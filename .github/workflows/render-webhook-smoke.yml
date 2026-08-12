@@ -1,0 +1,43 @@
+name: Render Webhook Smoke
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Wait for Render deployment and verify health
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://buyflow-v3-api-dev.onrender.com"
+          for attempt in $(seq 1 30); do
+            body="$(curl -fsS --max-time 20 "$URL/health" 2>/dev/null || true)"
+            if echo "$body" | grep -q '"version":"0.2.0"'; then
+              echo "Render health is on v0.2.0"
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Render did not expose v0.2.0 in time"
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Verify Nylas challenge handshake
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://buyflow-v3-api-dev.onrender.com/webhooks/nylas?challenge=buyflow-webhook-smoke"
+          body="$(curl -fsS --max-time 20 "$URL")"
+          test "$body" = "buyflow-webhook-smoke"
+          echo "Nylas challenge handshake passed"
