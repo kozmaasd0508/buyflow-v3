@@ -17,9 +17,8 @@ import {
   verifyNylasSignature,
 } from './webhooks/nylas-webhook.js';
 
-const app = Fastify({
-  logger: true,
-});
+const app = Fastify({ logger: true });
+const deployedGitCommit = process.env.RENDER_GIT_COMMIT ?? null;
 
 const allowedAppOrigins = new Set([
   'https://localhost',
@@ -62,8 +61,6 @@ const webhookStats = {
   emailScanRecoveryFailed: 0,
 };
 
-// Nylas signs the exact raw request body. Preserve raw bytes for its webhook
-// while keeping normal JSON parsing behavior for future API routes.
 app.removeContentTypeParser('application/json');
 app.addContentTypeParser(
   'application/json',
@@ -73,7 +70,6 @@ app.addContentTypeParser(
       done(null, body);
       return;
     }
-
     try {
       done(null, JSON.parse(body.toString('utf8')) as unknown);
     } catch (error) {
@@ -99,28 +95,21 @@ app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
   version: '0.4.0',
+  commit: deployedGitCommit,
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
   webhook: { ...webhookStats },
 }));
 
 app.get<{ Querystring: { challenge?: string } }>('/webhooks/nylas', async (request, reply) => {
   const challenge = request.query.challenge;
-  if (!challenge) {
-    return reply.code(400).type('text/plain').send('missing challenge');
-  }
-
-  return reply
-    .code(200)
-    .type('text/plain')
-    .header('Content-Length', Buffer.byteLength(challenge).toString())
-    .send(challenge);
+  if (!challenge) return reply.code(400).type('text/plain').send('missing challenge');
+  return reply.code(200).type('text/plain').header('Content-Length', Buffer.byteLength(challenge).toString()).send(challenge);
 });
 
 async function runInboxEvent(eventId: string) {
   try {
     const result = await processWebhookInboxEvent(eventId, env.BUYFLOW_AUTOMATION_MODE);
     if (!result.claimed) return;
-
     webhookStats.inboxClaimed += 1;
     if (result.pipeline) {
       webhookStats.pipelineCompleted += 1;
@@ -136,9 +125,7 @@ async function runInboxEvent(eventId: string) {
     }
   } catch (error) {
     webhookStats.pipelineFailed += 1;
-    app.log.error({
-      errorType: error instanceof Error ? error.name : 'UnknownError',
-    }, 'Durable Nylas message pipeline failed and was scheduled for retry');
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Durable Nylas message pipeline failed and was scheduled for retry');
   }
 }
 
@@ -149,17 +136,11 @@ async function runRecovery() {
     webhookStats.recoveryClaimed += result.claimed;
     webhookStats.recoveryFailed += result.failed;
     if (result.claimed > 0 || result.failed > 0) {
-      app.log.info({
-        scanned: result.scanned,
-        claimed: result.claimed,
-        failed: result.failed,
-      }, 'Webhook inbox recovery completed');
+      app.log.info({ scanned: result.scanned, claimed: result.claimed, failed: result.failed }, 'Webhook inbox recovery completed');
     }
   } catch (error) {
     webhookStats.recoveryFailed += 1;
-    app.log.error({
-      errorType: error instanceof Error ? error.name : 'UnknownError',
-    }, 'Webhook inbox recovery scan failed');
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Webhook inbox recovery scan failed');
   }
 
   try {
@@ -168,27 +149,18 @@ async function runRecovery() {
     webhookStats.emailScanRecoveryClaimed += result.claimed;
     webhookStats.emailScanRecoveryFailed += result.failed;
     if (result.claimed > 0 || result.failed > 0) {
-      app.log.info({
-        scanned: result.scanned,
-        claimed: result.claimed,
-        failed: result.failed,
-      }, 'Email scan recovery completed');
+      app.log.info({ scanned: result.scanned, claimed: result.claimed, failed: result.failed }, 'Email scan recovery completed');
     }
   } catch (error) {
     webhookStats.emailScanRecoveryFailed += 1;
-    app.log.error({
-      errorType: error instanceof Error ? error.name : 'UnknownError',
-    }, 'Email scan recovery scan failed');
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Email scan recovery scan failed');
   }
 }
 
 app.post('/webhooks/nylas', async (request, reply) => {
   webhookStats.postsReceived += 1;
-
   const rawBody = request.body;
-  if (!Buffer.isBuffer(rawBody)) {
-    return reply.code(400).send();
-  }
+  if (!Buffer.isBuffer(rawBody)) return reply.code(400).send();
 
   let secret: string;
   try {
@@ -207,7 +179,6 @@ app.post('/webhooks/nylas', async (request, reply) => {
   }
 
   webhookStats.validSignatures += 1;
-
   const event = parseNylasMessageCreatedEvent(rawBody);
   if (!event) {
     webhookStats.unsupportedSignedEvents += 1;
@@ -215,40 +186,25 @@ app.post('/webhooks/nylas', async (request, reply) => {
   }
 
   webhookStats.parsedMessageCreated += 1;
-
   let inboxEventId: string;
   try {
-    inboxEventId = await enqueueNylasMessageEvent({
-      grantId: event.grantId,
-      messageId: event.messageId,
-    });
+    inboxEventId = await enqueueNylasMessageEvent({ grantId: event.grantId, messageId: event.messageId });
     webhookStats.inboxPersisted += 1;
   } catch (error) {
     webhookStats.inboxPersistenceFailed += 1;
-    request.log.error({
-      errorType: error instanceof Error ? error.name : 'UnknownError',
-    }, 'Nylas webhook could not be persisted; returning retryable response');
+    request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Nylas webhook could not be persisted; returning retryable response');
     return reply.code(503).send();
   }
 
-  setImmediate(() => {
-    void runInboxEvent(inboxEventId);
-  });
-
+  setImmediate(() => { void runInboxEvent(inboxEventId); });
   return reply.code(200).send();
 });
 
 async function start() {
   try {
-    await app.listen({
-      port: env.PORT,
-      host: env.HOST,
-    });
-
+    await app.listen({ port: env.PORT, host: env.HOST });
     void runRecovery();
-    const recoveryTimer = setInterval(() => {
-      void runRecovery();
-    }, 60_000);
+    const recoveryTimer = setInterval(() => { void runRecovery(); }, 60_000);
     recoveryTimer.unref();
   } catch (error) {
     app.log.error(error);
