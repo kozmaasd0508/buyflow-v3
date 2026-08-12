@@ -1,3 +1,4 @@
+import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { registerAppApiRoutes } from './api/app-routes.js';
 import { env, requireNylasWebhookSecret } from './config.js';
@@ -13,6 +14,27 @@ import {
 
 const app = Fastify({
   logger: true,
+});
+
+const allowedAppOrigins = new Set([
+  'https://localhost',
+  'capacitor://localhost',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
+
+await app.register(cors, {
+  origin(origin, callback) {
+    if (!origin || allowedAppOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  },
+  methods: ['GET', 'HEAD', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'Accept'],
+  credentials: false,
+  maxAge: 86_400,
 });
 
 const webhookStats = {
@@ -57,7 +79,7 @@ await registerAppApiRoutes(app);
 app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
-  version: '0.3.0',
+  version: '0.3.1',
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
   webhook: { ...webhookStats },
 }));
