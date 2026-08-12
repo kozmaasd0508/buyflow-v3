@@ -22,12 +22,12 @@ jobs:
           URL="https://buyflow-v3-api-dev.onrender.com"
           for attempt in $(seq 1 30); do
             body="$(curl -fsS --max-time 20 "$URL/health" 2>/dev/null || true)"
-            if echo "$body" | grep -q '"version":"0.3.0"'; then
-              echo "Render health is on v0.3.0"
+            if echo "$body" | grep -q '"version":"0.3.1"'; then
+              echo "Render health is on v0.3.1"
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              echo "Render did not expose v0.3.0 in time"
+              echo "Render did not expose v0.3.1 in time"
               exit 1
             fi
             sleep 10
@@ -44,6 +44,35 @@ jobs:
             exit 1
           fi
           echo "App API authentication guard passed"
+
+      - name: Verify mobile CORS allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://buyflow-v3-api-dev.onrender.com/api/purchases"
+
+          allowed_code="$(curl -sS -D /tmp/cors-allowed.txt -o /dev/null -w '%{http_code}' \
+            --max-time 20 \
+            -X OPTIONS \
+            -H 'Origin: https://localhost' \
+            -H 'Access-Control-Request-Method: GET' \
+            -H 'Access-Control-Request-Headers: authorization' \
+            "$URL")"
+          if [ "$allowed_code" != "204" ]; then
+            echo "Expected 204 for trusted mobile preflight, got $allowed_code"
+            exit 1
+          fi
+          grep -qi '^access-control-allow-origin: https://localhost' /tmp/cors-allowed.txt
+          grep -qi '^access-control-allow-headers:.*Authorization' /tmp/cors-allowed.txt
+
+          curl -sS -D /tmp/cors-blocked.txt -o /dev/null --max-time 20 \
+            -H 'Origin: https://not-buyflow.example' \
+            "https://buyflow-v3-api-dev.onrender.com/api/me"
+          if grep -qi '^access-control-allow-origin:' /tmp/cors-blocked.txt; then
+            echo "Untrusted origin unexpectedly received CORS permission"
+            exit 1
+          fi
+          echo "Mobile CORS allowlist passed"
 
       - name: Verify Nylas challenge handshake
         shell: bash
