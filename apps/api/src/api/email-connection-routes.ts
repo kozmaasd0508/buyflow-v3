@@ -2,6 +2,11 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env, requireNylasApiConfig } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import {
+  drainEmailScanJobs,
+  enqueueInitialEmailScan,
+  processEmailScanJob,
+} from '../ingestion/email-scan-jobs.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
 
 interface NylasApplicationResponse {
@@ -36,6 +41,16 @@ function stateHash(value: string): string {
 
 function publicBaseUrl(): string {
   return env.BUYFLOW_PUBLIC_BASE_URL.replace(/\/$/, '');
+}
+
+function scheduleScan(app: FastifyInstance, jobId: string) {
+  setImmediate(() => {
+    void processEmailScanJob(jobId, env.BUYFLOW_AUTOMATION_MODE).catch((error) => {
+      app.log.error({
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }, 'Initial 7 day email scan failed and was scheduled for retry');
+    });
+  });
 }
 
 async function nylasJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -123,15 +138,43 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: 'email_connections_unavailable' });
     }
 
+    const rows = data ?? [];
+    const connectionIds = rows.map((row: any) => row.id);
+    let scanRows: any[] = [];
+
+    if (connectionIds.length > 0) {
+      const { data: scans, error: scanError } = await db
+        .from('email_scan_jobs')
+        .select('email_connection_id,window_days,status,processed_at,result')
+        .eq('user_id', user.id)
+        .eq('kind', 'initial')
+        .in('email_connection_id', connectionIds);
+
+      if (scanError) {
+        request.log.error({ errorType: 'EmailScanStatusReadError' }, 'Failed to load initial email scan status');
+        return reply.code(500).send({ error: 'email_connections_unavailable' });
+      }
+      scanRows = scans ?? [];
+    }
+
     return {
-      connections: (data ?? []).map((row: any) => ({
-        id: row.id,
-        provider: row.provider,
-        emailAddress: row.email_address,
-        status: row.status,
-        connectedAt: row.connected_at,
-        updatedAt: row.updated_at,
-      })),
+      connections: rows.map((row: any) => {
+        const scan = scanRows.find((candidate) => candidate.email_connection_id === row.id);
+        return {
+          id: row.id,
+          provider: row.provider,
+          emailAddress: row.email_address,
+          status: row.status,
+          connectedAt: row.connected_at,
+          updatedAt: row.updated_at,
+          initialScan: scan ? {
+            windowDays: scan.window_days,
+            status: scan.status,
+            processedAt: scan.processed_at,
+            result: scan.result ?? null,
+          } : null,
+        };
+      }),
     };
   });
 
@@ -180,6 +223,52 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
     }
   });
 
+  app.post<{ Params: { id: string } }>('/api/email-connections/:id/initial-scan', async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const db = getSupabaseAdmin() as any;
+    const { data: connection, error } = await db
+      .from('email_connections')
+      .select('id')
+      .eq('id', request.params.id)
+      .eq('user_id', user.id)
+      .eq('provider', 'nylas')
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (error) {
+      request.log.error({ errorType: 'InitialScanConnectionReadError' }, 'Failed to verify email connection');
+      return reply.code(500).send({ error: 'email_scan_unavailable' });
+    }
+    if (!connection) return reply.code(404).send({ error: 'email_connection_not_found' });
+
+    try {
+      const jobId = await enqueueInitialEmailScan({
+        userId: user.id,
+        emailConnectionId: connection.id,
+        windowDays: 7,
+      });
+
+      const { data: job } = await db
+        .from('email_scan_jobs')
+        .select('status')
+        .eq('id', jobId)
+        .single();
+
+      if (job?.status !== 'processed') scheduleScan(app, jobId);
+      return reply.code(job?.status === 'processed' ? 200 : 202).send({
+        status: job?.status ?? 'pending',
+        windowDays: 7,
+      });
+    } catch (scanError) {
+      request.log.error({
+        errorType: scanError instanceof Error ? scanError.name : 'UnknownError',
+      }, 'Failed to enqueue initial 7 day email scan');
+      return reply.code(503).send({ error: 'email_scan_unavailable' });
+    }
+  });
+
   app.get<{
     Querystring: { code?: string; state?: string; error?: string };
   }>('/auth/nylas/callback', async (request, reply) => {
@@ -219,7 +308,7 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
       if (!grantId || !emailAddress) throw new Error('Nylas token response is missing grant identity');
 
       const now = new Date().toISOString();
-      const { error: connectionError } = await db
+      const { data: connection, error: connectionError } = await db
         .from('email_connections')
         .upsert({
           user_id: stateRow.user_id,
@@ -231,9 +320,20 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
           updated_at: now,
         }, {
           onConflict: 'user_id,provider,email_address',
-        });
+        })
+        .select('id')
+        .single();
 
-      if (connectionError) throw new Error(`Failed to save email connection: ${connectionError.message}`);
+      if (connectionError || !connection) {
+        throw new Error(`Failed to save email connection: ${connectionError?.message ?? 'missing connection'}`);
+      }
+
+      const scanJobId = await enqueueInitialEmailScan({
+        userId: stateRow.user_id,
+        emailConnectionId: connection.id,
+        windowDays: 7,
+      });
+      scheduleScan(app, scanJobId);
 
       return reply.redirect(successUrl);
     } catch (error) {
@@ -243,4 +343,19 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
       return reply.redirect(errorUrl);
     }
   });
+
+  void drainEmailScanJobs(env.BUYFLOW_AUTOMATION_MODE).catch((error) => {
+    app.log.error({
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+    }, 'Initial email scan recovery failed at startup');
+  });
+
+  const scanRecoveryTimer = setInterval(() => {
+    void drainEmailScanJobs(env.BUYFLOW_AUTOMATION_MODE).catch((error) => {
+      app.log.error({
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }, 'Initial email scan recovery failed');
+    });
+  }, 60_000);
+  scanRecoveryTimer.unref();
 }
