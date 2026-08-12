@@ -1,0 +1,236 @@
+.settings-overlay {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+
+.settings-overlay.open {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 5, 13, .64);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.settings-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 520px);
+  height: 100dvh;
+  margin-left: auto;
+  overflow-y: auto;
+  border-left: 1px solid rgba(255,255,255,.11);
+  background: linear-gradient(180deg, rgba(15,19,36,.97), rgba(7,9,20,.985));
+  box-shadow: -30px 0 80px rgba(0,0,0,.38);
+  transform: translateX(26px);
+  transition: transform .24s cubic-bezier(.2,.8,.2,1);
+}
+
+.settings-overlay.open .settings-sheet { transform: translateX(0); }
+
+.settings-header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  min-height: 82px;
+  padding: max(18px, env(safe-area-inset-top)) 20px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(10,13,27,.83);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+}
+
+.settings-header h1 {
+  margin: 3px 0 0;
+  font-size: 25px;
+  letter-spacing: -.03em;
+}
+
+.settings-eyebrow {
+  margin: 0;
+  color: #a9b2ff;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .17em;
+}
+
+.settings-close {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,.06);
+  color: #dfe4f5;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.settings-content {
+  padding: 18px 18px calc(30px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.settings-profile-card,
+.gmail-connection-card,
+.settings-info-card {
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 21px;
+  background: linear-gradient(145deg, rgba(26,32,54,.84), rgba(14,18,34,.76));
+  box-shadow: 0 14px 38px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.settings-profile-card {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.settings-profile-card > div:last-child { min-width: 0; }
+.settings-profile-card strong,
+.settings-profile-card span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-profile-card strong { font-size: 14px; }
+.settings-profile-card span { margin-top: 4px; color: #9fa8bd; font-size: 11px; }
+
+.settings-avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #6178ff, #a05dff 70%, #d269f1);
+  color: white;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 0 11px 28px rgba(101,91,255,.28);
+}
+
+.settings-section { display: flex; flex-direction: column; gap: 11px; }
+.settings-section-title h2 { margin: 5px 0 0; font-size: 19px; }
+
+.gmail-connection-card { padding: 16px; }
+.gmail-connection-card.connected { border-color: rgba(85,215,165,.19); }
+
+.gmail-status-row {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.gmail-status-row > div { min-width: 0; }
+.gmail-status-row strong,
+.gmail-status-row span { display: block; }
+.gmail-status-row strong { font-size: 13px; }
+.gmail-status-row div > span { margin-top: 4px; color: #a0a9bf; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.gmail-status-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(85,215,165,.13);
+  color: #69e0b3;
+  font-weight: 900;
+}
+.gmail-status-icon.disconnected { background: rgba(129,146,255,.13); color: #aab5ff; }
+
+.gmail-status-pill {
+  min-height: 25px;
+  padding: 5px 9px;
+  display: inline-flex !important;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(85,215,165,.13);
+  color: #69e0b3;
+  font-size: 9px !important;
+  font-weight: 850;
+}
+
+.gmail-meta {
+  margin-top: 15px;
+  padding-top: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgba(255,255,255,.075);
+  font-size: 10px;
+}
+.gmail-meta span { color: #929cb2; }
+.gmail-meta strong { font-size: 10px; }
+.gmail-help { margin: 12px 0 0; color: #8993aa; font-size: 10.5px; line-height: 1.5; }
+
+.connect-gmail-button {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 15px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #5d73ff, #9460ff);
+  color: white;
+  font-weight: 850;
+  box-shadow: 0 13px 28px rgba(91,91,255,.22);
+}
+.connect-gmail-button:disabled { opacity: .6; }
+
+.settings-info-card { padding: 16px; }
+.settings-info-card strong { font-size: 12px; }
+.settings-info-card p { margin: 7px 0 0; color: #929cb2; font-size: 10.5px; line-height: 1.55; }
+
+.settings-logout {
+  min-height: 46px;
+  border: 1px solid rgba(255,123,145,.16);
+  border-radius: 14px;
+  background: rgba(145,38,66,.13);
+  color: #ffc3ce;
+  font-weight: 800;
+}
+
+.settings-account-action { color: #e1e5f7 !important; }
+.settings-gear { width: 18px; text-align: center; color: #aeb7ff; }
+
+.settings-notice {
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.settings-notice.success { border: 1px solid rgba(85,215,165,.22); background: rgba(34,121,91,.17); color: #adf1d5; }
+.settings-notice.error { border: 1px solid rgba(255,123,145,.22); background: rgba(145,38,66,.17); color: #ffc3ce; }
+.settings-error { margin: 11px 0 0; color: #ffc3ce; font-size: 10.5px; line-height: 1.45; }
+
+.settings-spinner {
+  width: 22px;
+  height: 22px;
+  margin-right: 9px;
+  display: inline-block;
+  vertical-align: middle;
+  border: 2px solid rgba(255,255,255,.12);
+  border-top-color: #99a7ff;
+  border-radius: 50%;
+  animation: settings-spin .8s linear infinite;
+}
+@keyframes settings-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 560px) {
+  .settings-sheet { width: 100%; border-left: 0; }
+}
