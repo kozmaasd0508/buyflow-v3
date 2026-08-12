@@ -47,6 +47,7 @@ export interface AutomaticPipelineResult {
     | 'ignored'
     | 'already_processing'
     | 'processed'
+    | 'unlinked'
     | 'review'
     | 'unknown_grant';
   sourceEmailId?: string;
@@ -127,6 +128,17 @@ function extractionToJson(extraction: EmailExtraction): Json {
 
 function toJson(value: unknown): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function shouldStayUnlinked(
+  validationStatus: unknown,
+  validatedResult: Record<string, unknown> | null,
+): boolean {
+  if (!validatedResult || !isTrustedAutomaticEvidence(validationStatus, validatedResult)) {
+    return false;
+  }
+
+  return validatedResult.event_type !== 'order_created';
 }
 
 function toPurchaseEvidence(row: SourceRow): ResolutionEvidence | null {
@@ -548,7 +560,11 @@ export async function processNylasMessage(input: {
     .eq('source_email_id', sourceId);
   if (linkedError) throw new Error(`Failed to verify automatic evidence link: ${linkedError.message}`);
 
-  const finalStatus = (linkedCount ?? 0) > 0 ? 'processed' : 'review';
+  const finalStatus = (linkedCount ?? 0) > 0
+    ? 'processed'
+    : shouldStayUnlinked(validatedResult?.validation_status, validatedResult)
+      ? 'unlinked'
+      : 'review';
   await db.from('source_emails').update({ processing_status: finalStatus }).eq('id', sourceId);
 
   return {
