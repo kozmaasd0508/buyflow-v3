@@ -18,6 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # BFTEST-002 diagnostic rerun
           body="$(curl -fsS --max-time 30 https://buyflow-v3-api-dev.onrender.com/health)"
           echo "$body" | node -e '
             let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
