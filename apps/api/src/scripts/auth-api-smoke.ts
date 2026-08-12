@@ -1,13 +1,15 @@
 import { randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
-const apiBaseUrl = (process.env.API_BASE_URL ?? 'https://buyflow-v3-api-dev.onrender.com').replace(/\/$/, '');
-
-if (!supabaseUrl || !supabaseSecretKey) {
-  throw new Error('SUPABASE_URL and SUPABASE_SECRET_KEY are required');
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
 }
+
+const supabaseUrl = requireEnv('SUPABASE_URL');
+const supabaseSecretKey = requireEnv('SUPABASE_SECRET_KEY');
+const apiBaseUrl = (process.env.API_BASE_URL ?? 'https://buyflow-v3-api-dev.onrender.com').replace(/\/$/, '');
 
 const admin = createClient(supabaseUrl, supabaseSecretKey, {
   auth: {
