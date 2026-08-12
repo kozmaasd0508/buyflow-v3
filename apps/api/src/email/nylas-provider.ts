@@ -1,4 +1,4 @@
-import Nylas from 'nylas';
+import { createRequire } from 'node:module';
 import type { EmailProvider } from './provider.js';
 import type {
   EmailAddress,
@@ -35,6 +35,36 @@ export type NylasMessageLike = {
   body?: string;
   attachments?: NylasAttachment[];
 };
+
+type NylasClientShape = {
+  messages: {
+    list(input: {
+      identifier: string;
+      queryParams: {
+        limit: number;
+        pageToken?: string;
+        searchQueryNative: string;
+      };
+    }): Promise<{
+      data: NylasMessageLike[];
+      nextCursor?: string;
+    }>;
+    find(input: {
+      identifier: string;
+      messageId: string;
+    }): Promise<{
+      data: NylasMessageLike;
+    }>;
+  };
+};
+
+type NylasConstructor = new (config: {
+  apiKey: string;
+  apiUri: string;
+}) => NylasClientShape;
+
+const require = createRequire(import.meta.url);
+const Nylas = require('nylas') as NylasConstructor;
 
 export interface NylasEmailProviderConfig {
   apiKey: string;
@@ -86,7 +116,7 @@ export function normalizeNylasMessage(
 export class NylasEmailProvider implements EmailProvider {
   readonly name = 'nylas' as const;
 
-  private readonly client: Nylas;
+  private readonly client: NylasClientShape;
   private readonly grantId: string;
 
   constructor(config: NylasEmailProviderConfig) {
@@ -104,14 +134,14 @@ export class NylasEmailProvider implements EmailProvider {
       identifier: this.grantId,
       queryParams: {
         limit,
-        pageToken: input.cursor,
+        ...(input.cursor ? { pageToken: input.cursor } : {}),
         searchQueryNative: input.query,
       },
     });
 
     return {
       messages: response.data.map((message) => normalizeNylasMessage(message)),
-      nextCursor: response.nextCursor,
+      ...(response.nextCursor ? { nextCursor: response.nextCursor } : {}),
     };
   }
 
