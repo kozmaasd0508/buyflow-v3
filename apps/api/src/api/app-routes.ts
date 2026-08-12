@@ -6,6 +6,7 @@ function publicPurchase(row: any) {
   return {
     id: row.id,
     merchantName: row.merchant_name,
+    merchantLegalName: row.merchant_legal_name,
     merchantDomain: row.merchant_domain,
     orderNumber: row.order_number,
     purchaseDate: row.purchase_date,
@@ -16,6 +17,27 @@ function publicPurchase(row: any) {
     orderedAt: row.ordered_at,
     shippedAt: row.shipped_at,
     deliveredAt: row.delivered_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function publicProduct(row: any) {
+  return {
+    id: row.id,
+    name: row.name,
+    brand: row.brand,
+    model: row.model,
+    variant: row.variant,
+    sku: row.sku,
+    gtin: row.gtin,
+    category: row.category,
+    quantity: row.quantity,
+    unitPrice: row.unit_price,
+    totalPrice: row.total_price,
+    currency: row.currency,
+    productUrl: row.product_url,
+    imageUrl: row.image_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -88,7 +110,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
 
     const { data: purchaseRows, error: purchaseError } = await supabase
       .from('purchases')
-      .select('id,merchant_name,merchant_domain,order_number,purchase_date,total_amount,currency,payment_status,current_state,ordered_at,shipped_at,delivered_at,created_at,updated_at')
+      .select('id,merchant_name,merchant_legal_name,merchant_domain,order_number,purchase_date,total_amount,currency,payment_status,current_state,ordered_at,shipped_at,delivered_at,created_at,updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -103,9 +125,10 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
 
     let shipmentRows: any[] = [];
     let documentRows: any[] = [];
+    let productRows: any[] = [];
 
     if (purchaseIds.length > 0) {
-      const [shipmentResult, documentResult] = await Promise.all([
+      const [shipmentResult, documentResult, productResult] = await Promise.all([
         supabase
           .from('shipments')
           .select('id,purchase_id,carrier,carrier_slug,tracking_number,tracking_url,status,shipped_at,estimated_delivery_at,delivered_at,last_event_at,created_at,updated_at')
@@ -117,25 +140,34 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
           .select('id,purchase_id,type,document_number,issued_at,source_type,external_url,filename,mime_type,created_at')
           .in('purchase_id', purchaseIds)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('products')
+          .select('id,purchase_id,name')
+          .in('purchase_id', purchaseIds)
+          .order('created_at', { ascending: true }),
       ]);
 
-      if (shipmentResult.error || documentResult.error) {
+      if (shipmentResult.error || documentResult.error || productResult.error) {
         request.log.error({ errorType: 'PurchaseListChildReadError' }, 'Failed to load purchase list children');
         return reply.code(500).send({ error: 'purchase_list_unavailable' });
       }
 
       shipmentRows = shipmentResult.data ?? [];
       documentRows = documentResult.data ?? [];
+      productRows = productResult.data ?? [];
     }
 
     return {
       purchases: purchases.map((purchase: any) => {
         const shipments = shipmentRows.filter((row) => row.purchase_id === purchase.id);
         const documents = documentRows.filter((row) => row.purchase_id === purchase.id);
+        const products = productRows.filter((row) => row.purchase_id === purchase.id);
         return {
           ...publicPurchase(purchase),
           shipments: shipments.map(publicShipment),
           documentCount: documents.length,
+          productCount: products.length,
+          productPreview: products.slice(0, 2).map((row) => row.name),
         };
       }),
     };
@@ -153,7 +185,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
     const supabase = getSupabaseAdmin() as any;
     const { data: purchase, error: purchaseError } = await supabase
       .from('purchases')
-      .select('id,merchant_name,merchant_domain,order_number,purchase_date,subtotal,shipping_amount,discount_amount,total_amount,currency,payment_method,payment_status,current_state,ordered_at,paid_at,shipped_at,delivered_at,cancelled_at,created_at,updated_at')
+      .select('id,merchant_name,merchant_legal_name,merchant_domain,order_number,purchase_date,subtotal,shipping_amount,discount_amount,total_amount,currency,payment_method,payment_status,shipping_method,expected_carrier,current_state,ordered_at,paid_at,shipped_at,delivered_at,cancelled_at,created_at,updated_at')
       .eq('id', purchaseId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -166,7 +198,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: 'purchase_not_found' });
     }
 
-    const [shipmentResult, documentResult] = await Promise.all([
+    const [shipmentResult, documentResult, productResult] = await Promise.all([
       supabase
         .from('shipments')
         .select('id,purchase_id,carrier,carrier_slug,tracking_number,tracking_url,status,shipped_at,estimated_delivery_at,delivered_at,last_event_at,created_at,updated_at')
@@ -178,9 +210,14 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         .select('id,purchase_id,type,document_number,issued_at,source_type,external_url,filename,mime_type,created_at')
         .eq('purchase_id', purchaseId)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('products')
+        .select('id,purchase_id,name,brand,model,variant,sku,gtin,category,quantity,unit_price,total_price,currency,product_url,image_url,created_at,updated_at')
+        .eq('purchase_id', purchaseId)
+        .order('created_at', { ascending: true }),
     ]);
 
-    if (shipmentResult.error || documentResult.error) {
+    if (shipmentResult.error || documentResult.error || productResult.error) {
       request.log.error({ errorType: 'PurchaseDetailChildReadError' }, 'Failed to load purchase detail children');
       return reply.code(500).send({ error: 'purchase_unavailable' });
     }
@@ -192,8 +229,11 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         shippingAmount: purchase.shipping_amount,
         discountAmount: purchase.discount_amount,
         paymentMethod: purchase.payment_method,
+        shippingMethod: purchase.shipping_method,
+        expectedCarrier: purchase.expected_carrier,
         paidAt: purchase.paid_at,
         cancelledAt: purchase.cancelled_at,
+        products: (productResult.data ?? []).map(publicProduct),
         shipments: (shipmentResult.data ?? []).map(publicShipment),
         documents: (documentResult.data ?? []).map(publicDocument),
       },
