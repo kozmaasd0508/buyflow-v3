@@ -1,15 +1,67 @@
-import { env, requireNylasSmokeGrantId } from '../config.js';
+import { env, requireNylasApiConfig } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { discoverPurchaseCandidates } from '../ingestion/discover-purchases.js';
 import { SupabaseSourceEmailRepository } from '../source-emails/supabase-repository.js';
 
-function requireDevEmail() {
-  const email = process.env.BUYFLOW_DEV_EMAIL?.trim().toLowerCase();
-  if (!email) {
-    throw new Error('Set BUYFLOW_DEV_EMAIL for the controlled development import.');
+type NylasGrant = {
+  id: string;
+  email: string;
+  provider: string;
+  grant_status?: string;
+  grantStatus?: string;
+};
+
+type NylasGrantListResponse = {
+  data?: NylasGrant[];
+};
+
+async function resolveDevelopmentGrant() {
+  const { apiKey, apiUri } = requireNylasApiConfig();
+  const url = new URL('/v3/grants', apiUri);
+  url.searchParams.set('limit', '10');
+  url.searchParams.set('provider', 'google');
+  url.searchParams.set('grant_status', 'valid');
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to list Nylas grants: HTTP ${response.status} ${response.statusText}`,
+    );
   }
-  return email;
+
+  const payload = (await response.json()) as NylasGrantListResponse;
+  const grants = (payload.data ?? []).filter(
+    (grant) =>
+      typeof grant.id === 'string' &&
+      typeof grant.email === 'string' &&
+      grant.provider === 'google',
+  );
+
+  const requestedGrantId = process.env.NYLAS_SMOKE_GRANT_ID?.trim();
+  if (requestedGrantId) {
+    const selected = grants.find((grant) => grant.id === requestedGrantId);
+    if (!selected) {
+      throw new Error(
+        'NYLAS_SMOKE_GRANT_ID does not match an active Google grant in this Nylas application.',
+      );
+    }
+    return selected;
+  }
+
+  if (grants.length !== 1) {
+    throw new Error(
+      `Expected exactly one active Google Nylas grant for automatic development bootstrap, found ${grants.length}. Set NYLAS_SMOKE_GRANT_ID only if multiple grants are intentionally connected.`,
+    );
+  }
+
+  return grants[0];
 }
 
 async function findOrCreateDevUser(email: string) {
@@ -85,12 +137,13 @@ async function ensureNylasConnection(userId: string, email: string, grantId: str
     );
   }
 
-  return data.id as string;
+  return data.id;
 }
 
 async function main() {
-  const email = requireDevEmail();
-  const grantId = requireNylasSmokeGrantId();
+  const grant = await resolveDevelopmentGrant();
+  const email = grant.email.trim().toLowerCase();
+  const grantId = grant.id;
   const supabase = getSupabaseAdmin();
   const user = await findOrCreateDevUser(email);
   const emailConnectionId = await ensureNylasConnection(user.id, email, grantId);
@@ -119,6 +172,7 @@ async function main() {
         ok: true,
         mode: 'controlled_dev_import',
         provider: provider.name,
+        email,
         userId: user.id,
         emailConnectionId,
         query: env.EMAIL_DISCOVERY_QUERY,
