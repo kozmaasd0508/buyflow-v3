@@ -25,6 +25,7 @@ export interface InitialEmailScanResult {
   checked: number;
   pages: number;
   ignored: number;
+  unlinked: number;
   review: number;
   processed: number;
   aiCalls: number;
@@ -117,6 +118,7 @@ export async function processEmailScanJob(
       checked: 0,
       pages: 0,
       ignored: 0,
+      unlinked: 0,
       review: 0,
       processed: 0,
       aiCalls: 0,
@@ -149,6 +151,7 @@ export async function processEmailScanJob(
 
         if (pipeline.status === 'ignored') result.ignored += 1;
         else if (pipeline.status === 'processed') result.processed += 1;
+        else if (pipeline.status === 'unlinked') result.unlinked += 1;
         else result.review += 1;
       }
 
