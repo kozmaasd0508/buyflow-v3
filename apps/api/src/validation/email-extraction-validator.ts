@@ -88,20 +88,36 @@ function validateMoneyPair(input: {
   contextText: string;
   reasons: string[];
   blockedFields: string[];
+  allowExplicitPaymentWithoutCurrency?: boolean;
 }) {
   const amount = input.extraction[input.amountField];
   const currency = input.extraction[input.currencyField];
   if (amount === null) return;
 
-  if (
-    amount < 0 ||
-    !currency ||
-    !currencyEvidence(input.contextText, currency) ||
-    !hasMonetaryContext(input.contextText)
-  ) {
+  if (amount < 0 || !hasMonetaryContext(input.contextText)) {
     clearField(input.extraction, input.amountField, input.blockedFields);
     clearField(input.extraction, input.currencyField, input.blockedFields);
     input.reasons.push(`${input.amountField}_lacks_monetary_evidence`);
+    return;
+  }
+
+  if (!currency) {
+    if (
+      input.allowExplicitPaymentWithoutCurrency &&
+      input.extraction.event_type === 'payment_completed' &&
+      input.extraction.payment_status === 'paid'
+    ) {
+      return;
+    }
+    clearField(input.extraction, input.amountField, input.blockedFields);
+    input.reasons.push(`${input.amountField}_missing_currency`);
+    return;
+  }
+
+  if (!currencyEvidence(input.contextText, currency)) {
+    clearField(input.extraction, input.amountField, input.blockedFields);
+    clearField(input.extraction, input.currencyField, input.blockedFields);
+    input.reasons.push(`${input.amountField}_currency_lacks_evidence`);
   }
 }
 
@@ -177,6 +193,7 @@ export function validateEmailExtraction(
       contextText,
       reasons,
       blockedFields,
+      allowExplicitPaymentWithoutCurrency: true,
     });
 
     if (validated.cod_amount !== null && validated.cod_amount < 0) {
@@ -191,17 +208,29 @@ export function validateEmailExtraction(
     reasons.push('payment_completed_without_explicit_paid_status');
   }
 
-  const eligibleForPurchaseCreation = Boolean(
+  const hasCompleteOrderIdentity = Boolean(
     !senderIsCarrier &&
-      validated.event_type === 'order_created' &&
-      validated.confidence >= 0.9 &&
-      validated.merchant &&
-      validated.order_number,
+    validated.event_type === 'order_created' &&
+    validated.merchant &&
+    validated.order_number,
+  );
+
+  const eligibleForPurchaseCreation = Boolean(
+    hasCompleteOrderIdentity &&
+    validated.confidence >= 0.9,
   );
 
   let validationStatus: EmailValidationStatus;
   if (requiresReview) {
     validationStatus = 'review';
+  } else if (
+    validated.event_type === 'order_created' &&
+    hasCompleteOrderIdentity &&
+    validated.confidence >= 0.8 &&
+    validated.confidence < 0.9
+  ) {
+    validationStatus = 'guardrailed';
+    reasons.push('order_created_requires_corroboration');
   } else if (reasons.length > 0 || blockedFields.length > 0 || validated.event_type !== raw.event_type) {
     validationStatus = 'guardrailed';
   } else if (validated.event_type === 'order_created' && !eligibleForPurchaseCreation) {
