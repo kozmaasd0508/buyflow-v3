@@ -165,7 +165,7 @@ function renderConnectionCard(container: HTMLElement, connections: EmailConnecti
   `;
 
   container.querySelector<HTMLButtonElement>('#connect-gmail-button')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
+    const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
     button.textContent = 'Google megnyitása…';
 
