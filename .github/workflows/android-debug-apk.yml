@@ -1,12 +1,6 @@
 name: Android Debug APK
 
 on:
-  push:
-    paths:
-      - '.github/workflows/android-debug-apk.yml'
-      - 'apps/mobile/**'
-      - 'package.json'
-      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
