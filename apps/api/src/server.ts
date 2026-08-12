@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { registerAppApiRoutes } from './api/app-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
+import { registerWebPreview } from './web-preview.js';
 import {
   drainWebhookInbox,
   enqueueNylasMessageEvent,
@@ -76,6 +77,7 @@ app.addContentTypeParser(
 );
 
 await registerAppApiRoutes(app);
+await registerWebPreview(app);
 
 app.get('/auth/reset-password', async (_request, reply) => reply
   .code(200)
