@@ -14,6 +14,7 @@
     "openai:nano-smoke": "tsx src/scripts/openai-nano-smoke.ts",
     "pipeline:nano-extract-pending": "tsx src/scripts/nano-extract-pending.ts",
     "pipeline:validate-extractions": "tsx src/scripts/validate-nano-extractions.ts",
+    "pipeline:import-next-20": "tsx src/scripts/import-next-purchases.ts",
     "nylas:discover": "tsx src/scripts/nylas-discover.ts"
   },
   "dependencies": {
