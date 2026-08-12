@@ -1,0 +1,36 @@
+name: Render Webhook Health Diagnostic
+
+on:
+  push:
+    paths:
+      - .github/workflows/render-health-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read non-sensitive webhook counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -fsS --max-time 30 https://buyflow-v3-api-dev.onrender.com/health)"
+          echo "$body" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
+              const h=JSON.parse(s); const w=h.webhook || {};
+              console.log(`version=${h.version ?? "unknown"}`);
+              console.log(`automation_mode=${h.automationMode ?? "unknown"}`);
+              console.log(`posts_received=${w.postsReceived ?? -1}`);
+              console.log(`invalid_signatures=${w.invalidSignatures ?? -1}`);
+              console.log(`valid_signatures=${w.validSignatures ?? -1}`);
+              console.log(`parsed_message_created=${w.parsedMessageCreated ?? -1}`);
+              console.log(`unsupported_signed_events=${w.unsupportedSignedEvents ?? -1}`);
+              console.log(`pipeline_completed=${w.pipelineCompleted ?? -1}`);
+              console.log(`pipeline_failed=${w.pipelineFailed ?? -1}`);
+              console.log(`unknown_grant=${w.unknownGrant ?? -1}`);
+            });
+          '
