@@ -30,9 +30,7 @@ jobs:
         run: npm exec --workspace @buyflow/api -- tsx src/scripts/dev-import.ts
         env:
           SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
-          SUPABASE_SECRET_KEY: ${{ secrets.BUYFLOW_SUPABASE_SECRET_KEY }}
-          NYLAS_API_KEY: ${{ secrets.BUYFLOW_NYLAS_API_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
           NYLAS_API_URI: https://api.eu.nylas.com
-          NYLAS_SMOKE_GRANT_ID: ${{ secrets.BUYFLOW_NYLAS_GRANT_ID }}
-          BUYFLOW_DEV_EMAIL: ${{ secrets.BUYFLOW_DEV_EMAIL }}
           EMAIL_DISCOVERY_QUERY: category:purchases newer_than:30d -in:spam -in:trash
