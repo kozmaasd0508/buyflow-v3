@@ -10,6 +10,7 @@
     "test": "node --import tsx --test src/**/*.test.ts",
     "nylas:smoke": "tsx src/scripts/nylas-smoke.ts",
     "nylas:audit": "tsx src/scripts/nylas-audit.ts",
+    "nylas:markup-audit": "tsx src/scripts/nylas-markup-audit.ts",
     "nylas:discover": "tsx src/scripts/nylas-discover.ts"
   },
   "dependencies": {
