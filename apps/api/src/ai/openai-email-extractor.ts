@@ -12,6 +12,15 @@ export type BuyFlowEmailEventType =
   | 'subscription'
   | 'other';
 
+export type PaymentStatus =
+  | 'paid'
+  | 'pending'
+  | 'unpaid'
+  | 'failed'
+  | 'refunded'
+  | 'cash_on_delivery'
+  | 'unknown';
+
 export interface ProductExtraction {
   name: string;
   brand: string | null;
@@ -39,7 +48,7 @@ export interface EmailExtraction {
   discount_amount: number | null;
   total: number | null;
   currency: string | null;
-  payment_status: string | null;
+  payment_status: PaymentStatus | null;
   payment_method: string | null;
   paid_amount: number | null;
   paid_currency: string | null;
@@ -85,8 +94,22 @@ const CARRIER_EVENT_TYPES = [
   'other',
 ] as const;
 
+const PAYMENT_STATUSES = [
+  'paid',
+  'pending',
+  'unpaid',
+  'failed',
+  'refunded',
+  'cash_on_delivery',
+  'unknown',
+] as const;
+
 const nullableString = { type: ['string', 'null'] } as const;
 const nullableNumber = { type: ['number', 'null'] } as const;
+const nullablePaymentStatus = {
+  type: ['string', 'null'],
+  enum: [...PAYMENT_STATUSES, null],
+} as const;
 
 const productSchema = {
   type: 'object',
@@ -129,6 +152,7 @@ function extractionSchema(senderRole: EmailSenderRole) {
   const carrier = senderRole === 'carrier';
   const carrierBlockedString = carrier ? { type: 'null' } as const : nullableString;
   const carrierBlockedNumber = carrier ? { type: 'null' } as const : nullableNumber;
+  const carrierBlockedPaymentStatus = carrier ? { type: 'null' } as const : nullablePaymentStatus;
 
   return {
     type: 'object',
@@ -146,7 +170,7 @@ function extractionSchema(senderRole: EmailSenderRole) {
       discount_amount: carrierBlockedNumber,
       total: carrierBlockedNumber,
       currency: carrierBlockedString,
-      payment_status: carrierBlockedString,
+      payment_status: carrierBlockedPaymentStatus,
       payment_method: carrierBlockedString,
       paid_amount: carrierBlockedNumber,
       paid_currency: carrierBlockedString,
@@ -282,6 +306,12 @@ export function htmlToCompactText(html: string, maxChars = 20_000): string {
     .slice(0, maxChars);
 }
 
+function normalizeOrderNumber(value: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.trim().replace(/^#\s*/, '').trim();
+  return normalized || null;
+}
+
 export async function extractEmailWithOpenAIResult(input: {
   apiKey: string;
   model?: string;
@@ -302,10 +332,13 @@ export async function extractEmailWithOpenAIResult(input: {
     'Use product_url or image_url only when the URL is explicitly present and clearly belongs to that purchased product, not a generic shop, tracking, footer, logo, or unsubscribe link.',
     'quantity must be null when quantity is not explicit or cannot safely be determined. Monetary fields must be null when the amount is not actually monetary evidence.',
     'Distinguish order total from amount already paid and from cash-on-delivery amount. A cod_amount of 0 is meaningful evidence and must be preserved when explicitly shown.',
+    'payment_status must use only the schema values. If successful payment is explicitly confirmed, use paid. Never copy a localized sentence such as Sikeres bankkártyás fizetés into payment_status.',
     'payment_completed means the email explicitly confirms a successful payment. Do not classify a payment confirmation as order_created unless the same email also clearly establishes creation of the order.',
+    'Return the order identifier itself in order_number without labels or decorative prefixes such as #.',
     'Distinguish merchant from merchant_legal_name and from parcel_sender. parcel_sender is a shipper/consignor named inside a carrier email, for example after Feladó, Sender, Shipper, Consignor, or Versender.',
     'A shipment/delivery/invoice/return/refund email must not be treated as order_created unless the email itself clearly establishes a new purchase.',
-    'Confidence is confidence in the extracted event and evidence, not permission to write to the database.',
+    'Top-level confidence is confidence in the event identity and core email interpretation. Do not lower it merely because optional product attributes are missing or uncertain; each product has its own confidence.',
+    'Confidence is not permission to write to the database.',
   ];
 
   if (senderRole === 'carrier') {
@@ -364,6 +397,7 @@ export async function extractEmailWithOpenAIResult(input: {
   ) {
     throw new Error('OpenAI structured extraction was incomplete.');
   }
+  extraction.order_number = normalizeOrderNumber(extraction.order_number);
 
   const responseId =
     json && typeof json === 'object' && typeof (json as { id?: unknown }).id === 'string'
