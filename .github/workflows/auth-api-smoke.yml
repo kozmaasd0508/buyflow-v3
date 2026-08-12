@@ -1,0 +1,37 @@
+name: Authenticated API Smoke
+
+on:
+  push:
+    paths:
+      - '.github/workflows/auth-api-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Authenticated API isolation smoke
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/auth-api-smoke.ts
+        env:
+          SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          API_BASE_URL: https://buyflow-v3-api-dev.onrender.com
