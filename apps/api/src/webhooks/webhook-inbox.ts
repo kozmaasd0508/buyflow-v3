@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
 import {
   processNylasMessage,
   type AutomaticPipelineResult,
@@ -90,6 +91,10 @@ export async function processWebhookInboxEvent(
       messageId: event.provider_message_id,
       mode,
     });
+
+    if (pipeline.status === 'unlinked' && pipeline.sourceEmailId) {
+      await enqueueAutomaticTargetedRecoveryForSource(pipeline.sourceEmailId);
+    }
 
     const { error: finishError } = await db.rpc('finish_webhook_inbox_event', {
       p_id: eventId,
