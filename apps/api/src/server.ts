@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { registerAppApiRoutes } from './api/app-routes.js';
 import { registerEmailConnectionRoutes } from './api/email-connection-routes.js';
+import { registerEmailScanReviewRoutes } from './api/email-scan-review-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
@@ -80,6 +81,7 @@ app.addContentTypeParser(
 
 await registerAppApiRoutes(app);
 await registerEmailConnectionRoutes(app);
+await registerEmailScanReviewRoutes(app);
 await registerPurchaseRecoveryRoutes(app);
 await registerWebPreview(app);
 
