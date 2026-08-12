@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
-    "nylas:smoke": "tsx src/scripts/nylas-smoke.ts"
+    "nylas:smoke": "tsx src/scripts/nylas-smoke.ts",
+    "nylas:discover": "tsx src/scripts/nylas-discover.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
