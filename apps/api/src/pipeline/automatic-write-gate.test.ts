@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  canAutomaticallyWriteDocument,
+  canAutomaticallyWritePurchase,
+  canAutomaticallyWriteShipment,
+  isTrustedAutomaticEvidence,
+} from './automatic-write-gate.js';
+import type { DocumentResolutionCandidate } from '../resolution/document-resolution.js';
+import type { PurchaseResolutionCandidate } from '../resolution/purchase-resolution.js';
+import type { ShipmentResolutionCandidate } from '../resolution/shipment-resolution.js';
+
+function purchase(
+  overrides: Partial<PurchaseResolutionCandidate> = {},
+): PurchaseResolutionCandidate {
+  return {
+    key: 'user::merchant::order',
+    userId: 'user-1',
+    senderDomain: 'shop.example',
+    merchant: 'Example Shop',
+    orderNumber: 'ORDER-1',
+    decision: 'create_corroborated',
+    confidence: 0.94,
+    evidenceCount: 3,
+    orderCreatedEvidenceCount: 1,
+    corroboratingEvidenceCount: 2,
+    reasons: [],
+    sourceEmailIds: ['email-1', 'email-2', 'email-3'],
+    ...overrides,
+  };
+}
+
+function shipment(
+  overrides: Partial<ShipmentResolutionCandidate> = {},
+): ShipmentResolutionCandidate {
+  return {
+    key: 'user::tracking',
+    userId: 'user-1',
+    trackingNumber: 'TRACK123',
+    carrierSlug: 'express-one',
+    purchaseId: 'purchase-1',
+    decision: 'linkable',
+    recommendedStatus: 'delivered',
+    confidence: 0.94,
+    evidenceCount: 3,
+    merchantAnchorCount: 1,
+    carrierEvidenceCount: 2,
+    reasons: [],
+    sourceEmailIds: ['email-1', 'email-2', 'email-3'],
+    ...overrides,
+  };
+}
+
+function document(
+  overrides: Partial<DocumentResolutionCandidate> = {},
+): DocumentResolutionCandidate {
+  return {
+    sourceEmailId: 'email-1',
+    userId: 'user-1',
+    purchaseId: 'purchase-1',
+    decision: 'linkable',
+    documentType: 'invoice',
+    confidence: 0.9,
+    reasons: [],
+    ...overrides,
+  };
+}
+
+test('validated and guardrailed evidence are trusted, review evidence is not', () => {
+  assert.equal(isTrustedAutomaticEvidence('validated', null), true);
+  assert.equal(isTrustedAutomaticEvidence('guardrailed', null), true);
+  assert.equal(isTrustedAutomaticEvidence('review', null), false);
+  assert.equal(
+    isTrustedAutomaticEvidence('validated', { validation_status: 'review' }),
+    false,
+  );
+});
+
+test('allows strongly corroborated purchase creation', () => {
+  assert.equal(canAutomaticallyWritePurchase(purchase()), true);
+});
+
+test('rejects weakly corroborated purchase creation', () => {
+  assert.equal(
+    canAutomaticallyWritePurchase(
+      purchase({ evidenceCount: 2, corroboratingEvidenceCount: 1 }),
+    ),
+    false,
+  );
+});
+
+test('allows direct purchase only at high confidence', () => {
+  assert.equal(
+    canAutomaticallyWritePurchase(
+      purchase({
+        decision: 'create_direct',
+        confidence: 0.9,
+        evidenceCount: 1,
+        corroboratingEvidenceCount: 0,
+        sourceEmailIds: ['email-1'],
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    canAutomaticallyWritePurchase(
+      purchase({ decision: 'create_direct', confidence: 0.89 }),
+    ),
+    false,
+  );
+});
+
+test('never writes lifecycle-only purchase candidate', () => {
+  assert.equal(
+    canAutomaticallyWritePurchase(purchase({ decision: 'lifecycle_only' })),
+    false,
+  );
+});
+
+test('allows only strongly anchored shipment candidate', () => {
+  assert.equal(canAutomaticallyWriteShipment(shipment()), true);
+  assert.equal(
+    canAutomaticallyWriteShipment(shipment({ carrierEvidenceCount: 1 })),
+    false,
+  );
+  assert.equal(
+    canAutomaticallyWriteShipment(shipment({ merchantAnchorCount: 0 })),
+    false,
+  );
+});
+
+test('allows only linkable high-confidence invoice document', () => {
+  assert.equal(canAutomaticallyWriteDocument(document()), true);
+  assert.equal(
+    canAutomaticallyWriteDocument(document({ documentType: 'receipt' })),
+    false,
+  );
+  assert.equal(
+    canAutomaticallyWriteDocument(document({ confidence: 0.84 })),
+    false,
+  );
+});
