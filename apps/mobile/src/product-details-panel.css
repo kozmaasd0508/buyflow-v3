@@ -1,0 +1,126 @@
+.buyflow-products-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.buyflow-product-card {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(11, 16, 30, 0.54);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.buyflow-product-media {
+  width: 68px;
+  height: 68px;
+  border-radius: 16px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(63, 208, 255, 0.12), rgba(131, 93, 255, 0.13));
+  color: rgba(225, 240, 255, 0.72);
+  font-size: 28px;
+}
+
+.buyflow-product-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.buyflow-product-content {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.buyflow-product-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.buyflow-product-heading > div {
+  min-width: 0;
+}
+
+.buyflow-product-heading strong {
+  display: block;
+  color: #f7fbff;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.buyflow-product-heading small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(218, 229, 244, 0.62);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.buyflow-product-qty {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(98, 214, 255, 0.1);
+  border: 1px solid rgba(98, 214, 255, 0.16);
+  color: #bcefff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.buyflow-product-identifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.buyflow-product-identifiers span {
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(224, 233, 247, 0.68);
+  font-size: 10px;
+}
+
+.buyflow-product-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.buyflow-product-bottom strong {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.buyflow-product-bottom a {
+  color: #8ddfff;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.buyflow-product-bottom a:hover,
+.buyflow-product-bottom a:focus-visible {
+  text-decoration: underline;
+}
+
+@media (max-width: 420px) {
+  .buyflow-product-card {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .buyflow-product-media {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+  }
+}
