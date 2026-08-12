@@ -13,6 +13,7 @@ export type ResolutionEventType =
 
 export interface ResolutionEvidence {
   sourceEmailId: string;
+  userId: string;
   senderDomain: string;
   eventType: ResolutionEventType;
   merchant: string | null;
@@ -29,6 +30,7 @@ export type PurchaseResolutionDecision =
 
 export interface PurchaseResolutionCandidate {
   key: string;
+  userId: string;
   senderDomain: string;
   merchant: string | null;
   orderNumber: string;
@@ -57,11 +59,11 @@ function normalizeOrderNumber(orderNumber: string): string {
 }
 
 function candidateKey(evidence: ResolutionEvidence): string | null {
-  if (!evidence.orderNumber) return null;
+  if (!evidence.userId || !evidence.orderNumber) return null;
   const senderDomain = normalizeDomain(evidence.senderDomain);
   const orderNumber = normalizeOrderNumber(evidence.orderNumber);
   if (!senderDomain || !orderNumber) return null;
-  return `${senderDomain}::${orderNumber}`;
+  return `${evidence.userId}::${senderDomain}::${orderNumber}`;
 }
 
 export function resolvePurchaseCandidates(
@@ -83,6 +85,7 @@ export function resolvePurchaseCandidates(
     const sorted = [...rows].sort((a, b) =>
       a.receivedAt.localeCompare(b.receivedAt),
     );
+    const userId = sorted[0]?.userId ?? '';
     const senderDomain = normalizeDomain(sorted[0]?.senderDomain ?? '');
     const orderNumber = sorted[0]?.orderNumber?.trim() ?? '';
     const carrierSender = isCarrierSenderDomain(senderDomain);
@@ -128,6 +131,7 @@ export function resolvePurchaseCandidates(
 
     candidates.push({
       key,
+      userId,
       senderDomain,
       merchant,
       orderNumber,
