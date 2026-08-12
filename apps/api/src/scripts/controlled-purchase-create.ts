@@ -68,13 +68,13 @@ async function main() {
     throw new Error(`Failed to load validated source emails: ${error.message}`);
   }
 
-  const evidence = (rows ?? [])
+  const evidence: ResolutionEvidence[] = ((rows ?? []) as any[])
     .map(toEvidence)
     .filter((row: ResolutionEvidence | null): row is ResolutionEvidence => Boolean(row));
 
   const candidates = resolvePurchaseCandidates(evidence);
   const candidate = selectControlledPurchaseCandidate(candidates);
-  const candidateEvidence = evidence.filter((row) =>
+  const candidateEvidence: ResolutionEvidence[] = evidence.filter((row: ResolutionEvidence) =>
     candidate.sourceEmailIds.includes(row.sourceEmailId),
   );
 
@@ -82,13 +82,13 @@ async function main() {
     throw new Error('Controlled candidate evidence set is incomplete');
   }
 
-  if (candidateEvidence.some((row) => row.userId !== candidate.userId)) {
+  if (candidateEvidence.some((row: ResolutionEvidence) => row.userId !== candidate.userId)) {
     throw new Error('Controlled candidate contains cross-user evidence');
   }
 
-  const orderCreatedEvidence = candidateEvidence
-    .filter((row) => row.eventType === 'order_created')
-    .sort((a, b) => b.confidence - a.confidence);
+  const orderCreatedEvidence: ResolutionEvidence[] = candidateEvidence
+    .filter((row: ResolutionEvidence) => row.eventType === 'order_created')
+    .sort((a: ResolutionEvidence, b: ResolutionEvidence) => b.confidence - a.confidence);
   const primaryOrderEvidence = orderCreatedEvidence[0];
 
   if (!primaryOrderEvidence) {
@@ -108,7 +108,7 @@ async function main() {
   }
 
   const existedBefore = Array.isArray(existingRows) && existingRows.length > 0;
-  const sources = candidateEvidence.map((row) => ({
+  const sources = candidateEvidence.map((row: ResolutionEvidence) => ({
     source_email_id: row.sourceEmailId,
     relation_type: row.eventType,
     confidence: row.confidence,
