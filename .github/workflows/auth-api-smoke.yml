@@ -35,3 +35,5 @@ jobs:
           SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           API_BASE_URL: https://buyflow-v3-api-dev.onrender.com
+
+# Triggered after auth smoke type-fix verification.
