@@ -44,7 +44,7 @@ app.addContentTypeParser(
 app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
-  version: '0.2.1',
+  version: '0.2.2',
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
   webhook: { ...webhookStats },
 }));
