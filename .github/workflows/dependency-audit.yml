@@ -1,0 +1,69 @@
+name: Dependency Audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/dependency-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Summarize full and production dependency audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --json > /tmp/full-audit.json || true
+          npm audit --omit=dev --json > /tmp/prod-audit.json || true
+          node <<'NODE'
+          const fs = require('fs');
+          function read(path) {
+            try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
+            catch { return {}; }
+          }
+          function summary(report) {
+            const meta = report.metadata?.vulnerabilities || {};
+            const vulnerabilities = report.vulnerabilities || {};
+            const affected = Object.entries(vulnerabilities)
+              .filter(([, v]) => v && (v.severity === 'high' || v.severity === 'critical'))
+              .map(([name, v]) => ({
+                name,
+                severity: v.severity,
+                direct: Boolean(v.isDirect),
+                fixAvailable: Boolean(v.fixAvailable),
+                via: Array.isArray(v.via)
+                  ? v.via.map(x => typeof x === 'string' ? x : x?.title).filter(Boolean).slice(0, 3)
+                  : [],
+              }));
+            return {
+              counts: {
+                low: meta.low || 0,
+                moderate: meta.moderate || 0,
+                high: meta.high || 0,
+                critical: meta.critical || 0,
+              },
+              affected,
+            };
+          }
+          console.log(JSON.stringify({
+            full: summary(read('/tmp/full-audit.json')),
+            productionOnly: summary(read('/tmp/prod-audit.json')),
+          }, null, 2));
+          NODE
