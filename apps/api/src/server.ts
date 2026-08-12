@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { registerAppApiRoutes } from './api/app-routes.js';
+import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import {
   drainWebhookInbox,
@@ -76,10 +77,18 @@ app.addContentTypeParser(
 
 await registerAppApiRoutes(app);
 
+app.get('/auth/reset-password', async (_request, reply) => reply
+  .code(200)
+  .type('text/html; charset=utf-8')
+  .header('Cache-Control', 'no-store')
+  .header('Referrer-Policy', 'no-referrer')
+  .header('X-Content-Type-Options', 'nosniff')
+  .send(passwordResetPageHtml()));
+
 app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
-  version: '0.3.1',
+  version: '0.3.2',
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
   webhook: { ...webhookStats },
 }));
