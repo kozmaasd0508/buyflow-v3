@@ -7,7 +7,10 @@ import {
   type ValidatedEmailExtraction,
 } from '../validation/email-extraction-validator.js';
 
-const MAX_EMAILS = 10;
+const requestedMaxEmails = Number.parseInt(process.env.PIPELINE_MAX_EMAILS ?? '10', 10);
+const MAX_EMAILS = Number.isFinite(requestedMaxEmails)
+  ? Math.min(Math.max(requestedMaxEmails, 1), 100)
+  : 10;
 
 function senderDomains(addresses: Array<{ email: string }>): string[] {
   return [...new Set(
@@ -71,7 +74,7 @@ async function main() {
   const statusCounts: Record<string, number> = {};
   const eventChanges: Record<string, number> = {};
   const blockedFieldCounts: Record<string, number> = {};
-  let selected = rows?.length ?? 0;
+  const selected = rows?.length ?? 0;
   let processed = 0;
   let eligibleForPurchaseCreation = 0;
   let errors = 0;
@@ -145,6 +148,7 @@ async function main() {
           publicLogContainsEmailBody: false,
           publicLogContainsIdentifiers: false,
         },
+        maxEmails: MAX_EMAILS,
         selected,
         processed,
         errors,
