@@ -9,7 +9,9 @@ interface EmailScanJobRow {
   id: string;
   user_id: string;
   email_connection_id: string;
+  kind: 'initial' | 'targeted';
   window_days: number;
+  search_term: string | null;
   status: string;
 }
 
@@ -40,6 +42,13 @@ function safeErrorCode(error: unknown): string {
     : 'UnknownError';
 }
 
+function normalizeSearchTerm(value: string): string {
+  return value
+    .replace(/["\\]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function enqueueInitialEmailScan(input: {
   userId: string;
   emailConnectionId: string;
@@ -61,6 +70,34 @@ export async function enqueueInitialEmailScan(input: {
   return data;
 }
 
+export async function enqueueTargetedEmailScan(input: {
+  userId: string;
+  emailConnectionId: string;
+  searchTerm: string;
+  windowDays: 7 | 30 | 90;
+}): Promise<string> {
+  const db = getSupabaseAdmin() as any;
+  const searchTerm = normalizeSearchTerm(input.searchTerm);
+  if (searchTerm.length < 2 || searchTerm.length > 120) {
+    throw new Error('Targeted email scan search term is invalid');
+  }
+
+  const { data, error } = await db.rpc('enqueue_targeted_email_scan', {
+    p_user_id: input.userId,
+    p_email_connection_id: input.emailConnectionId,
+    p_search_term: searchTerm,
+    p_window_days: input.windowDays,
+  });
+
+  if (error) {
+    throw new Error(`Targeted email scan enqueue failed: ${error.message}`);
+  }
+  if (typeof data !== 'string' || !data) {
+    throw new Error('Targeted email scan enqueue returned no job id');
+  }
+  return data;
+}
+
 export async function processEmailScanJob(
   jobId: string,
   mode: AutomationMode,
@@ -75,7 +112,7 @@ export async function processEmailScanJob(
   try {
     const { data: job, error: jobError } = await db
       .from('email_scan_jobs')
-      .select('id,user_id,email_connection_id,window_days,status')
+      .select('id,user_id,email_connection_id,kind,window_days,search_term,status')
       .eq('id', jobId)
       .single();
     if (jobError || !job) {
@@ -107,10 +144,24 @@ export async function processEmailScanJob(
       providerAccountId: emailConnection.provider_account_id,
     });
 
-    const windowDays = Math.min(Math.max(scanJob.window_days, 1), 30);
-    const query = `category:purchases newer_than:${windowDays}d -in:spam -in:trash`;
-    const pageSize = 50;
-    const maxPages = 20;
+    const windowDays = Math.min(Math.max(scanJob.window_days, 1), 90);
+    let query: string;
+    let pageSize: number;
+    let maxPages: number;
+
+    if (scanJob.kind === 'targeted') {
+      const searchTerm = normalizeSearchTerm(scanJob.search_term ?? '');
+      if (searchTerm.length < 2) {
+        throw new Error('Targeted email scan is missing a valid search term');
+      }
+      query = `"${searchTerm}" newer_than:${windowDays}d -in:spam -in:trash`;
+      pageSize = 20;
+      maxPages = 2;
+    } else {
+      query = `category:purchases newer_than:${windowDays}d -in:spam -in:trash`;
+      pageSize = 50;
+      maxPages = 20;
+    }
 
     let cursor: string | undefined;
     let pages = 0;
