@@ -10,6 +10,17 @@ const app = Fastify({
   logger: true,
 });
 
+const webhookStats = {
+  postsReceived: 0,
+  invalidSignatures: 0,
+  validSignatures: 0,
+  parsedMessageCreated: 0,
+  unsupportedSignedEvents: 0,
+  pipelineCompleted: 0,
+  pipelineFailed: 0,
+  unknownGrant: 0,
+};
+
 // Nylas signs the exact raw request body. Preserve raw bytes for its webhook
 // while keeping normal JSON parsing behavior for future API routes.
 app.removeContentTypeParser('application/json');
@@ -33,8 +44,9 @@ app.addContentTypeParser(
 app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
-  version: '0.2.0',
+  version: '0.2.1',
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
+  webhook: { ...webhookStats },
 }));
 
 app.get<{ Querystring: { challenge?: string } }>('/webhooks/nylas', async (request, reply) => {
@@ -51,6 +63,8 @@ app.get<{ Querystring: { challenge?: string } }>('/webhooks/nylas', async (reque
 });
 
 app.post('/webhooks/nylas', async (request, reply) => {
+  webhookStats.postsReceived += 1;
+
   const rawBody = request.body;
   if (!Buffer.isBuffer(rawBody)) {
     return reply.code(400).send();
@@ -67,16 +81,22 @@ app.post('/webhooks/nylas', async (request, reply) => {
   const signature = request.headers['x-nylas-signature'];
   const signatureValue = Array.isArray(signature) ? signature[0] : signature;
   if (!verifyNylasSignature(rawBody, signatureValue, secret)) {
+    webhookStats.invalidSignatures += 1;
     request.log.warn('Rejected Nylas webhook with invalid signature');
     return reply.code(401).send();
   }
 
+  webhookStats.validSignatures += 1;
+
   const event = parseNylasMessageCreatedEvent(rawBody);
   if (!event) {
+    webhookStats.unsupportedSignedEvents += 1;
     // A validly signed but unsupported notification is acknowledged so Nylas
     // does not retry it. This endpoint only acts on message.created variants.
     return reply.code(200).send();
   }
+
+  webhookStats.parsedMessageCreated += 1;
 
   setImmediate(() => {
     void processNylasMessage({
@@ -85,6 +105,8 @@ app.post('/webhooks/nylas', async (request, reply) => {
       mode: env.BUYFLOW_AUTOMATION_MODE,
     })
       .then((result) => {
+        webhookStats.pipelineCompleted += 1;
+        if (result.status === 'unknown_grant') webhookStats.unknownGrant += 1;
         app.log.info({
           pipelineStatus: result.status,
           purchaseWrites: result.purchaseWrites,
@@ -95,6 +117,7 @@ app.post('/webhooks/nylas', async (request, reply) => {
         }, 'Nylas message pipeline completed');
       })
       .catch((error) => {
+        webhookStats.pipelineFailed += 1;
         app.log.error({
           errorType: error instanceof Error ? error.name : 'UnknownError',
         }, 'Nylas message pipeline failed');
