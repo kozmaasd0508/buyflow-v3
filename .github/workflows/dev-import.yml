@@ -1,0 +1,38 @@
+name: Dev Nylas import
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Controlled import
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/dev-import.ts
+        env:
+          SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.BUYFLOW_SUPABASE_SECRET_KEY }}
+          NYLAS_API_KEY: ${{ secrets.BUYFLOW_NYLAS_API_KEY }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.BUYFLOW_NYLAS_GRANT_ID }}
+          BUYFLOW_DEV_EMAIL: ${{ secrets.BUYFLOW_DEV_EMAIL }}
+          EMAIL_DISCOVERY_QUERY: category:purchases newer_than:30d -in:spam -in:trash
