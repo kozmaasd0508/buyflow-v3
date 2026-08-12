@@ -22,12 +22,12 @@ jobs:
           URL="https://buyflow-v3-api-dev.onrender.com"
           for attempt in $(seq 1 30); do
             body="$(curl -fsS --max-time 20 "$URL/health" 2>/dev/null || true)"
-            if echo "$body" | grep -q '"version":"0.3.2"'; then
-              echo "Render health is on v0.3.2"
+            if echo "$body" | grep -q '"version":"0.4.0"'; then
+              echo "Render health is on v0.4.0"
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              echo "Render did not expose v0.3.2 in time"
+              echo "Render did not expose v0.4.0 in time"
               exit 1
             fi
             sleep 10
