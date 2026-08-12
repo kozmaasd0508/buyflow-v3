@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import Nylas from 'nylas';
 import type { EmailProvider } from './provider.js';
 import type {
   EmailAddress,
@@ -58,14 +58,6 @@ type NylasClientShape = {
   };
 };
 
-type NylasConstructor = new (config: {
-  apiKey: string;
-  apiUri: string;
-}) => NylasClientShape;
-
-const require = createRequire(import.meta.url);
-const Nylas = require('nylas') as NylasConstructor;
-
 export interface NylasEmailProviderConfig {
   apiKey: string;
   apiUri: string;
@@ -123,7 +115,7 @@ export class NylasEmailProvider implements EmailProvider {
     this.client = new Nylas({
       apiKey: config.apiKey,
       apiUri: config.apiUri,
-    });
+    }) as unknown as NylasClientShape;
     this.grantId = config.grantId;
   }
 
