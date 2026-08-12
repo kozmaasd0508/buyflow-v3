@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  api:
+  api-and-mobile:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,11 +21,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: API typecheck
+        run: npm run typecheck --workspace @buyflow/api
 
-      - name: Test
-        run: npm test
+      - name: API tests
+        run: npm test --workspace @buyflow/api
 
-      - name: Build
-        run: npm run build
+      - name: API build
+        run: npm run build --workspace @buyflow/api
+
+      - name: Mobile typecheck
+        run: npm run typecheck --workspace @buyflow/mobile
+
+      - name: Mobile web build
+        run: npm run build --workspace @buyflow/mobile
