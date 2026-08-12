@@ -12,10 +12,12 @@ const envSchema = z.object({
   NYLAS_API_KEY: z.string().min(1).optional(),
   NYLAS_API_URI: z.string().url().default('https://api.eu.nylas.com'),
   NYLAS_SMOKE_GRANT_ID: z.string().min(1).optional(),
+  NYLAS_WEBHOOK_SECRET: z.string().min(1).optional(),
 
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().min(1).default('gpt-5.4-nano'),
 
+  BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
 
@@ -62,6 +64,13 @@ export function requireNylasSmokeGrantId() {
   }
 
   return env.NYLAS_SMOKE_GRANT_ID;
+}
+
+export function requireNylasWebhookSecret() {
+  if (!env.NYLAS_WEBHOOK_SECRET) {
+    throw new Error('Nylas webhook secret is not configured. Set NYLAS_WEBHOOK_SECRET.');
+  }
+  return env.NYLAS_WEBHOOK_SECRET;
 }
 
 export function requireOpenAIConfig() {
