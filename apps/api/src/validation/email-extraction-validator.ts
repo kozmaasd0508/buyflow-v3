@@ -2,6 +2,9 @@ import type {
   BuyFlowEmailEventType,
   EmailExtraction,
 } from '../ai/openai-email-extractor.js';
+import { isCarrierSenderDomain } from '../email/sender-role.js';
+
+export { isCarrierSenderDomain } from '../email/sender-role.js';
 
 export type EmailValidationStatus = 'validated' | 'guardrailed' | 'review';
 
@@ -18,26 +21,6 @@ export interface ValidateEmailExtractionInput {
   senderDomains: string[];
   subject?: string | null;
   bodyText?: string | null;
-}
-
-const CARRIER_DOMAIN_TOKENS = [
-  'expressone',
-  'gls',
-  'dpd',
-  'foxpost',
-  'packeta',
-] as const;
-
-function normalizeDomain(domain: string): string {
-  return domain.trim().toLowerCase().replace(/^www\./, '');
-}
-
-export function isCarrierSenderDomain(domain: string): boolean {
-  const normalized = normalizeDomain(domain);
-  return CARRIER_DOMAIN_TOKENS.some((token) => {
-    const pattern = new RegExp(`(^|[.-])${token}([.-]|$)`, 'i');
-    return pattern.test(normalized);
-  });
 }
 
 function currencyEvidence(text: string, currency: string): boolean {
