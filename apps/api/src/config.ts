@@ -13,6 +13,9 @@ const envSchema = z.object({
   NYLAS_API_URI: z.string().url().default('https://api.eu.nylas.com'),
   NYLAS_SMOKE_GRANT_ID: z.string().min(1).optional(),
 
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).default('gpt-5.4-nano'),
+
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
 
@@ -59,6 +62,19 @@ export function requireNylasSmokeGrantId() {
   }
 
   return env.NYLAS_SMOKE_GRANT_ID;
+}
+
+export function requireOpenAIConfig() {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error(
+      'OpenAI is not configured. Set OPENAI_API_KEY in the server environment.',
+    );
+  }
+
+  return {
+    apiKey: env.OPENAI_API_KEY,
+    model: env.OPENAI_MODEL,
+  };
 }
 
 export function requireSmokeImportContext() {
