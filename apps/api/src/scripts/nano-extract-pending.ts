@@ -1,5 +1,6 @@
-import { env, requireNylasSmokeGrantId, requireOpenAIConfig } from '../config.js';
+import { requireNylasSmokeGrantId, requireOpenAIConfig } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import type { Json } from '../db/database.types.js';
 import { createEmailProvider } from '../email/factory.js';
 import {
   extractEmailWithOpenAIResult,
@@ -29,6 +30,20 @@ function extractionFieldPresence(extraction: EmailExtraction): string[] {
   if (extraction.total !== null) fields.push('total');
   if (extraction.currency) fields.push('currency');
   return fields;
+}
+
+function extractionToJson(extraction: EmailExtraction): Json {
+  return {
+    event_type: extraction.event_type,
+    merchant: extraction.merchant,
+    order_number: extraction.order_number,
+    tracking_number: extraction.tracking_number,
+    carrier: extraction.carrier,
+    invoice_number: extraction.invoice_number,
+    total: extraction.total,
+    currency: extraction.currency,
+    confidence: extraction.confidence,
+  };
 }
 
 async function main() {
@@ -112,7 +127,15 @@ async function main() {
       });
 
       const extraction = result.extraction;
+      const extractionJson = extractionToJson(extraction);
       const now = new Date().toISOString();
+
+      const aiRunResult: Json = {
+        extraction: extractionJson,
+        openai_response_id: result.responseId,
+        total_tokens: result.totalTokens,
+        cached_input_tokens: result.cachedInputTokens,
+      };
 
       const { error: runError } = await supabase.from('ai_processing_runs').insert({
         user_id: source.user_id,
@@ -127,12 +150,7 @@ async function main() {
         output_tokens: result.outputTokens,
         estimated_cost: null,
         confidence: extraction.confidence,
-        result: {
-          extraction,
-          openai_response_id: result.responseId,
-          total_tokens: result.totalTokens,
-          cached_input_tokens: result.cachedInputTokens,
-        },
+        result: aiRunResult,
       });
 
       if (runError) {
@@ -143,7 +161,7 @@ async function main() {
         .from('source_emails')
         .update({
           classification: extraction.event_type,
-          structured_result: extraction,
+          structured_result: extractionJson,
           processing_status: 'review',
           processed_at: now,
         })
@@ -166,6 +184,10 @@ async function main() {
     } catch (error) {
       errors += 1;
 
+      const failedResult: Json = {
+        error_type: error instanceof Error ? error.name : 'UnknownError',
+      };
+
       await supabase.from('ai_processing_runs').insert({
         user_id: source.user_id,
         source_email_id: source.id,
@@ -175,9 +197,7 @@ async function main() {
         model: openai.model,
         prompt_version: PROMPT_VERSION,
         status: 'failed',
-        result: {
-          error_type: error instanceof Error ? error.name : 'UnknownError',
-        },
+        result: failedResult,
       });
 
       await supabase
