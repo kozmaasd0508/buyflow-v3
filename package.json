@@ -1,0 +1,18 @@
+{
+  "name": "buyflow-v3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @buyflow/api",
+    "build": "npm run build --workspace @buyflow/api",
+    "typecheck": "npm run typecheck --workspace @buyflow/api",
+    "test": "npm run test --workspace @buyflow/api"
+  }
+}
