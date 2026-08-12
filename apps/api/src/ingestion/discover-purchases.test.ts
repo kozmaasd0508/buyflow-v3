@@ -17,6 +17,7 @@ function email(id: string): NormalizedEmail {
     cc: [],
     bcc: [],
     receivedAt: '2026-08-12T10:00:00.000Z',
+    folders: [],
     attachments: [],
   };
 }
