@@ -41,3 +41,20 @@ jobs:
           body="$(curl -fsS --max-time 20 "$URL")"
           test "$body" = "buyflow-webhook-smoke"
           echo "Nylas challenge handshake passed"
+
+      - name: Verify webhook secret enforcement
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://buyflow-v3-api-dev.onrender.com/webhooks/nylas"
+          code="$(curl -sS -o /tmp/nylas-secret-check.txt -w '%{http_code}' \
+            --max-time 20 \
+            -H 'content-type: application/json' \
+            -X POST \
+            --data '{"type":"message.created","data":{"object":{"id":"buyflow-invalid-signature-smoke"}}}' \
+            "$URL")"
+          if [ "$code" != "401" ]; then
+            echo "Expected 401 for unsigned webhook, got $code"
+            exit 1
+          fi
+          echo "Nylas webhook secret enforcement passed"
