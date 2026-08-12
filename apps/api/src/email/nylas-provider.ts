@@ -10,7 +10,7 @@ import type {
 
 type NylasEmailName = {
   email: string;
-  name?: string;
+  name?: string | null;
 };
 
 type NylasAttachment = {
@@ -22,7 +22,7 @@ type NylasAttachment = {
   contentId?: string;
 };
 
-type NylasMessageLike = {
+export type NylasMessageLike = {
   id: string;
   date: number;
   threadId?: string;
@@ -40,6 +40,47 @@ export interface NylasEmailProviderConfig {
   apiKey: string;
   apiUri: string;
   grantId: string;
+}
+
+function normalizeAddresses(addresses?: NylasEmailName[]): EmailAddress[] {
+  return (addresses ?? []).map((address) => ({
+    email: address.email,
+    ...(address.name ? { name: address.name } : {}),
+  }));
+}
+
+function normalizeAttachments(
+  attachments?: NylasAttachment[],
+): EmailAttachmentMetadata[] {
+  return (attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    filename: attachment.filename,
+    contentType: attachment.contentType,
+    ...(attachment.size !== undefined ? { size: attachment.size } : {}),
+    ...(attachment.isInline !== undefined
+      ? { isInline: attachment.isInline }
+      : {}),
+    ...(attachment.contentId ? { contentId: attachment.contentId } : {}),
+  }));
+}
+
+export function normalizeNylasMessage(
+  message: NylasMessageLike,
+): NormalizedEmail {
+  return {
+    provider: 'nylas',
+    providerMessageId: message.id,
+    providerThreadId: message.threadId,
+    subject: message.subject,
+    from: normalizeAddresses(message.from),
+    to: normalizeAddresses(message.to),
+    cc: normalizeAddresses(message.cc),
+    bcc: normalizeAddresses(message.bcc),
+    receivedAt: new Date(message.date * 1000).toISOString(),
+    snippet: message.snippet,
+    bodyHtml: message.body,
+    attachments: normalizeAttachments(message.attachments),
+  };
 }
 
 export class NylasEmailProvider implements EmailProvider {
@@ -69,7 +110,7 @@ export class NylasEmailProvider implements EmailProvider {
     });
 
     return {
-      messages: response.data.map((message) => this.normalize(message)),
+      messages: response.data.map((message) => normalizeNylasMessage(message)),
       nextCursor: response.nextCursor,
     };
   }
@@ -80,45 +121,6 @@ export class NylasEmailProvider implements EmailProvider {
       messageId: providerMessageId,
     });
 
-    return this.normalize(response.data);
-  }
-
-  private normalize(message: NylasMessageLike): NormalizedEmail {
-    return {
-      provider: this.name,
-      providerMessageId: message.id,
-      providerThreadId: message.threadId,
-      subject: message.subject,
-      from: this.normalizeAddresses(message.from),
-      to: this.normalizeAddresses(message.to),
-      cc: this.normalizeAddresses(message.cc),
-      bcc: this.normalizeAddresses(message.bcc),
-      receivedAt: new Date(message.date * 1000).toISOString(),
-      snippet: message.snippet,
-      bodyHtml: message.body,
-      attachments: this.normalizeAttachments(message.attachments),
-    };
-  }
-
-  private normalizeAddresses(addresses?: NylasEmailName[]): EmailAddress[] {
-    return (addresses ?? []).map((address) => ({
-      email: address.email,
-      ...(address.name ? { name: address.name } : {}),
-    }));
-  }
-
-  private normalizeAttachments(
-    attachments?: NylasAttachment[],
-  ): EmailAttachmentMetadata[] {
-    return (attachments ?? []).map((attachment) => ({
-      id: attachment.id,
-      filename: attachment.filename,
-      contentType: attachment.contentType,
-      ...(attachment.size !== undefined ? { size: attachment.size } : {}),
-      ...(attachment.isInline !== undefined
-        ? { isInline: attachment.isInline }
-        : {}),
-      ...(attachment.contentId ? { contentId: attachment.contentId } : {}),
-    }));
+    return normalizeNylasMessage(response.data);
   }
 }
