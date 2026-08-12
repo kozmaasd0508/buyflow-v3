@@ -21,6 +21,15 @@ export interface EmailExtraction {
   confidence: number;
 }
 
+export interface OpenAIEmailExtractionResult {
+  extraction: EmailExtraction;
+  responseId: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  cachedInputTokens: number | null;
+}
+
 const extractionSchema = {
   type: 'object',
   additionalProperties: false,
@@ -81,6 +90,46 @@ function outputText(response: unknown): string {
   return '';
 }
 
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+function parseUsage(response: unknown) {
+  if (!response || typeof response !== 'object') {
+    return {
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+      cachedInputTokens: null,
+    };
+  }
+
+  const usage = (response as { usage?: unknown }).usage;
+  if (!usage || typeof usage !== 'object') {
+    return {
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+      cachedInputTokens: null,
+    };
+  }
+
+  const details = (usage as { input_tokens_details?: unknown }).input_tokens_details;
+  const cachedInputTokens =
+    details && typeof details === 'object'
+      ? nonNegativeInteger((details as { cached_tokens?: unknown }).cached_tokens)
+      : null;
+
+  return {
+    inputTokens: nonNegativeInteger((usage as { input_tokens?: unknown }).input_tokens),
+    outputTokens: nonNegativeInteger((usage as { output_tokens?: unknown }).output_tokens),
+    totalTokens: nonNegativeInteger((usage as { total_tokens?: unknown }).total_tokens),
+    cachedInputTokens,
+  };
+}
+
 export function htmlToCompactText(html: string, maxChars = 12_000): string {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -101,14 +150,14 @@ export function htmlToCompactText(html: string, maxChars = 12_000): string {
     .slice(0, maxChars);
 }
 
-export async function extractEmailWithOpenAI(input: {
+export async function extractEmailWithOpenAIResult(input: {
   apiKey: string;
   model?: string;
   subject?: string;
   fromDomains?: string[];
   bodyText: string;
   fetchImpl?: typeof fetch;
-}): Promise<EmailExtraction> {
+}): Promise<OpenAIEmailExtractionResult> {
   const fetchImpl = input.fetchImpl ?? fetch;
   const response = await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -153,9 +202,31 @@ export async function extractEmailWithOpenAI(input: {
   const text = outputText(json);
   if (!text) throw new Error('OpenAI response did not contain output text.');
 
-  const parsed = JSON.parse(text) as EmailExtraction;
-  if (typeof parsed.confidence !== 'number' || !parsed.event_type) {
+  const extraction = JSON.parse(text) as EmailExtraction;
+  if (typeof extraction.confidence !== 'number' || !extraction.event_type) {
     throw new Error('OpenAI structured extraction was incomplete.');
   }
-  return parsed;
+
+  const responseId =
+    json && typeof json === 'object' && typeof (json as { id?: unknown }).id === 'string'
+      ? (json as { id: string }).id
+      : null;
+
+  return {
+    extraction,
+    responseId,
+    ...parseUsage(json),
+  };
+}
+
+export async function extractEmailWithOpenAI(input: {
+  apiKey: string;
+  model?: string;
+  subject?: string;
+  fromDomains?: string[];
+  bodyText: string;
+  fetchImpl?: typeof fetch;
+}): Promise<EmailExtraction> {
+  const result = await extractEmailWithOpenAIResult(input);
+  return result.extraction;
 }
