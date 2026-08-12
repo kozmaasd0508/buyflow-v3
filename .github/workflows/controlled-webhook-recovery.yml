@@ -1,0 +1,38 @@
+name: Controlled Webhook Recovery
+
+on:
+  push:
+    paths:
+      - .github/workflows/controlled-webhook-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Controlled failure and automatic recovery
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/controlled-webhook-recovery.ts
+        env:
+          SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_API_URI: https://api.eu.nylas.com
