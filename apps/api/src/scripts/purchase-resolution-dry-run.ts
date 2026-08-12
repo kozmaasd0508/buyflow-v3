@@ -30,6 +30,7 @@ function toEvidence(row: any): ResolutionEvidence | null {
   const eventType = result.event_type;
   const confidence = result.confidence;
   if (
+    typeof row.user_id !== 'string' ||
     typeof eventType !== 'string' ||
     !ALLOWED_EVENT_TYPES.has(eventType as ResolutionEventType) ||
     typeof confidence !== 'number'
@@ -39,6 +40,7 @@ function toEvidence(row: any): ResolutionEvidence | null {
 
   return {
     sourceEmailId: row.id,
+    userId: row.user_id,
     senderDomain: senderDomain(row.from_address),
     eventType: eventType as ResolutionEventType,
     merchant: typeof result.merchant === 'string' ? result.merchant : null,
@@ -55,7 +57,7 @@ async function main() {
 
   const { data: rows, error } = await db
     .from('source_emails')
-    .select('id,from_address,received_at,validated_result')
+    .select('id,user_id,from_address,received_at,validated_result')
     .not('validated_result', 'is', null)
     .order('received_at', { ascending: true });
 
@@ -101,6 +103,7 @@ async function main() {
           documentWrites: false,
           openAiCalls: false,
           publicLogContainsIdentifiers: false,
+          userScopedResolution: true,
         },
         validatedEmailsLoaded: evidence.length,
         candidateGroups: candidates.length,
