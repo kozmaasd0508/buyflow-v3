@@ -18,6 +18,7 @@
     "nylas:discover": "tsx src/scripts/nylas-discover.ts"
   },
   "dependencies": {
+    "@fastify/cors": "11.3.0",
     "@supabase/supabase-js": "^2.56.0",
     "dotenv": "^17.2.1",
     "fastify": "^5.5.0",
