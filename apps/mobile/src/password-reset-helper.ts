@@ -1,4 +1,5 @@
 import './ambient-fix.css';
+import './settings-panel.js';
 import { supabase } from './supabase.js';
 
 const RESET_URL = 'https://buyflow-v3-api-dev.onrender.com/auth/reset-password';
