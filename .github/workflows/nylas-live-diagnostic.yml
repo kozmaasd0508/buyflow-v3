@@ -1,0 +1,67 @@
+name: Nylas Live Diagnostic
+
+on:
+  push:
+    paths:
+      - .github/workflows/nylas-live-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+      NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+      NYLAS_API_URI: https://api.eu.nylas.com
+      WEBHOOK_URL: https://buyflow-v3-api-dev.onrender.com/webhooks/nylas
+      TEST_SUBJECT: 'BuyFlow teszt rendelés #BFTEST-001'
+
+    steps:
+      - name: Check Nylas webhook and latest mailbox messages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${NYLAS_API_KEY:-}" ] || [ -z "${NYLAS_GRANT_ID:-}" ]; then
+            echo 'diagnostic=missing_github_secrets'
+            exit 1
+          fi
+
+          webhooks="$(curl -fsS --max-time 30 \
+            -H "Authorization: Bearer $NYLAS_API_KEY" \
+            -H 'Accept: application/json' \
+            "$NYLAS_API_URI/v3/webhooks")"
+
+          echo "$webhooks" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
+              const body=JSON.parse(s); const rows=Array.isArray(body.data)?body.data:[];
+              const target=process.env.WEBHOOK_URL;
+              const matches=rows.filter(r=>r && r.webhook_url===target);
+              const triggered=matches.filter(r=>Array.isArray(r.trigger_types) && r.trigger_types.includes("message.created"));
+              const statusValues=[...new Set(matches.map(r=>String(r.status ?? "unknown")))];
+              console.log(`webhook_count=${rows.length}`);
+              console.log(`matching_webhook_count=${matches.length}`);
+              console.log(`matching_message_created_count=${triggered.length}`);
+              console.log(`matching_statuses=${statusValues.join(",") || "none"}`);
+            });
+          '
+
+          messages="$(curl -fsS --max-time 30 \
+            -H "Authorization: Bearer $NYLAS_API_KEY" \
+            -H 'Accept: application/json' \
+            "$NYLAS_API_URI/v3/grants/$NYLAS_GRANT_ID/messages?limit=20")"
+
+          echo "$messages" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
+              const body=JSON.parse(s); const rows=Array.isArray(body.data)?body.data:[];
+              const subject=process.env.TEST_SUBJECT;
+              const exact=rows.filter(r=>r && r.subject===subject);
+              console.log(`latest_messages_checked=${rows.length}`);
+              console.log(`test_email_visible_in_nylas=${exact.length>0}`);
+              console.log(`test_email_exact_matches=${exact.length}`);
+            });
+          '
