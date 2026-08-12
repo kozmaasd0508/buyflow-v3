@@ -5,6 +5,7 @@ import { registerEmailConnectionRoutes } from './api/email-connection-routes.js'
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
+import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
 import { registerWebPreview } from './web-preview.js';
 import {
   drainWebhookInbox,
@@ -56,6 +57,9 @@ const webhookStats = {
   recoveryRuns: 0,
   recoveryClaimed: 0,
   recoveryFailed: 0,
+  emailScanRecoveryRuns: 0,
+  emailScanRecoveryClaimed: 0,
+  emailScanRecoveryFailed: 0,
 };
 
 // Nylas signs the exact raw request body. Preserve raw bytes for its webhook
@@ -157,6 +161,25 @@ async function runRecovery() {
       errorType: error instanceof Error ? error.name : 'UnknownError',
     }, 'Webhook inbox recovery scan failed');
   }
+
+  try {
+    const result = await drainEmailScanJobs(env.BUYFLOW_AUTOMATION_MODE);
+    webhookStats.emailScanRecoveryRuns += 1;
+    webhookStats.emailScanRecoveryClaimed += result.claimed;
+    webhookStats.emailScanRecoveryFailed += result.failed;
+    if (result.claimed > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        claimed: result.claimed,
+        failed: result.failed,
+      }, 'Email scan recovery completed');
+    }
+  } catch (error) {
+    webhookStats.emailScanRecoveryFailed += 1;
+    app.log.error({
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+    }, 'Email scan recovery scan failed');
+  }
 }
 
 app.post('/webhooks/nylas', async (request, reply) => {
@@ -227,8 +250,8 @@ async function start() {
     });
 
     // Recover queued or stale work after a deploy/restart. While the free
-    // service is awake, retry due work every minute. The timer is not relied on
-    // for durability; the database inbox is the source of truth.
+    // service is awake, retry due work every minute. Durable database queues
+    // remain the source of truth for both webhook and email-scan work.
     void runRecovery();
     const recoveryTimer = setInterval(() => {
       void runRecovery();
