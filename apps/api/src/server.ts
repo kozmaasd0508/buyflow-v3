@@ -98,7 +98,7 @@ app.get('/auth/reset-password', async (_request, reply) => reply
 app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
-  version: '0.3.2',
+  version: '0.4.0',
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
   webhook: { ...webhookStats },
 }));
@@ -211,8 +211,6 @@ app.post('/webhooks/nylas', async (request, reply) => {
   const event = parseNylasMessageCreatedEvent(rawBody);
   if (!event) {
     webhookStats.unsupportedSignedEvents += 1;
-    // Validly signed notifications that this endpoint does not consume are
-    // acknowledged so Nylas does not retry unsupported event types forever.
     return reply.code(200).send();
   }
 
@@ -220,8 +218,6 @@ app.post('/webhooks/nylas', async (request, reply) => {
 
   let inboxEventId: string;
   try {
-    // Durability boundary: do not acknowledge Nylas until the normalized event
-    // identity is safely stored. Duplicate deliveries reuse the same row.
     inboxEventId = await enqueueNylasMessageEvent({
       grantId: event.grantId,
       messageId: event.messageId,
@@ -249,9 +245,6 @@ async function start() {
       host: env.HOST,
     });
 
-    // Recover queued or stale work after a deploy/restart. While the free
-    // service is awake, retry due work every minute. Durable database queues
-    // remain the source of truth for both webhook and email-scan work.
     void runRecovery();
     const recoveryTimer = setInterval(() => {
       void runRecovery();
