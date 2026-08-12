@@ -61,7 +61,12 @@ async function resolveDevelopmentGrant() {
     );
   }
 
-  return grants[0];
+  const selected = grants[0];
+  if (!selected) {
+    throw new Error('Active Google Nylas grant disappeared during bootstrap.');
+  }
+
+  return selected;
 }
 
 async function findOrCreateDevUser(email: string) {
