@@ -9,6 +9,7 @@ export interface DiscoverPurchaseCandidatesInput {
   query: string;
   pageSize?: number;
   maxPages?: number;
+  maxCreated?: number;
 }
 
 export interface DiscoverPurchaseCandidatesResult {
@@ -24,12 +25,16 @@ export async function discoverPurchaseCandidates(
 ): Promise<DiscoverPurchaseCandidatesResult> {
   const pageSize = Math.min(Math.max(input.pageSize ?? 20, 1), 200);
   const maxPages = Math.min(Math.max(input.maxPages ?? 50, 1), 500);
+  const maxCreated = input.maxCreated === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.min(Math.max(input.maxCreated, 1), 10_000);
 
   let cursor: string | undefined;
   let checked = 0;
   let created = 0;
   let duplicates = 0;
   let pages = 0;
+  let stoppedInsidePage = false;
 
   do {
     const page = await input.provider.searchMessages({
@@ -40,7 +45,10 @@ export async function discoverPurchaseCandidates(
 
     pages += 1;
 
-    for (const email of page.messages) {
+    for (let index = 0; index < page.messages.length; index += 1) {
+      const email = page.messages[index];
+      if (!email) continue;
+
       checked += 1;
 
       const saved = await input.sourceEmails.insertIfNew({
@@ -55,6 +63,16 @@ export async function discoverPurchaseCandidates(
       } else {
         duplicates += 1;
       }
+
+      if (created >= maxCreated) {
+        stoppedInsidePage = index < page.messages.length - 1;
+        cursor = page.nextCursor;
+        break;
+      }
+    }
+
+    if (created >= maxCreated) {
+      break;
     }
 
     cursor = page.nextCursor;
@@ -65,6 +83,6 @@ export async function discoverPurchaseCandidates(
     created,
     duplicates,
     pages,
-    hasMore: Boolean(cursor),
+    hasMore: stoppedInsidePage || Boolean(cursor),
   };
 }
