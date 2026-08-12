@@ -1,0 +1,108 @@
+/* Android/WebView ambient-light visibility fix.
+   Keep the ambient layer above the opaque document background and below app content. */
+
+#app {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  background: transparent !important;
+}
+
+.ambient-stage {
+  z-index: 0 !important;
+  background:
+    radial-gradient(circle at 12% 4%, rgba(74, 83, 255, .28), transparent 38%),
+    radial-gradient(circle at 92% 34%, rgba(190, 62, 255, .22), transparent 36%),
+    radial-gradient(circle at 42% 96%, rgba(24, 171, 255, .18), transparent 42%),
+    linear-gradient(180deg, #080a17 0%, #070914 52%, #090a17 100%) !important;
+}
+
+.ambient-stage::before {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  background:
+    radial-gradient(circle at 8% 30%, rgba(91, 79, 255, .28), transparent 25%),
+    radial-gradient(circle at 92% 62%, rgba(235, 67, 208, .20), transparent 27%);
+  filter: blur(28px);
+  animation: ambient-breathe 9s ease-in-out infinite alternate;
+}
+
+.ambient-stage::after {
+  background: linear-gradient(180deg, rgba(3, 5, 13, .02), rgba(3, 5, 13, .12)) !important;
+}
+
+.ambient-orb {
+  filter: blur(52px) saturate(165%) !important;
+  opacity: .94 !important;
+  mix-blend-mode: screen;
+}
+
+.ambient-orb-a {
+  width: 82vw !important;
+  height: 82vw !important;
+  max-width: 560px !important;
+  max-height: 560px !important;
+  left: -33vw !important;
+  top: -8vh !important;
+  background: rgba(73, 77, 255, .92) !important;
+}
+
+.ambient-orb-b {
+  width: 76vw !important;
+  height: 76vw !important;
+  max-width: 520px !important;
+  max-height: 520px !important;
+  right: -31vw !important;
+  top: 20vh !important;
+  background: rgba(202, 62, 255, .84) !important;
+}
+
+.ambient-orb-c {
+  width: 76vw !important;
+  height: 76vw !important;
+  max-width: 520px !important;
+  max-height: 520px !important;
+  left: 2vw !important;
+  bottom: -24vh !important;
+  background: rgba(30, 174, 255, .76) !important;
+}
+
+.ambient-orb-d {
+  width: 58vw !important;
+  height: 58vw !important;
+  max-width: 410px !important;
+  max-height: 410px !important;
+  right: -8vw !important;
+  bottom: 13vh !important;
+  background: rgba(255, 58, 151, .58) !important;
+}
+
+.app-shell,
+.centered-screen,
+.login-screen {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+}
+
+/* Let the lighting bleed through cards instead of covering it with near-opaque panels. */
+.glass-panel,
+.entity-card,
+.purchase-card,
+.order-card,
+.detail-card,
+.shipment-card,
+.hero-status-card,
+.empty-card,
+.summary-card,
+.insight-card,
+.quick-card {
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+}
+
+@keyframes ambient-breathe {
+  from { transform: translate3d(-2%, -1%, 0) scale(.98); opacity: .72; }
+  to { transform: translate3d(3%, 2%, 0) scale(1.06); opacity: 1; }
+}
