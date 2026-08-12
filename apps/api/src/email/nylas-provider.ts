@@ -33,6 +33,7 @@ export type NylasMessageLike = {
   bcc?: NylasEmailName[];
   snippet?: string;
   body?: string;
+  folders?: string[];
   attachments?: NylasAttachment[];
 };
 
@@ -113,6 +114,7 @@ export function normalizeNylasMessage(
     receivedAt: new Date(message.date * 1000).toISOString(),
     snippet: message.snippet,
     bodyHtml: message.body,
+    folders: [...(message.folders ?? [])],
     attachments: normalizeAttachments(message.attachments),
   };
 }
