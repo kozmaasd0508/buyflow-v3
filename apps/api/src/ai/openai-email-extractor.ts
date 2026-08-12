@@ -1,3 +1,5 @@
+import { classifyEmailSenderRole, type EmailSenderRole } from '../email/sender-role.js';
+
 export type BuyFlowEmailEventType =
   | 'order_created'
   | 'order_updated'
@@ -30,45 +32,59 @@ export interface OpenAIEmailExtractionResult {
   cachedInputTokens: number | null;
 }
 
-const extractionSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    event_type: {
-      type: 'string',
-      enum: [
-        'order_created',
-        'order_updated',
-        'shipment',
-        'delivery',
-        'invoice_or_receipt',
-        'return',
-        'refund',
-        'subscription',
-        'other',
-      ],
+const ALL_EVENT_TYPES = [
+  'order_created',
+  'order_updated',
+  'shipment',
+  'delivery',
+  'invoice_or_receipt',
+  'return',
+  'refund',
+  'subscription',
+  'other',
+] as const;
+
+const CARRIER_EVENT_TYPES = [
+  'shipment',
+  'delivery',
+  'invoice_or_receipt',
+  'return',
+  'refund',
+  'other',
+] as const;
+
+function extractionSchema(senderRole: EmailSenderRole) {
+  const carrier = senderRole === 'carrier';
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      event_type: {
+        type: 'string',
+        enum: carrier ? CARRIER_EVENT_TYPES : ALL_EVENT_TYPES,
+      },
+      merchant: carrier ? { type: 'null' } : { type: ['string', 'null'] },
+      order_number: carrier ? { type: 'null' } : { type: ['string', 'null'] },
+      tracking_number: { type: ['string', 'null'] },
+      carrier: { type: ['string', 'null'] },
+      invoice_number: { type: ['string', 'null'] },
+      total: carrier ? { type: 'null' } : { type: ['number', 'null'] },
+      currency: carrier ? { type: 'null' } : { type: ['string', 'null'] },
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
     },
-    merchant: { type: ['string', 'null'] },
-    order_number: { type: ['string', 'null'] },
-    tracking_number: { type: ['string', 'null'] },
-    carrier: { type: ['string', 'null'] },
-    invoice_number: { type: ['string', 'null'] },
-    total: { type: ['number', 'null'] },
-    currency: { type: ['string', 'null'] },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-  },
-  required: [
-    'event_type',
-    'merchant',
-    'order_number',
-    'tracking_number',
-    'carrier',
-    'invoice_number',
-    'total',
-    'currency',
-    'confidence',
-  ],
-} as const;
+    required: [
+      'event_type',
+      'merchant',
+      'order_number',
+      'tracking_number',
+      'carrier',
+      'invoice_number',
+      'total',
+      'currency',
+      'confidence',
+    ],
+  } as const;
+}
 
 function outputText(response: unknown): string {
   if (!response || typeof response !== 'object') return '';
@@ -159,6 +175,23 @@ export async function extractEmailWithOpenAIResult(input: {
   fetchImpl?: typeof fetch;
 }): Promise<OpenAIEmailExtractionResult> {
   const fetchImpl = input.fetchImpl ?? fetch;
+  const senderRole = classifyEmailSenderRole(input.fromDomains ?? []);
+  const instructions = [
+    'You extract evidence from commerce emails for BuyFlow.',
+    'Never invent identifiers or facts.',
+    'Use null for missing fields.',
+    'A shipment/delivery/invoice/return/refund email must not be treated as order_created unless the email itself clearly establishes a new purchase.',
+    'Confidence is confidence in the extracted event and fields, not a request to take action.',
+  ];
+
+  if (senderRole === 'carrier') {
+    instructions.push(
+      'The sender is a known parcel carrier, not the merchant.',
+      'For a known carrier sender, never classify the email as order_created or order_updated.',
+      'For a known carrier sender, merchant, order_number, total, and currency must remain null; extract logistics evidence such as tracking_number, carrier, shipment or delivery state when present.',
+    );
+  }
+
   const response = await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -169,16 +202,11 @@ export async function extractEmailWithOpenAIResult(input: {
       model: input.model ?? 'gpt-5.4-nano',
       store: false,
       reasoning: { effort: 'none' },
-      instructions: [
-        'You extract evidence from commerce emails for BuyFlow.',
-        'Never invent identifiers or facts.',
-        'Use null for missing fields.',
-        'A shipment/delivery/invoice/return/refund email must not be treated as order_created unless the email itself clearly establishes a new purchase.',
-        'Confidence is confidence in the extracted event and fields, not a request to take action.',
-      ].join(' '),
+      instructions: instructions.join(' '),
       input: [
         'Subject: ' + (input.subject ?? ''),
         'Sender domains: ' + (input.fromDomains ?? []).join(', '),
+        'Sender role: ' + senderRole,
         'Email body:',
         input.bodyText,
       ].join('\n'),
@@ -187,7 +215,7 @@ export async function extractEmailWithOpenAIResult(input: {
           type: 'json_schema',
           name: 'buyflow_email_extraction',
           strict: true,
-          schema: extractionSchema,
+          schema: extractionSchema(senderRole),
         },
       },
     }),
