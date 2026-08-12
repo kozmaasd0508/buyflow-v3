@@ -4,6 +4,7 @@ import {
   processNylasMessage,
   type AutomationMode,
 } from '../pipeline/automatic-email-pipeline.js';
+import { enqueueAutomaticTargetedRecoveryForSource } from './automatic-targeted-recovery.js';
 
 interface EmailScanJobRow {
   id: string;
@@ -195,6 +196,14 @@ export async function processEmailScanJob(
           mode,
         });
 
+        if (
+          scanJob.kind === 'initial' &&
+          pipeline.status === 'unlinked' &&
+          pipeline.sourceEmailId
+        ) {
+          await enqueueAutomaticTargetedRecoveryForSource(pipeline.sourceEmailId);
+        }
+
         result.aiCalls += pipeline.aiCalls;
         result.purchaseWrites += pipeline.purchaseWrites;
         result.shipmentWrites += pipeline.shipmentWrites;
@@ -236,10 +245,13 @@ export async function drainEmailScanJobs(
   limit = 5,
 ): Promise<{ scanned: number; claimed: number; failed: number }> {
   const db = getSupabaseAdmin() as any;
+  const now = new Date().toISOString();
+  const staleCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
   const { data, error } = await db
     .from('email_scan_jobs')
-    .select('id')
+    .select('id,status,next_attempt_at,locked_at')
     .in('status', ['pending', 'retry', 'processing'])
+    .or(`and(status.in.(pending,retry),next_attempt_at.lte.${now}),and(status.eq.processing,locked_at.lt.${staleCutoff})`)
     .order('next_attempt_at', { ascending: true })
     .limit(limit);
   if (error) throw new Error(`Email scan recovery read failed: ${error.message}`);
