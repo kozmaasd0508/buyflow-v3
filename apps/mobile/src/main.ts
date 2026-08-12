@@ -3,8 +3,9 @@ import { loadPurchase, loadPurchases, type PurchaseDetail, type PurchaseSummary 
 import { supabase } from './supabase.js';
 import './styles.css';
 
-const root = document.querySelector<HTMLDivElement>('#app');
-if (!root) throw new Error('Missing #app root');
+const rootElement = document.querySelector<HTMLDivElement>('#app');
+if (!rootElement) throw new Error('Missing #app root');
+const root: HTMLDivElement = rootElement;
 
 interface AppState {
   initialized: boolean;
