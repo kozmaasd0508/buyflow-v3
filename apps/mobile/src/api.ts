@@ -27,9 +27,29 @@ export interface DocumentSummary {
   createdAt: string;
 }
 
+export interface ProductSummary {
+  id: string;
+  name: string;
+  brand: string | null;
+  model: string | null;
+  variant: string | null;
+  sku: string | null;
+  gtin: string | null;
+  category: string | null;
+  quantity: number | string | null;
+  unitPrice: number | string | null;
+  totalPrice: number | string | null;
+  currency: string | null;
+  productUrl: string | null;
+  imageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PurchaseSummary {
   id: string;
   merchantName: string | null;
+  merchantLegalName: string | null;
   merchantDomain: string | null;
   orderNumber: string | null;
   purchaseDate: string | null;
@@ -44,15 +64,20 @@ export interface PurchaseSummary {
   updatedAt: string;
   shipments: ShipmentSummary[];
   documentCount: number;
+  productCount: number;
+  productPreview: string[];
 }
 
-export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount'> {
+export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount' | 'productCount' | 'productPreview'> {
   subtotal: number | string | null;
   shippingAmount: number | string | null;
   discountAmount: number | string | null;
   paymentMethod: string | null;
+  shippingMethod: string | null;
+  expectedCarrier: string | null;
   paidAt: string | null;
   cancelledAt: string | null;
+  products: ProductSummary[];
   documents: DocumentSummary[];
 }
 
