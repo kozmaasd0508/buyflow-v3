@@ -1,8 +1,12 @@
-import { env } from '../config.js';
+import { env, requireNylasSmokeGrantId } from '../config.js';
 import { createEmailProvider } from '../email/factory.js';
 
 async function main() {
-  const provider = createEmailProvider();
+  const provider = createEmailProvider({
+    provider: 'nylas',
+    providerAccountId: requireNylasSmokeGrantId(),
+  });
+
   const page = await provider.searchMessages({
     query: env.EMAIL_DISCOVERY_QUERY,
     limit: 5,
