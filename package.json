@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @buyflow/api",
-    "build": "npm run build --workspace @buyflow/api",
+    "build": "npm run build --workspace @buyflow/mobile && npm run build --workspace @buyflow/api",
     "typecheck": "npm run typecheck --workspace @buyflow/api",
     "test": "npm run test --workspace @buyflow/api"
   }
