@@ -29,6 +29,12 @@ import {
   type DocumentPurchaseIdentity,
   type DocumentResolutionEvidence,
 } from '../resolution/document-resolution.js';
+import {
+  canAutomaticallyWriteDocument,
+  canAutomaticallyWritePurchase,
+  canAutomaticallyWriteShipment,
+  isTrustedAutomaticEvidence,
+} from './automatic-write-gate.js';
 
 const PROMPT_VERSION = 'nano-email-extraction-v1';
 const RECONCILIATION_WINDOW_DAYS = 45;
@@ -57,6 +63,7 @@ interface SourceRow {
   from_address: string | null;
   received_at: string;
   processing_status: string;
+  validation_status: string | null;
   structured_result: Record<string, unknown> | null;
   validated_result: Record<string, unknown> | null;
 }
@@ -124,7 +131,7 @@ function toJson(value: unknown): Record<string, unknown> {
 
 function toPurchaseEvidence(row: SourceRow): ResolutionEvidence | null {
   const result = row.validated_result;
-  if (!result) return null;
+  if (!result || !isTrustedAutomaticEvidence(row.validation_status, result)) return null;
   const eventType = result.event_type;
   const confidence = numberOrNull(result.confidence);
   if (
@@ -147,7 +154,11 @@ function toPurchaseEvidence(row: SourceRow): ResolutionEvidence | null {
 
 function toShipmentEvidence(row: SourceRow): ShipmentResolutionEvidence | null {
   const result = row.validated_result;
-  if (!result || (result.event_type !== 'shipment' && result.event_type !== 'delivery')) return null;
+  if (
+    !result ||
+    !isTrustedAutomaticEvidence(row.validation_status, result) ||
+    (result.event_type !== 'shipment' && result.event_type !== 'delivery')
+  ) return null;
   const confidence = numberOrNull(result.confidence);
   if (confidence === null) return null;
   return {
@@ -166,7 +177,11 @@ function toShipmentEvidence(row: SourceRow): ShipmentResolutionEvidence | null {
 
 function toDocumentEvidence(row: SourceRow): DocumentResolutionEvidence | null {
   const result = row.validated_result;
-  if (!result || result.event_type !== 'invoice_or_receipt') return null;
+  if (
+    !result ||
+    !isTrustedAutomaticEvidence(row.validation_status, result) ||
+    result.event_type !== 'invoice_or_receipt'
+  ) return null;
   const confidence = numberOrNull(result.confidence);
   if (confidence === null) return null;
   return {
@@ -209,7 +224,7 @@ async function reconcileUser(userId: string, mode: AutomationMode) {
 
   const { data: sourceRows, error: sourceError } = await db
     .from('source_emails')
-    .select('id,user_id,provider_message_id,from_address,received_at,processing_status,structured_result,validated_result')
+    .select('id,user_id,provider_message_id,from_address,received_at,processing_status,validation_status,structured_result,validated_result')
     .eq('user_id', userId)
     .not('validated_result', 'is', null)
     .gte('received_at', cutoff)
@@ -227,13 +242,7 @@ async function reconcileUser(userId: string, mode: AutomationMode) {
 
   if (mode === 'write') {
     for (const candidate of resolvePurchaseCandidates(purchaseEvidence)) {
-      const allowed =
-        candidate.decision === 'create_direct' ||
-        (candidate.decision === 'create_corroborated' &&
-          candidate.evidenceCount >= 2 &&
-          candidate.orderCreatedEvidenceCount >= 1 &&
-          candidate.corroboratingEvidenceCount >= 1);
-      if (!allowed || !candidate.merchant) continue;
+      if (!canAutomaticallyWritePurchase(candidate)) continue;
 
       const evidence = purchaseEvidence.filter((row) => candidate.sourceEmailIds.includes(row.sourceEmailId));
       const primary = evidence
@@ -287,14 +296,7 @@ async function reconcileUser(userId: string, mode: AutomationMode) {
 
   if (mode === 'write') {
     for (const candidate of resolveShipmentCandidates(shipmentPurchases, shipmentEvidence)) {
-      if (
-        candidate.decision !== 'linkable' ||
-        !candidate.purchaseId ||
-        !candidate.carrierSlug ||
-        candidate.evidenceCount < 3 ||
-        candidate.merchantAnchorCount < 1 ||
-        candidate.carrierEvidenceCount < 2
-      ) continue;
+      if (!canAutomaticallyWriteShipment(candidate)) continue;
 
       const evidence = shipmentEvidence.filter((row) => candidate.sourceEmailIds.includes(row.sourceEmailId));
       const merchantAnchor = evidence.find(
@@ -351,12 +353,7 @@ async function reconcileUser(userId: string, mode: AutomationMode) {
 
   if (mode === 'write') {
     for (const candidate of resolveDocumentCandidates(documentPurchases, documentEvidence)) {
-      if (
-        candidate.decision !== 'linkable' ||
-        !candidate.purchaseId ||
-        candidate.documentType !== 'invoice' ||
-        candidate.confidence < 0.85
-      ) continue;
+      if (!canAutomaticallyWriteDocument(candidate)) continue;
 
       const evidence = documentEvidence.find((row) => row.sourceEmailId === candidate.sourceEmailId);
       const source = rows.find((row) => row.id === candidate.sourceEmailId);
