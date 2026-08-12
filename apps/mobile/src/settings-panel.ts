@@ -2,6 +2,21 @@ import { mobileConfig } from './config.js';
 import { supabase } from './supabase.js';
 import './settings-panel.css';
 
+interface InitialScan {
+  windowDays: number;
+  status: string;
+  processedAt: string | null;
+  result: {
+    checked?: number;
+    processed?: number;
+    review?: number;
+    ignored?: number;
+    purchaseWrites?: number;
+    shipmentWrites?: number;
+    documentWrites?: number;
+  } | null;
+}
+
 interface EmailConnection {
   id: string;
   provider: string;
@@ -9,6 +24,7 @@ interface EmailConnection {
   status: string;
   connectedAt: string;
   updatedAt: string;
+  initialScan: InitialScan | null;
 }
 
 function escapeHtml(value: unknown): string {
@@ -66,6 +82,12 @@ async function startGmailConnection(): Promise<string> {
   return data.authorizeUrl;
 }
 
+async function startInitialScan(connectionId: string): Promise<void> {
+  await apiRequest(`/api/email-connections/${encodeURIComponent(connectionId)}/initial-scan`, {
+    method: 'POST',
+  });
+}
+
 function closeSettings() {
   document.querySelector('#buyflow-settings-overlay')?.remove();
 }
@@ -109,7 +131,7 @@ function settingsShell(email: string): HTMLDivElement {
 
         <section class="settings-info-card">
           <strong>Mit engedélyezel?</strong>
-          <p>A Google engedélykérésén keresztül a BuyFlow a vásárlásokhoz kapcsolódó e-maileket tudja feldolgozni. A Google-jelszavadat a BuyFlow nem látja és nem tárolja.</p>
+          <p>A Google engedélykérésén keresztül a BuyFlow a vásárlásokhoz kapcsolódó e-maileket tudja feldolgozni. Első csatlakozáskor csak az elmúlt 7 napot nézi át. A Google-jelszavadat a BuyFlow nem látja és nem tárolja.</p>
         </section>
 
         <button id="settings-logout" class="settings-logout" type="button">Kijelentkezés</button>
@@ -127,6 +149,34 @@ function settingsShell(email: string): HTMLDivElement {
   });
 
   return overlay;
+}
+
+function scanStatusHtml(scan: InitialScan | null): string {
+  if (!scan) {
+    return '<button id="scan-seven-days-button" class="connect-gmail-button" type="button">Elmúlt 7 nap ellenőrzése</button>';
+  }
+
+  if (scan.status === 'processed') {
+    const checked = scan.result?.checked ?? 0;
+    return `
+      <div class="gmail-meta">
+        <span>Első ellenőrzés</span>
+        <strong>7 nap kész · ${escapeHtml(checked)} email</strong>
+      </div>
+      <p class="gmail-help">A 7 napos első átnézés befejeződött. Az új leveleket ezután automatikusan követi a BuyFlow.</p>
+    `;
+  }
+
+  return `
+    <button class="connect-gmail-button" type="button" disabled>7 nap ellenőrzése folyamatban…</button>
+    <p class="gmail-help">A BuyFlow biztonságosan feldolgozza az elmúlt 7 nap vásárlási e-mailjeit.</p>
+  `;
+}
+
+async function refreshConnectionCard(container: HTMLElement): Promise<EmailConnection | null> {
+  const connections = await loadConnections();
+  renderConnectionCard(container, connections);
+  return connections.find((connection) => connection.provider === 'nylas' && connection.status === 'active') ?? null;
 }
 
 function renderConnectionCard(container: HTMLElement, connections: EmailConnection[]) {
@@ -148,7 +198,39 @@ function renderConnectionCard(container: HTMLElement, connections: EmailConnecti
         <strong>${escapeHtml(formatDate(active.connectedAt))}</strong>
       </div>
       <p class="gmail-help">Az új vásárlási e-maileket a BuyFlow automatikusan fel tudja dolgozni.</p>
+      ${scanStatusHtml(active.initialScan)}
     `;
+
+    container.querySelector<HTMLButtonElement>('#scan-seven-days-button')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      button.disabled = true;
+      button.textContent = '7 napos ellenőrzés indítása…';
+
+      try {
+        await startInitialScan(active.id);
+        button.textContent = '7 nap ellenőrzése folyamatban…';
+
+        let attempts = 0;
+        const poll = async () => {
+          attempts += 1;
+          try {
+            const current = await refreshConnectionCard(container);
+            if (current?.initialScan?.status === 'processed' || attempts >= 20) return;
+            window.setTimeout(() => void poll(), 3000);
+          } catch {
+            // A feldolgozás a szerveren ettől még folytatódik; a felhasználó később újranyithatja a panelt.
+          }
+        };
+        window.setTimeout(() => void poll(), 2500);
+      } catch {
+        button.disabled = false;
+        button.textContent = 'Elmúlt 7 nap ellenőrzése';
+        const error = document.createElement('p');
+        error.className = 'settings-error';
+        error.textContent = 'Most nem sikerült elindítani a 7 napos ellenőrzést. Próbáld újra.';
+        button.insertAdjacentElement('afterend', error);
+      }
+    });
     return;
   }
 
@@ -196,7 +278,7 @@ async function openSettings(showResult?: 'connected' | 'error') {
   if (showResult === 'connected') {
     const notice = document.createElement('div');
     notice.className = 'settings-notice success';
-    notice.textContent = 'Gmail sikeresen csatlakoztatva.';
+    notice.textContent = 'Gmail sikeresen csatlakoztatva. Az első 7 napos ellenőrzés elindult.';
     overlay.querySelector('.settings-content')?.prepend(notice);
   } else if (showResult === 'error') {
     const notice = document.createElement('div');
@@ -209,7 +291,7 @@ async function openSettings(showResult?: 'connected' | 'error') {
   if (!container) return;
 
   try {
-    renderConnectionCard(container, await loadConnections());
+    await refreshConnectionCard(container);
   } catch {
     container.innerHTML = '<p class="settings-error">A Gmail kapcsolat állapota most nem tölthető be.</p>';
   }
