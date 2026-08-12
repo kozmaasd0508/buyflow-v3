@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { registerAppApiRoutes } from './api/app-routes.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import {
   drainWebhookInbox,
@@ -51,10 +52,12 @@ app.addContentTypeParser(
   },
 );
 
+await registerAppApiRoutes(app);
+
 app.get('/health', async () => ({
   ok: true,
   service: 'buyflow-api',
-  version: '0.2.3',
+  version: '0.3.0',
   automationMode: env.BUYFLOW_AUTOMATION_MODE,
   webhook: { ...webhookStats },
 }));
