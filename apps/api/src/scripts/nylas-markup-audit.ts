@@ -66,8 +66,6 @@ async function main() {
   let messagesWithAnyStructuredMarkup = 0;
   let messagesWithCommerceMarkup = 0;
 
-  const jsonLdTypeCounts = new Map<string, number>();
-  const microdataTypeCounts = new Map<string, number>();
   const commerceTypeCounts = new Map<string, number>();
 
   let nextIndex = 0;
@@ -104,8 +102,6 @@ async function main() {
         if (audit.hasJsonLd || audit.hasMicrodata) messagesWithAnyStructuredMarkup += 1;
         if (audit.commerceTypes.length > 0) messagesWithCommerceMarkup += 1;
 
-        for (const type of audit.jsonLdTypes) bump(jsonLdTypeCounts, type);
-        for (const type of audit.microdataTypes) bump(microdataTypeCounts, type);
         for (const type of audit.commerceTypes) bump(commerceTypeCounts, type);
       } catch {
         fetchErrors += 1;
@@ -128,6 +124,7 @@ async function main() {
       messageIdOutput: false,
       senderAddressOutput: false,
       rawMarkupOutput: false,
+      arbitrarySchemaTypeOutput: false,
       maxMessages: MAX_MESSAGES,
       maxBodyCharsPerMessage: MAX_BODY_CHARS,
       fetchConcurrency: FETCH_CONCURRENCY,
@@ -154,8 +151,6 @@ async function main() {
       jsonLdParseErrors,
       messagesWithMicrodata,
       messagesWithCommerceMarkup,
-      jsonLdTypes: sortedObject(jsonLdTypeCounts),
-      microdataTypes: sortedObject(microdataTypeCounts),
       commerceTypes: sortedObject(commerceTypeCounts),
     },
   };
