@@ -8,7 +8,10 @@ import {
   type EmailExtraction,
 } from '../ai/openai-email-extractor.js';
 
-const MAX_EMAILS = 10;
+const requestedMaxEmails = Number.parseInt(process.env.PIPELINE_MAX_EMAILS ?? '10', 10);
+const MAX_EMAILS = Number.isFinite(requestedMaxEmails)
+  ? Math.min(Math.max(requestedMaxEmails, 1), 100)
+  : 10;
 const PROMPT_VERSION = 'nano-email-extraction-v1';
 
 function senderDomains(addresses: Array<{ email: string }>): string[] {
@@ -221,6 +224,7 @@ async function main() {
           publicLogContainsIdentifiers: false,
         },
         model: openai.model,
+        maxEmails: MAX_EMAILS,
         selected: pending?.length ?? 0,
         claimed,
         processed,
