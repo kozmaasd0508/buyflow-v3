@@ -4,6 +4,10 @@ import { z } from 'zod';
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('0.0.0.0'),
+  BUYFLOW_PUBLIC_BASE_URL: z
+    .string()
+    .url()
+    .default('https://buyflow-v3-api-dev.onrender.com'),
 
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
