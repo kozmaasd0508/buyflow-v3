@@ -6,11 +6,15 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
 
   SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
   NYLAS_API_KEY: z.string().min(1).optional(),
   NYLAS_API_URI: z.string().url().default('https://api.eu.nylas.com'),
   NYLAS_SMOKE_GRANT_ID: z.string().min(1).optional(),
+
+  BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
+  BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
 
   EMAIL_DISCOVERY_QUERY: z
     .string()
@@ -20,15 +24,17 @@ const envSchema = z.object({
 export const env = envSchema.parse(process.env);
 
 export function requireSupabaseAdminConfig() {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+  const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!env.SUPABASE_URL || !secretKey) {
     throw new Error(
-      'Supabase admin access is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the server environment.',
+      'Supabase admin access is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY in the server environment.',
     );
   }
 
   return {
     url: env.SUPABASE_URL,
-    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+    secretKey,
   };
 }
 
@@ -53,4 +59,17 @@ export function requireNylasSmokeGrantId() {
   }
 
   return env.NYLAS_SMOKE_GRANT_ID;
+}
+
+export function requireSmokeImportContext() {
+  if (!env.BUYFLOW_SMOKE_USER_ID || !env.BUYFLOW_SMOKE_CONNECTION_ID) {
+    throw new Error(
+      'Smoke import context is not configured. Set BUYFLOW_SMOKE_USER_ID and BUYFLOW_SMOKE_CONNECTION_ID.',
+    );
+  }
+
+  return {
+    userId: env.BUYFLOW_SMOKE_USER_ID,
+    emailConnectionId: env.BUYFLOW_SMOKE_CONNECTION_ID,
+  };
 }
