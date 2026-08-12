@@ -9,6 +9,7 @@ export { isCarrierSenderDomain } from '../email/sender-role.js';
 export type EmailValidationStatus = 'validated' | 'guardrailed' | 'review';
 
 export interface ValidatedEmailExtraction extends EmailExtraction {
+  schema_version: 2;
   original_event_type: BuyFlowEmailEventType;
   validation_status: EmailValidationStatus;
   reasons: string[];
@@ -55,6 +56,9 @@ function hasMonetaryContext(text: string): boolean {
     'ar:',
     'végösszeg',
     'vegosszeg',
+    'utánvét',
+    'utanvet',
+    'cash on delivery',
   ].some((token) => normalized.includes(token));
 }
 
@@ -63,9 +67,41 @@ function clearField(
   field: keyof EmailExtraction,
   blockedFields: string[],
 ) {
-  if (extraction[field] !== null) {
+  const value = extraction[field];
+  if (value !== null && !(Array.isArray(value) && value.length === 0)) {
     (extraction as unknown as Record<string, unknown>)[field] = null;
     blockedFields.push(field);
+  }
+}
+
+function clearProducts(extraction: EmailExtraction, blockedFields: string[]) {
+  if (extraction.products.length > 0) {
+    extraction.products = [];
+    blockedFields.push('products');
+  }
+}
+
+function validateMoneyPair(input: {
+  extraction: EmailExtraction;
+  amountField: 'total' | 'paid_amount';
+  currencyField: 'currency' | 'paid_currency';
+  contextText: string;
+  reasons: string[];
+  blockedFields: string[];
+}) {
+  const amount = input.extraction[input.amountField];
+  const currency = input.extraction[input.currencyField];
+  if (amount === null) return;
+
+  if (
+    amount < 0 ||
+    !currency ||
+    !currencyEvidence(input.contextText, currency) ||
+    !hasMonetaryContext(input.contextText)
+  ) {
+    clearField(input.extraction, input.amountField, input.blockedFields);
+    clearField(input.extraction, input.currencyField, input.blockedFields);
+    input.reasons.push(`${input.amountField}_lacks_monetary_evidence`);
   }
 }
 
@@ -73,48 +109,86 @@ export function validateEmailExtraction(
   input: ValidateEmailExtractionInput,
 ): ValidatedEmailExtraction {
   const raw = input.extraction;
-  const validated: EmailExtraction = { ...raw };
+  const validated: EmailExtraction = {
+    ...raw,
+    products: raw.products.map((product) => ({ ...product })),
+  };
   const reasons: string[] = [];
   const blockedFields: string[] = [];
+  let requiresReview = false;
   const senderIsCarrier = input.senderDomains.some(isCarrierSenderDomain);
   const contextText = `${input.subject ?? ''}\n${input.bodyText ?? ''}`;
 
   if (senderIsCarrier) {
     reasons.push('carrier_sender_blocks_purchase_creation');
 
-    if (validated.event_type === 'order_created' || validated.event_type === 'order_updated') {
+    if (
+      validated.event_type === 'order_created' ||
+      validated.event_type === 'order_updated' ||
+      validated.event_type === 'payment_completed'
+    ) {
       validated.event_type = 'shipment';
       validated.confidence = Math.min(validated.confidence, 0.85);
       reasons.push('carrier_sender_event_downgraded_to_shipment');
     }
 
-    if (validated.merchant !== null) {
-      clearField(validated, 'merchant', blockedFields);
-      reasons.push('carrier_sender_cleared_merchant');
+    const purchaseFields: Array<keyof EmailExtraction> = [
+      'merchant',
+      'merchant_legal_name',
+      'order_number',
+      'subtotal',
+      'shipping_amount',
+      'discount_amount',
+      'total',
+      'currency',
+      'payment_status',
+      'payment_method',
+      'paid_amount',
+      'paid_currency',
+      'shipping_method',
+    ];
+    for (const field of purchaseFields) {
+      clearField(validated, field, blockedFields);
+    }
+    clearProducts(validated, blockedFields);
+
+    if (blockedFields.length > 0) {
+      reasons.push('carrier_sender_cleared_purchase_fields');
     }
 
-    if (validated.order_number !== null) {
-      clearField(validated, 'order_number', blockedFields);
-      reasons.push('carrier_sender_cleared_order_number');
+    if (validated.cod_amount !== null && validated.cod_amount < 0) {
+      clearField(validated, 'cod_amount', blockedFields);
+      clearField(validated, 'cod_currency', blockedFields);
+      reasons.push('negative_cod_amount_blocked');
     }
+  } else {
+    validateMoneyPair({
+      extraction: validated,
+      amountField: 'total',
+      currencyField: 'currency',
+      contextText,
+      reasons,
+      blockedFields,
+    });
+    validateMoneyPair({
+      extraction: validated,
+      amountField: 'paid_amount',
+      currencyField: 'paid_currency',
+      contextText,
+      reasons,
+      blockedFields,
+    });
 
-    if (validated.total !== null || validated.currency !== null) {
-      clearField(validated, 'total', blockedFields);
-      clearField(validated, 'currency', blockedFields);
-      reasons.push('carrier_sender_cleared_purchase_amount');
+    if (validated.cod_amount !== null && validated.cod_amount < 0) {
+      clearField(validated, 'cod_amount', blockedFields);
+      clearField(validated, 'cod_currency', blockedFields);
+      reasons.push('negative_cod_amount_blocked');
     }
-  } else if (validated.total !== null) {
-    if (!validated.currency) {
-      clearField(validated, 'total', blockedFields);
-      reasons.push('amount_missing_currency');
-    } else if (
-      !currencyEvidence(contextText, validated.currency) ||
-      !hasMonetaryContext(contextText)
-    ) {
-      clearField(validated, 'total', blockedFields);
-      clearField(validated, 'currency', blockedFields);
-      reasons.push('amount_lacks_monetary_context');
-    }
+  }
+
+  if (validated.event_type === 'payment_completed' && validated.payment_status !== 'paid') {
+    requiresReview = true;
+    reasons.push('payment_completed_without_explicit_paid_status');
   }
 
   const eligibleForPurchaseCreation = Boolean(
@@ -126,7 +200,9 @@ export function validateEmailExtraction(
   );
 
   let validationStatus: EmailValidationStatus;
-  if (reasons.length > 0 || blockedFields.length > 0 || validated.event_type !== raw.event_type) {
+  if (requiresReview) {
+    validationStatus = 'review';
+  } else if (reasons.length > 0 || blockedFields.length > 0 || validated.event_type !== raw.event_type) {
     validationStatus = 'guardrailed';
   } else if (validated.event_type === 'order_created' && !eligibleForPurchaseCreation) {
     validationStatus = 'review';
@@ -137,6 +213,7 @@ export function validateEmailExtraction(
 
   return {
     ...validated,
+    schema_version: 2,
     original_event_type: raw.event_type,
     validation_status: validationStatus,
     reasons,
