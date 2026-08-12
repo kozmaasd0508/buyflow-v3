@@ -10,7 +10,7 @@ interface EmailScanJobRow {
   id: string;
   user_id: string;
   email_connection_id: string;
-  kind: 'initial' | 'targeted';
+  kind: 'initial' | 'targeted' | 'audit';
   window_days: number;
   search_term: string | null;
   status: string;
@@ -67,6 +67,26 @@ export async function enqueueInitialEmailScan(input: {
   }
   if (typeof data !== 'string' || !data) {
     throw new Error('Initial email scan enqueue returned no job id');
+  }
+  return data;
+}
+
+export async function enqueueFullAuditEmailScan(input: {
+  userId: string;
+  emailConnectionId: string;
+}): Promise<string> {
+  const db = getSupabaseAdmin() as any;
+  const { data, error } = await db.rpc('enqueue_full_audit_email_scan', {
+    p_user_id: input.userId,
+    p_email_connection_id: input.emailConnectionId,
+    p_window_days: 7,
+  });
+
+  if (error) {
+    throw new Error(`Full audit email scan enqueue failed: ${error.message}`);
+  }
+  if (typeof data !== 'string' || !data) {
+    throw new Error('Full audit email scan enqueue returned no job id');
   }
   return data;
 }
@@ -158,12 +178,17 @@ export async function processEmailScanJob(
       query = `"${searchTerm}" newer_than:${windowDays}d -in:spam -in:trash`;
       pageSize = 20;
       maxPages = 2;
+    } else if (scanJob.kind === 'audit') {
+      query = `newer_than:${windowDays}d -in:spam -in:trash`;
+      pageSize = 50;
+      maxPages = 20;
     } else {
       query = `category:purchases newer_than:${windowDays}d -in:spam -in:trash`;
       pageSize = 50;
       maxPages = 20;
     }
 
+    const effectiveMode: AutomationMode = scanJob.kind === 'audit' ? 'observe' : mode;
     let cursor: string | undefined;
     let pages = 0;
     const result: InitialEmailScanResult = {
@@ -193,7 +218,7 @@ export async function processEmailScanJob(
         const pipeline = await processNylasMessage({
           grantId: emailConnection.provider_account_id,
           messageId: email.providerMessageId,
-          mode,
+          mode: effectiveMode,
         });
 
         if (
