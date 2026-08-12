@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { requireNylasApiConfig } from '../config.js';
+import { env, requireNylasApiConfig } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
 
@@ -30,17 +30,12 @@ async function requireUser(request: FastifyRequest, reply: FastifyReply) {
   return user;
 }
 
-function requestOrigin(request: FastifyRequest): string {
-  const forwarded = request.headers['x-forwarded-proto'];
-  const forwardedProtocol = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const protocol = forwardedProtocol || request.protocol || 'https';
-  const host = request.headers.host;
-  if (!host) throw new Error('Missing request host');
-  return `${protocol}://${host}`;
-}
-
 function stateHash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function publicBaseUrl(): string {
+  return env.BUYFLOW_PUBLIC_BASE_URL.replace(/\/$/, '');
 }
 
 async function nylasJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -145,8 +140,7 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
     if (!user) return;
 
     const db = getSupabaseAdmin() as any;
-    const origin = requestOrigin(request);
-    const callbackUri = `${origin}/auth/nylas/callback`;
+    const callbackUri = `${publicBaseUrl()}/auth/nylas/callback`;
 
     try {
       const { error: userError } = await db
@@ -189,16 +183,15 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
   app.get<{
     Querystring: { code?: string; state?: string; error?: string };
   }>('/auth/nylas/callback', async (request, reply) => {
-    const origin = requestOrigin(request);
-    const successUrl = `${origin}/app/?gmail=connected`;
-    const errorUrl = `${origin}/app/?gmail=error`;
+    const successUrl = `${publicBaseUrl()}/app/?gmail=connected`;
+    const errorUrl = `${publicBaseUrl()}/app/?gmail=error`;
 
     if (request.query.error || !request.query.code || !request.query.state) {
       return reply.redirect(errorUrl);
     }
 
     const db = getSupabaseAdmin() as any;
-    const callbackUri = `${origin}/auth/nylas/callback`;
+    const callbackUri = `${publicBaseUrl()}/auth/nylas/callback`;
 
     try {
       const { data: stateRow, error: stateError } = await db
