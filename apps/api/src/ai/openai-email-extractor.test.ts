@@ -64,6 +64,55 @@ test('requests strict structured output with store disabled', async () => {
   assert.equal(text.format?.strict, true);
 });
 
+test('known carrier senders cannot produce purchase fields or order-created events', async () => {
+  let requestBody: Record<string, unknown> | undefined;
+  const fakeFetch = async (_url: string | URL | Request, init?: RequestInit) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({
+        id: 'resp_carrier',
+        output_text: JSON.stringify({
+          event_type: 'shipment',
+          merchant: null,
+          order_number: null,
+          tracking_number: 'TRACK-1',
+          carrier: 'Express One',
+          invoice_number: null,
+          total: null,
+          currency: null,
+          confidence: 0.95,
+        }),
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+
+  await extractEmailWithOpenAI({
+    apiKey: 'test-key',
+    subject: 'Csomagértesítés',
+    fromDomains: ['expressone.hu'],
+    bodyText: 'A csomag kézbesítésre vár.',
+    fetchImpl: fakeFetch as typeof fetch,
+  });
+
+  const text = requestBody?.text as {
+    format?: {
+      schema?: {
+        properties?: Record<string, { type?: unknown; enum?: string[] }>;
+      };
+    };
+  };
+  const properties = text.format?.schema?.properties ?? {};
+  assert.equal(properties.merchant?.type, 'null');
+  assert.equal(properties.order_number?.type, 'null');
+  assert.equal(properties.total?.type, 'null');
+  assert.equal(properties.currency?.type, 'null');
+  assert.equal(properties.event_type?.enum?.includes('order_created'), false);
+  assert.equal(properties.event_type?.enum?.includes('order_updated'), false);
+  assert.match(String(requestBody?.instructions ?? ''), /known parcel carrier/i);
+  assert.match(String(requestBody?.input ?? ''), /Sender role: carrier/);
+});
+
 test('captures response id and token usage without changing extraction shape', async () => {
   const fakeFetch = async () =>
     new Response(
