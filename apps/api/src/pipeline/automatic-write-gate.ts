@@ -4,6 +4,27 @@ import type { ShipmentResolutionCandidate } from '../resolution/shipment-resolut
 
 const TRUSTED_VALIDATION_STATUSES = new Set(['validated', 'guardrailed']);
 
+type WritablePurchaseCandidate = PurchaseResolutionCandidate & {
+  userId: string;
+  senderDomain: string;
+  merchant: string;
+  orderNumber: string;
+  decision: 'create_direct' | 'create_corroborated';
+};
+
+type WritableShipmentCandidate = ShipmentResolutionCandidate & {
+  purchaseId: string;
+  trackingNumber: string;
+  carrierSlug: string;
+  decision: 'linkable';
+};
+
+type WritableDocumentCandidate = DocumentResolutionCandidate & {
+  purchaseId: string;
+  documentType: 'invoice';
+  decision: 'linkable';
+};
+
 export function isTrustedAutomaticEvidence(
   validationStatus: unknown,
   validatedResult: Record<string, unknown> | null,
@@ -21,7 +42,7 @@ export function isTrustedAutomaticEvidence(
 
 export function canAutomaticallyWritePurchase(
   candidate: PurchaseResolutionCandidate,
-): boolean {
+): candidate is WritablePurchaseCandidate {
   if (
     !candidate.userId ||
     !candidate.senderDomain ||
@@ -49,7 +70,7 @@ export function canAutomaticallyWritePurchase(
 
 export function canAutomaticallyWriteShipment(
   candidate: ShipmentResolutionCandidate,
-): boolean {
+): candidate is WritableShipmentCandidate {
   return (
     candidate.decision === 'linkable' &&
     Boolean(candidate.purchaseId) &&
@@ -63,7 +84,7 @@ export function canAutomaticallyWriteShipment(
 
 export function canAutomaticallyWriteDocument(
   candidate: DocumentResolutionCandidate,
-): boolean {
+): candidate is WritableDocumentCandidate {
   return (
     candidate.decision === 'linkable' &&
     Boolean(candidate.purchaseId) &&
