@@ -3,6 +3,7 @@ import { isCarrierSenderDomain } from '../validation/email-extraction-validator.
 export type ResolutionEventType =
   | 'order_created'
   | 'order_updated'
+  | 'payment_completed'
   | 'shipment'
   | 'delivery'
   | 'invoice_or_receipt'
@@ -45,6 +46,7 @@ export interface PurchaseResolutionCandidate {
 
 const CORROBORATING_EVENT_TYPES = new Set<ResolutionEventType>([
   'order_updated',
+  'payment_completed',
   'shipment',
   'delivery',
   'invoice_or_receipt',
