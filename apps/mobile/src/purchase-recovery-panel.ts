@@ -129,12 +129,38 @@ function renderCompleted(result: RecoveryResult | null) {
     return;
   }
 
-  const extra = safe.unlinked > 0
-    ? ` ${safe.unlinked} emailt felismertünk, de még nincs elég biztos adat ahhoz, hogy új vásárláshoz kapcsoljuk.`
-    : '';
+  if (safe.processed > 0) {
+    container.className = 'recovery-result success';
+    container.innerHTML = `
+      <strong>Ezt a vásárlást már ismeri a BuyFlow.</strong>
+      <p>${safe.checked} emailt ellenőriztünk, ebből ${safe.processed} már egy meglévő vásárláshoz kapcsolódik. Nem hoztunk létre másolatot.</p>
+      <button id="recovery-refresh-purchases" class="recovery-refresh-button" type="button">Vásárlások megtekintése</button>
+    `;
+    container.querySelector<HTMLButtonElement>('#recovery-refresh-purchases')?.addEventListener('click', () => {
+      closeRecovery();
+    });
+    return;
+  }
+
+  if (safe.unlinked > 0) {
+    container.innerHTML = `
+      <strong>Találtunk kapcsolódó emaileket.</strong>
+      <p>${safe.checked} emailt ellenőriztünk. ${safe.unlinked} levelet felismertünk, de még nincs elég biztos adat egy új vásárlás létrehozásához.</p>
+    `;
+    return;
+  }
+
+  if (safe.review > 0) {
+    container.innerHTML = `
+      <strong>Találtunk bizonytalan egyezést.</strong>
+      <p>${safe.checked} emailt ellenőriztünk, de a BuyFlow nem kapott elég biztos bizonyítékot ahhoz, hogy automatikusan új vásárlást hozzon létre.</p>
+    `;
+    return;
+  }
+
   container.innerHTML = `
-    <strong>A keresés elkészült.</strong>
-    <p>${safe.checked} emailt ellenőriztünk, de nem jött létre új vásárlás.${extra}</p>
+    <strong>Nem találtunk új vásárlást.</strong>
+    <p>${safe.checked} emailt ellenőriztünk, de egyikből sem azonosítható biztonságosan új rendelés.</p>
   `;
 }
 
