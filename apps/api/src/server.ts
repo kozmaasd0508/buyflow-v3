@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { registerAppApiRoutes } from './api/app-routes.js';
+import { registerEmailConnectionRoutes } from './api/email-connection-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { registerWebPreview } from './web-preview.js';
@@ -33,7 +34,7 @@ await app.register(cors, {
     }
     callback(null, false);
   },
-  methods: ['GET', 'HEAD', 'OPTIONS'],
+  methods: ['GET', 'POST', 'HEAD', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type', 'Accept'],
   credentials: false,
   maxAge: 86_400,
@@ -77,6 +78,7 @@ app.addContentTypeParser(
 );
 
 await registerAppApiRoutes(app);
+await registerEmailConnectionRoutes(app);
 await registerWebPreview(app);
 
 app.get('/auth/reset-password', async (_request, reply) => reply
