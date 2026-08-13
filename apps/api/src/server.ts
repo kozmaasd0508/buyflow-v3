@@ -1,6 +1,7 @@
 import cors from '@fastify/cors';
 import Fastify from 'fastify';
 import { registerAppApiRoutes } from './api/app-routes.js';
+import { registerEmailAuditRoutes } from './api/email-audit-routes.js';
 import { registerEmailConnectionRoutes } from './api/email-connection-routes.js';
 import { registerEmailScanReviewRoutes } from './api/email-scan-review-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
@@ -82,6 +83,7 @@ app.addContentTypeParser(
 await registerAppApiRoutes(app);
 await registerEmailConnectionRoutes(app);
 await registerEmailScanReviewRoutes(app);
+await registerEmailAuditRoutes(app);
 await registerPurchaseRecoveryRoutes(app);
 await registerWebPreview(app);
 
