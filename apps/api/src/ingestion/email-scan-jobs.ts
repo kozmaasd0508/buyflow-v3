@@ -213,6 +213,26 @@ export async function processEmailScanJob(
       maxPages = 20;
     }
 
+    const gmailPurchaseMessageIds = new Set<string>();
+    if (scanJob.kind === 'audit') {
+      let categoryCursor: string | undefined;
+      let categoryPages = 0;
+      const categoryQuery = `category:purchases newer_than:${windowDays}d -in:spam -in:trash`;
+
+      do {
+        const categoryPage = await provider.searchMessages({
+          query: categoryQuery,
+          limit: 200,
+          ...(categoryCursor ? { cursor: categoryCursor } : {}),
+        });
+        categoryPages += 1;
+        for (const message of categoryPage.messages) {
+          gmailPurchaseMessageIds.add(message.providerMessageId);
+        }
+        categoryCursor = categoryPage.nextCursor;
+      } while (categoryCursor && categoryPages < maxPages);
+    }
+
     const effectiveMode: AutomationMode = scanJob.kind === 'audit' ? 'observe' : mode;
     let cursor: string | undefined;
     let pages = 0;
@@ -247,6 +267,7 @@ export async function processEmailScanJob(
             userId: scanJob.user_id,
             emailConnectionId: scanJob.email_connection_id,
             email,
+            gmailCategoryPurchases: gmailPurchaseMessageIds.has(email.providerMessageId),
           });
           result.aiCalls += audit.aiCalled ? 1 : 0;
           if (audit.failed) result.review += 1;
