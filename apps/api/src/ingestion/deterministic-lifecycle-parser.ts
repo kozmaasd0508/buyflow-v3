@@ -89,7 +89,7 @@ function gyerekjatekboltOrderNumber(context: string): string | null {
   if (labelled?.[1]) return labelled[1];
 
   const sentence = context.match(
-    /\b(?:a\(z\)\s+)?(\d{5,12})\.?\s+szamu\s+rendeles(?:hez|et|ed|e)?\b/i,
+    /\b(?:a\(z\)\s+)?(\d{5,12})\.?\s+szamu\s+rendeles(?:hez|t|ed|e)?\b/i,
   );
   return sentence?.[1] ?? null;
 }
