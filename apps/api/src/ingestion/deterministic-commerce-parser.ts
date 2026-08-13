@@ -7,7 +7,7 @@ import {
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
-const PARSER_VERSION = 'deterministic-carrier-v1';
+const PARSER_VERSION = 'deterministic-commerce-v2';
 
 interface CarrierRule {
   name: string;
@@ -73,6 +73,12 @@ function domainHasToken(domain: string, token: string): boolean {
   return new RegExp(`(^|[.-])${escaped}([.-]|$)`, 'i').test(domain);
 }
 
+function domainMatches(domain: string, expected: string): boolean {
+  const normalized = normalizeDomain(domain);
+  const target = normalizeDomain(expected);
+  return normalized === target || normalized.endsWith(`.${target}`);
+}
+
 function senderDomains(from: Array<{ email: string }>): string[] {
   return [...new Set(
     from
@@ -82,6 +88,42 @@ function senderDomains(from: Array<{ email: string }>): string[] {
   )];
 }
 
+function baseExtraction(input: {
+  eventType: BuyFlowEmailEventType;
+  merchant?: string | null;
+  orderNumber?: string | null;
+  trackingNumber?: string | null;
+  carrier?: string | null;
+  invoiceNumber?: string | null;
+  paymentStatus?: EmailExtraction['payment_status'];
+  confidence?: number;
+}): EmailExtraction {
+  return {
+    event_type: input.eventType,
+    merchant: input.merchant ?? null,
+    merchant_legal_name: null,
+    order_number: input.orderNumber ?? null,
+    subtotal: null,
+    shipping_amount: null,
+    discount_amount: null,
+    total: null,
+    currency: null,
+    payment_status: input.paymentStatus ?? null,
+    payment_method: null,
+    paid_amount: null,
+    paid_currency: null,
+    shipping_method: null,
+    tracking_number: input.trackingNumber ?? null,
+    carrier: input.carrier ?? null,
+    parcel_sender: null,
+    cod_amount: null,
+    cod_currency: null,
+    invoice_number: input.invoiceNumber ?? null,
+    products: [],
+    confidence: input.confidence ?? 0.96,
+  };
+}
+
 export function detectCarrierFromDomains(domains: string[]): string | null {
   const normalized = domains.map(normalizeDomain);
   for (const rule of CARRIER_RULES) {
@@ -89,6 +131,18 @@ export function detectCarrierFromDomains(domains: string[]): string | null {
       return rule.name;
     }
   }
+  return null;
+}
+
+function detectCarrierFromText(text: string): string | null {
+  const normalized = normalizeText(text).toLowerCase();
+  if (/\bexpress\s*one\b/.test(normalized)) return 'Express One';
+  if (/\bgls\b/.test(normalized)) return 'GLS';
+  if (/\bdpd\b/.test(normalized)) return 'DPD';
+  if (/\bfoxpost\b/.test(normalized)) return 'Foxpost';
+  if (/\bpacketa\b/.test(normalized)) return 'Packeta';
+  if (/\bdhl\b/.test(normalized)) return 'DHL';
+  if (/\bups\b/.test(normalized)) return 'UPS';
   return null;
 }
 
@@ -111,38 +165,7 @@ function detectCarrierEventType(text: string): BuyFlowEmailEventType {
   return 'shipment';
 }
 
-function emptyExtraction(input: {
-  eventType: BuyFlowEmailEventType;
-  trackingNumber: string;
-  carrier: string;
-}): EmailExtraction {
-  return {
-    event_type: input.eventType,
-    merchant: null,
-    merchant_legal_name: null,
-    order_number: null,
-    subtotal: null,
-    shipping_amount: null,
-    discount_amount: null,
-    total: null,
-    currency: null,
-    payment_status: null,
-    payment_method: null,
-    paid_amount: null,
-    paid_currency: null,
-    shipping_method: null,
-    tracking_number: input.trackingNumber,
-    carrier: input.carrier,
-    parcel_sender: null,
-    cod_amount: null,
-    cod_currency: null,
-    invoice_number: null,
-    products: [],
-    confidence: 0.96,
-  };
-}
-
-export function parseDeterministicCommerceEmail(input: {
+function parseKnownCarrierEmail(input: {
   senderDomains: string[];
   subject?: string | null;
   bodyText?: string | null;
@@ -156,7 +179,7 @@ export function parseDeterministicCommerceEmail(input: {
 
   const eventType = detectCarrierEventType(contextText);
   return {
-    extraction: emptyExtraction({ eventType, trackingNumber, carrier }),
+    extraction: baseExtraction({ eventType, trackingNumber, carrier, confidence: 0.96 }),
     parserVersion: PARSER_VERSION,
     reasons: [
       'known_carrier_sender',
@@ -164,6 +187,115 @@ export function parseDeterministicCommerceEmail(input: {
       eventType === 'delivery' ? 'explicit_delivery_evidence' : 'shipment_or_transit_evidence',
     ],
   };
+}
+
+function parseGymBeamEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): DeterministicCommerceParseResult | null {
+  if (!input.senderDomains.some((domain) => domainMatches(domain, 'service.gymbeam.hu'))) {
+    return null;
+  }
+
+  const subject = normalizeText(input.subject ?? '');
+  const body = normalizeText(input.bodyText ?? '');
+  const context = `${subject}\n${body}`;
+
+  const invoiceSubject = subject.match(/\bszamlad elkeszult!\s*-\s*(\d{8,20})\b/i);
+  const invoiceBody = body.match(/\baz\s+(\d{8,20})\s+szamu\s+szamlad\s+elkeszult\b/i);
+  if (invoiceSubject?.[1] && invoiceBody?.[1]) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'invoice_or_receipt',
+        merchant: 'GymBeam',
+        orderNumber: invoiceSubject[1],
+        invoiceNumber: invoiceBody[1],
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gymbeam_sender',
+        'explicit_gymbeam_invoice_subject',
+        'explicit_invoice_number_in_body',
+      ],
+    };
+  }
+
+  const shipmentSubject = /\bmegrendelesed uton van\b/i.test(subject);
+  const orderMatch = body.match(/\ba\s+(\d{8,20})\s+szamu\s+rendelesed(?:et)?\b/i);
+  const trackingMatch = body.match(/\ba\s+([a-z0-9-]{10,32})\s+szammal\s+kovetheted\s+a\s+csomagot\b/i);
+  const carrier = detectCarrierFromText(context);
+  if (shipmentSubject && orderMatch?.[1] && trackingMatch?.[1] && carrier) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'shipment',
+        merchant: 'GymBeam',
+        orderNumber: orderMatch[1],
+        trackingNumber: trackingMatch[1].toUpperCase(),
+        carrier,
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gymbeam_sender',
+        'explicit_gymbeam_shipment_subject',
+        'explicit_order_number',
+        'explicit_gymbeam_tracking_sentence',
+        'explicit_carrier_name',
+      ],
+    };
+  }
+
+  return null;
+}
+
+function parseGyerekjatekboltEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): DeterministicCommerceParseResult | null {
+  if (!input.senderDomains.some((domain) => domainMatches(domain, 'gyerekjatekbolt.com'))) {
+    return null;
+  }
+
+  const subject = normalizeText(input.subject ?? '');
+  const body = normalizeText(input.bodyText ?? '');
+  const context = `${subject}\n${body}`;
+
+  const successfulPayment = /\bsikeres bankkartyas fizetes\b/i.test(context);
+  const orderMatch = context.match(/\b(?:a\(z\)\s+)?(\d{5,12})\.?\s+szamu\s+rendeles(?:t|ed)?\b/i)
+    ?? context.match(/\brendelesszam\s*[:#-]?\s*#?(\d{5,12})\b/i);
+
+  if (successfulPayment && orderMatch?.[1]) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'payment_completed',
+        merchant: 'Gyerekjatekbolt.com',
+        orderNumber: orderMatch[1],
+        paymentStatus: 'paid',
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gyerekjatekbolt_sender',
+        'explicit_successful_card_payment',
+        'explicit_order_number',
+      ],
+    };
+  }
+
+  return null;
+}
+
+export function parseDeterministicCommerceEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): DeterministicCommerceParseResult | null {
+  return parseKnownCarrierEmail(input)
+    ?? parseGymBeamEmail(input)
+    ?? parseGyerekjatekboltEmail(input);
 }
 
 export async function preprocessDeterministicNylasMessage(input: {
