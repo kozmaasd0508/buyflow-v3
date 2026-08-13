@@ -93,6 +93,28 @@ export async function processWebhookInboxEvent(
   }
 
   try {
+    const { data: connection, error: connectionError } = await db
+      .from('email_connections')
+      .select('id')
+      .eq('provider', 'nylas')
+      .eq('provider_account_id', event.grant_id)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (connectionError) {
+      throw new Error(`Webhook grant lookup failed: ${connectionError.message}`);
+    }
+    if (!connection) {
+      const { error: finishError } = await db.rpc('finish_webhook_inbox_event', {
+        p_id: eventId,
+        p_success: true,
+        p_error_code: null,
+      });
+      if (finishError) {
+        throw new Error(`Unknown webhook grant completion failed: ${finishError.message}`);
+      }
+      return { claimed: true };
+    }
+
     const provider = createEmailProvider({
       provider: 'nylas',
       providerAccountId: event.grant_id,
