@@ -10,7 +10,7 @@ const CARRIER_DOMAIN_TOKENS = [
 
 export type EmailSenderRole = 'carrier' | 'unknown';
 
-export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza';
+export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza' | 'aboutyou';
 
 export interface MerchantSenderDefinition {
   key: MerchantKey;
@@ -33,6 +33,11 @@ const MERCHANT_SENDER_DEFINITIONS: readonly MerchantSenderDefinition[] = [
     key: 'alza',
     displayName: 'Alza.hu',
     exactSenderDomains: ['alza.hu'],
+  },
+  {
+    key: 'aboutyou',
+    displayName: 'ABOUT YOU',
+    exactSenderDomains: ['aboutyou.hu', 'aboutyou.com'],
   },
 ] as const;
 
