@@ -10,7 +10,7 @@ const CARRIER_DOMAIN_TOKENS = [
 
 export type EmailSenderRole = 'carrier' | 'unknown';
 
-export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza' | 'aboutyou' | 'zalando' | 'dorko' | 'jatektenger' | 'marketa';
+export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza' | 'aboutyou' | 'zalando' | 'dorko' | 'jatektenger';
 
 export interface MerchantSenderDefinition {
   key: MerchantKey;
@@ -26,7 +26,6 @@ const MERCHANT_SENDER_DEFINITIONS: readonly MerchantSenderDefinition[] = [
   { key: 'zalando', displayName: 'Zalando', exactSenderDomains: ['service-mail.zalando.hu'] },
   { key: 'dorko', displayName: 'Dorko', exactSenderDomains: ['dorko.hu'] },
   { key: 'jatektenger', displayName: 'Játéktenger', exactSenderDomains: ['jatektenger.hu'] },
-  { key: 'marketa', displayName: 'Marketa.hu', exactSenderDomains: ['marketa.hu'] },
 ] as const;
 
 export function normalizeSenderDomain(domain: string): string {
