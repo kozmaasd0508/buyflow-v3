@@ -1,7 +1,11 @@
-import type {
-  BuyFlowEmailEventType,
-  EmailExtraction,
+import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import { createEmailProvider } from '../email/factory.js';
+import {
+  htmlToCompactText,
+  type BuyFlowEmailEventType,
+  type EmailExtraction,
 } from '../ai/openai-email-extractor.js';
+import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
 const PARSER_VERSION = 'deterministic-carrier-v1';
 
@@ -47,6 +51,12 @@ export interface DeterministicCommerceParseResult {
   reasons: string[];
 }
 
+export interface DeterministicEmailPreprocessResult {
+  matched: boolean;
+  sourceEmailId?: string;
+  parserVersion?: string;
+}
+
 function normalizeDomain(domain: string): string {
   return domain.trim().toLowerCase().replace(/^www\./, '');
 }
@@ -61,6 +71,15 @@ function normalizeText(value: string): string {
 function domainHasToken(domain: string, token: string): boolean {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(^|[.-])${escaped}([.-]|$)`, 'i').test(domain);
+}
+
+function senderDomains(from: Array<{ email: string }>): string[] {
+  return [...new Set(
+    from
+      .map((address) => address.email.trim().toLowerCase())
+      .map((address) => address.slice(address.lastIndexOf('@') + 1))
+      .filter((domain) => Boolean(domain) && !domain.includes('@')),
+  )];
 }
 
 export function detectCarrierFromDomains(domains: string[]): string | null {
@@ -144,5 +163,130 @@ export function parseDeterministicCommerceEmail(input: {
       'explicit_tracking_label',
       eventType === 'delivery' ? 'explicit_delivery_evidence' : 'shipment_or_transit_evidence',
     ],
+  };
+}
+
+export async function preprocessDeterministicNylasMessage(input: {
+  grantId: string;
+  messageId: string;
+}): Promise<DeterministicEmailPreprocessResult> {
+  const db = getSupabaseAdmin() as any;
+
+  const { data: connection, error: connectionError } = await db
+    .from('email_connections')
+    .select('id,user_id,provider_account_id')
+    .eq('provider', 'nylas')
+    .eq('provider_account_id', input.grantId)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (connectionError) {
+    throw new Error(`Failed to resolve deterministic parser grant: ${connectionError.message}`);
+  }
+  if (!connection) return { matched: false };
+
+  const provider = createEmailProvider({
+    provider: 'nylas',
+    providerAccountId: input.grantId,
+  });
+  const email = await provider.getMessage(input.messageId);
+  const domains = senderDomains(email.from);
+  const bodyText = email.bodyHtml
+    ? htmlToCompactText(email.bodyHtml)
+    : (email.snippet ?? '').trim().slice(0, 20_000);
+
+  const parsed = parseDeterministicCommerceEmail({
+    senderDomains: domains,
+    subject: email.subject,
+    bodyText,
+  });
+  if (!parsed) return { matched: false };
+
+  const validated = validateEmailExtraction({
+    extraction: parsed.extraction,
+    senderDomains: domains,
+    subject: email.subject,
+    bodyText,
+  });
+  const now = new Date().toISOString();
+  const structuredResult = {
+    schema_version: 2,
+    ...parsed.extraction,
+    extraction_source: 'deterministic',
+    parser_version: parsed.parserVersion,
+    parser_reasons: parsed.reasons,
+  };
+  const validatedResult = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
+
+  const { data: existing, error: existingError } = await db
+    .from('source_emails')
+    .select('id,validated_result')
+    .eq('email_connection_id', connection.id)
+    .eq('provider_message_id', input.messageId)
+    .maybeSingle();
+  if (existingError) {
+    throw new Error(`Failed to check deterministic source dedupe: ${existingError.message}`);
+  }
+
+  if (existing?.validated_result) {
+    return {
+      matched: true,
+      sourceEmailId: existing.id as string,
+      parserVersion: parsed.parserVersion,
+    };
+  }
+
+  if (existing) {
+    const { error: updateError } = await db
+      .from('source_emails')
+      .update({
+        classification: parsed.extraction.event_type,
+        structured_result: structuredResult,
+        validated_result: validatedResult,
+        validation_status: validated.validation_status,
+        validated_at: now,
+        processed_at: now,
+        processing_status: 'review',
+      })
+      .eq('id', existing.id);
+    if (updateError) {
+      throw new Error(`Failed to update deterministic source email: ${updateError.message}`);
+    }
+
+    return {
+      matched: true,
+      sourceEmailId: existing.id as string,
+      parserVersion: parsed.parserVersion,
+    };
+  }
+
+  const { data: inserted, error: insertError } = await db
+    .from('source_emails')
+    .insert({
+      user_id: connection.user_id,
+      email_connection_id: connection.id,
+      provider_message_id: email.providerMessageId,
+      provider_thread_id: email.providerThreadId ?? null,
+      from_address: email.from[0]?.email ?? null,
+      subject: email.subject ?? null,
+      received_at: email.receivedAt,
+      source_query: 'webhook:message.created',
+      classification: parsed.extraction.event_type,
+      structured_result: structuredResult,
+      validated_result: validatedResult,
+      validation_status: validated.validation_status,
+      validated_at: now,
+      processed_at: now,
+      processing_status: 'review',
+    })
+    .select('id')
+    .single();
+  if (insertError || !inserted) {
+    throw new Error(`Failed to save deterministic source email: ${insertError?.message ?? 'missing row'}`);
+  }
+
+  return {
+    matched: true,
+    sourceEmailId: inserted.id as string,
+    parserVersion: parsed.parserVersion,
   };
 }
