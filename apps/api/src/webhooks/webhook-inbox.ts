@@ -2,6 +2,8 @@ import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
 import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
+import { preprocessDeterministicLifecycleNylasMessage } from '../ingestion/deterministic-lifecycle-parser.js';
+import { reconcileDeterministicLifecycleStatesForGrant } from '../ingestion/deterministic-lifecycle-state.js';
 import {
   decideGmailPurchasesGate,
   isMessageInGmailPurchases,
@@ -150,16 +152,25 @@ export async function processWebhookInboxEvent(
       return { claimed: true, purchaseGate: 'filtered' };
     }
 
-    await preprocessDeterministicNylasMessage({
+    const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
     });
+
+    if (!lifecyclePreprocess.matched) {
+      await preprocessDeterministicNylasMessage({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+      });
+    }
 
     const pipeline = await processNylasMessage({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
       mode,
     });
+
+    await reconcileDeterministicLifecycleStatesForGrant(event.grant_id);
 
     if (pipeline.status === 'unlinked' && pipeline.sourceEmailId) {
       await enqueueAutomaticTargetedRecoveryForSource(pipeline.sourceEmailId);
