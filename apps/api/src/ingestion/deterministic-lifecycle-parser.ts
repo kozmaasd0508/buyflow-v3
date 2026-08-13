@@ -13,7 +13,10 @@ const PARSER_VERSION = 'deterministic-lifecycle-v1';
 export type DeterministicLifecycleEvent =
   | 'payment_failed'
   | 'cancelled'
-  | 'delayed';
+  | 'delayed'
+  | 'order_processing'
+  | 'order_packing'
+  | 'ready_to_ship';
 
 export interface DeterministicLifecycleParseResult {
   extraction: EmailExtraction;
@@ -79,10 +82,7 @@ function lifecycleExtraction(input: {
 function gyerekjatekboltOrderNumber(context: string): string | null {
   const labelled = context.match(/\brendelesszam\s*[:#-]?\s*#?(\d{5,12})\b/i);
   if (labelled?.[1]) return labelled[1];
-
-  const sentence = context.match(
-    /\b(?:a\(z\)\s+)?(\d{5,12})\.?\s+szamu\s+rendeles(?:hez|t|ed|e)?\b/i,
-  );
+  const sentence = context.match(/\b(?:a\(z\)\s+)?(\d{5,12})\.?\s+szamu\s+rendeles(?:hez|t|ed|e)?\b/i);
   return sentence?.[1] ?? null;
 }
 
@@ -115,11 +115,7 @@ function parseGyerekjatekbolt(input: {
       }),
       lifecycleEvent: 'payment_failed',
       parserVersion: PARSER_VERSION,
-      reasons: [
-        'known_gyerekjatekbolt_sender',
-        'explicit_payment_failure',
-        'explicit_order_number',
-      ],
+      reasons: ['known_gyerekjatekbolt_sender', 'explicit_payment_failure', 'explicit_order_number'],
     };
   }
 
@@ -131,17 +127,10 @@ function parseGyerekjatekbolt(input: {
 
   if (explicitCancellation) {
     return {
-      extraction: lifecycleExtraction({
-        merchant: merchantDisplayName('gyerekjatekbolt'),
-        orderNumber,
-      }),
+      extraction: lifecycleExtraction({ merchant: merchantDisplayName('gyerekjatekbolt'), orderNumber }),
       lifecycleEvent: 'cancelled',
       parserVersion: PARSER_VERSION,
-      reasons: [
-        'known_gyerekjatekbolt_sender',
-        'explicit_order_cancelled_state',
-        'explicit_order_number',
-      ],
+      reasons: ['known_gyerekjatekbolt_sender', 'explicit_order_cancelled_state', 'explicit_order_number'],
     };
   }
 
@@ -154,10 +143,8 @@ function parseGymBeam(input: {
   bodyText?: string | null;
 }): DeterministicLifecycleParseResult | null {
   if (!isMerchantSender(input.senderDomains, 'gymbeam')) return null;
-
   const subject = normalizeText(input.subject ?? '');
   const body = normalizeText(input.bodyText ?? '');
-
   if (!/\bellenorizzuk a kezbesitest\b/i.test(subject)) return null;
 
   const delayMatch = body.match(/\ba\(z\)\s+(\d{8,20})\s+rendelese\s+kesik\b/i)
@@ -165,16 +152,45 @@ function parseGymBeam(input: {
   if (!delayMatch?.[1]) return null;
 
   return {
-    extraction: lifecycleExtraction({
-      merchant: merchantDisplayName('gymbeam'),
-      orderNumber: delayMatch[1],
-    }),
+    extraction: lifecycleExtraction({ merchant: merchantDisplayName('gymbeam'), orderNumber: delayMatch[1] }),
     lifecycleEvent: 'delayed',
     parserVersion: PARSER_VERSION,
+    reasons: ['known_gymbeam_sender', 'explicit_delivery_check_subject', 'explicit_order_delay_sentence', 'explicit_order_number'],
+  };
+}
+
+function parseMarketa(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): DeterministicLifecycleParseResult | null {
+  if (!isMerchantSender(input.senderDomains, 'marketa')) return null;
+
+  const subject = normalizeText(input.subject ?? '');
+  const body = normalizeText(input.bodyText ?? '');
+  const context = `${subject}\n${body}`;
+
+  const orderMatch = context.match(/\b(\d{6,12})\s+(?:szamu\s+)?rendeles(?:ed|eddel)?\b/i);
+  if (!orderMatch?.[1]) return null;
+
+  const subjectPacking = /\belkezdtuk\s+rendelesed\s+osszekesziteset\b/i.test(subject);
+  const explicitPacking = /\braktarunk\s+mar\s+elkezdte\s+becsomagolni\b/i.test(body);
+  const futureCourierHandoff = /\b(?:1\s*-\s*2|1-2)\s+munkanapon\s+belul\s+atadja\s+azt\s+a\s+futarszolgalatnak\b/i.test(body);
+
+  if (!subjectPacking || !explicitPacking || !futureCourierHandoff) return null;
+
+  return {
+    extraction: lifecycleExtraction({
+      merchant: merchantDisplayName('marketa'),
+      orderNumber: orderMatch[1],
+    }),
+    lifecycleEvent: 'order_packing',
+    parserVersion: PARSER_VERSION,
     reasons: [
-      'known_gymbeam_sender',
-      'explicit_delivery_check_subject',
-      'explicit_order_delay_sentence',
+      'known_marketa_sender',
+      'explicit_order_packing_subject',
+      'explicit_warehouse_packing_sentence',
+      'explicit_future_courier_handoff',
       'explicit_order_number',
     ],
   };
@@ -187,6 +203,7 @@ export function parseDeterministicLifecycleEmail(input: {
 }): DeterministicLifecycleParseResult | null {
   return parseGyerekjatekbolt(input)
     ?? parseGymBeam(input)
+    ?? parseMarketa(input)
     ?? parseAlzaLifecycleEmail(input);
 }
 
@@ -203,34 +220,18 @@ export async function preprocessDeterministicLifecycleNylasMessage(input: {
     .eq('provider_account_id', input.grantId)
     .eq('status', 'active')
     .maybeSingle();
-  if (connectionError) {
-    throw new Error(`Failed to resolve lifecycle parser grant: ${connectionError.message}`);
-  }
+  if (connectionError) throw new Error(`Failed to resolve lifecycle parser grant: ${connectionError.message}`);
   if (!connection) return { matched: false };
 
-  const provider = createEmailProvider({
-    provider: 'nylas',
-    providerAccountId: input.grantId,
-  });
+  const provider = createEmailProvider({ provider: 'nylas', providerAccountId: input.grantId });
   const email = await provider.getMessage(input.messageId);
   const domains = senderDomains(email.from);
-  const bodyText = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml)
-    : (email.snippet ?? '').trim().slice(0, 20_000);
+  const bodyText = email.bodyHtml ? htmlToCompactText(email.bodyHtml) : (email.snippet ?? '').trim().slice(0, 20_000);
 
-  const parsed = parseDeterministicLifecycleEmail({
-    senderDomains: domains,
-    subject: email.subject,
-    bodyText,
-  });
+  const parsed = parseDeterministicLifecycleEmail({ senderDomains: domains, subject: email.subject, bodyText });
   if (!parsed) return { matched: false };
 
-  const validated = validateEmailExtraction({
-    extraction: parsed.extraction,
-    senderDomains: domains,
-    subject: email.subject,
-    bodyText,
-  });
+  const validated = validateEmailExtraction({ extraction: parsed.extraction, senderDomains: domains, subject: email.subject, bodyText });
   const now = new Date().toISOString();
   const structuredResult = {
     schema_version: 2,
@@ -254,60 +255,17 @@ export async function preprocessDeterministicLifecycleNylasMessage(input: {
     .eq('email_connection_id', connection.id)
     .eq('provider_message_id', input.messageId)
     .maybeSingle();
-  if (existingError) {
-    throw new Error(`Failed to check lifecycle source dedupe: ${existingError.message}`);
-  }
+  if (existingError) throw new Error(`Failed to check lifecycle source dedupe: ${existingError.message}`);
 
-  const existingLifecycle = existing?.validated_result
-    && typeof existing.validated_result === 'object'
+  const existingLifecycle = existing?.validated_result && typeof existing.validated_result === 'object'
     ? (existing.validated_result as Record<string, unknown>).lifecycle_event
     : null;
-
   if (existing && existingLifecycle === parsed.lifecycleEvent) {
-    return {
-      matched: true,
-      sourceEmailId: existing.id as string,
-      lifecycleEvent: parsed.lifecycleEvent,
-      parserVersion: parsed.parserVersion,
-    };
+    return { matched: true, sourceEmailId: existing.id as string, lifecycleEvent: parsed.lifecycleEvent, parserVersion: parsed.parserVersion };
   }
 
   if (existing) {
-    const { error: updateError } = await db
-      .from('source_emails')
-      .update({
-        classification: parsed.lifecycleEvent,
-        structured_result: structuredResult,
-        validated_result: validatedResult,
-        validation_status: validated.validation_status,
-        validated_at: now,
-        processed_at: now,
-        processing_status: 'review',
-      })
-      .eq('id', existing.id);
-    if (updateError) {
-      throw new Error(`Failed to update lifecycle source email: ${updateError.message}`);
-    }
-
-    return {
-      matched: true,
-      sourceEmailId: existing.id as string,
-      lifecycleEvent: parsed.lifecycleEvent,
-      parserVersion: parsed.parserVersion,
-    };
-  }
-
-  const { data: inserted, error: insertError } = await db
-    .from('source_emails')
-    .insert({
-      user_id: connection.user_id,
-      email_connection_id: connection.id,
-      provider_message_id: email.providerMessageId,
-      provider_thread_id: email.providerThreadId ?? null,
-      from_address: email.from[0]?.email ?? null,
-      subject: email.subject ?? null,
-      received_at: email.receivedAt,
-      source_query: 'webhook:message.created',
+    const { error: updateError } = await db.from('source_emails').update({
       classification: parsed.lifecycleEvent,
       structured_result: structuredResult,
       validated_result: validatedResult,
@@ -315,17 +273,29 @@ export async function preprocessDeterministicLifecycleNylasMessage(input: {
       validated_at: now,
       processed_at: now,
       processing_status: 'review',
-    })
-    .select('id')
-    .single();
-  if (insertError || !inserted) {
-    throw new Error(`Failed to save lifecycle source email: ${insertError?.message ?? 'missing row'}`);
+    }).eq('id', existing.id);
+    if (updateError) throw new Error(`Failed to update lifecycle source email: ${updateError.message}`);
+    return { matched: true, sourceEmailId: existing.id as string, lifecycleEvent: parsed.lifecycleEvent, parserVersion: parsed.parserVersion };
   }
 
-  return {
-    matched: true,
-    sourceEmailId: inserted.id as string,
-    lifecycleEvent: parsed.lifecycleEvent,
-    parserVersion: parsed.parserVersion,
-  };
+  const { data: inserted, error: insertError } = await db.from('source_emails').insert({
+    user_id: connection.user_id,
+    email_connection_id: connection.id,
+    provider_message_id: email.providerMessageId,
+    provider_thread_id: email.providerThreadId ?? null,
+    from_address: email.from[0]?.email ?? null,
+    subject: email.subject ?? null,
+    received_at: email.receivedAt,
+    source_query: 'webhook:message.created',
+    classification: parsed.lifecycleEvent,
+    structured_result: structuredResult,
+    validated_result: validatedResult,
+    validation_status: validated.validation_status,
+    validated_at: now,
+    processed_at: now,
+    processing_status: 'review',
+  }).select('id').single();
+  if (insertError || !inserted) throw new Error(`Failed to save lifecycle source email: ${insertError?.message ?? 'missing row'}`);
+
+  return { matched: true, sourceEmailId: inserted.id as string, lifecycleEvent: parsed.lifecycleEvent, parserVersion: parsed.parserVersion };
 }
