@@ -10,7 +10,7 @@ const CARRIER_DOMAIN_TOKENS = [
 
 export type EmailSenderRole = 'carrier' | 'unknown';
 
-export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza' | 'aboutyou' | 'zalando' | 'dorko' | 'jatektenger';
+export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza' | 'aboutyou' | 'zalando' | 'dorko' | 'jatektenger' | 'marketa';
 
 export interface MerchantSenderDefinition {
   key: MerchantKey;
@@ -19,41 +19,14 @@ export interface MerchantSenderDefinition {
 }
 
 const MERCHANT_SENDER_DEFINITIONS: readonly MerchantSenderDefinition[] = [
-  {
-    key: 'gymbeam',
-    displayName: 'GymBeam',
-    exactSenderDomains: ['service.gymbeam.hu'],
-  },
-  {
-    key: 'gyerekjatekbolt',
-    displayName: 'Gyerekjatekbolt.com',
-    exactSenderDomains: ['gyerekjatekbolt.com'],
-  },
-  {
-    key: 'alza',
-    displayName: 'Alza.hu',
-    exactSenderDomains: ['alza.hu'],
-  },
-  {
-    key: 'aboutyou',
-    displayName: 'ABOUT YOU',
-    exactSenderDomains: ['aboutyou.hu'],
-  },
-  {
-    key: 'zalando',
-    displayName: 'Zalando',
-    exactSenderDomains: ['service-mail.zalando.hu'],
-  },
-  {
-    key: 'dorko',
-    displayName: 'Dorko',
-    exactSenderDomains: ['dorko.hu'],
-  },
-  {
-    key: 'jatektenger',
-    displayName: 'Játéktenger',
-    exactSenderDomains: ['jatektenger.hu'],
-  },
+  { key: 'gymbeam', displayName: 'GymBeam', exactSenderDomains: ['service.gymbeam.hu'] },
+  { key: 'gyerekjatekbolt', displayName: 'Gyerekjatekbolt.com', exactSenderDomains: ['gyerekjatekbolt.com'] },
+  { key: 'alza', displayName: 'Alza.hu', exactSenderDomains: ['alza.hu'] },
+  { key: 'aboutyou', displayName: 'ABOUT YOU', exactSenderDomains: ['aboutyou.hu'] },
+  { key: 'zalando', displayName: 'Zalando', exactSenderDomains: ['service-mail.zalando.hu'] },
+  { key: 'dorko', displayName: 'Dorko', exactSenderDomains: ['dorko.hu'] },
+  { key: 'jatektenger', displayName: 'Játéktenger', exactSenderDomains: ['jatektenger.hu'] },
+  { key: 'marketa', displayName: 'Marketa.hu', exactSenderDomains: ['marketa.hu'] },
 ] as const;
 
 export function normalizeSenderDomain(domain: string): string {
@@ -81,14 +54,11 @@ export function getMerchantSenderDefinition(key: MerchantKey): MerchantSenderDef
 export function isMerchantSender(domains: string[], key: MerchantKey): boolean {
   const merchant = getMerchantSenderDefinition(key);
   const allowed = new Set(merchant.exactSenderDomains.map(normalizeSenderDomain));
-  return domains
-    .map(normalizeSenderDomain)
-    .some((domain) => allowed.has(domain));
+  return domains.map(normalizeSenderDomain).some((domain) => allowed.has(domain));
 }
 
 export function identifyMerchantSender(domains: string[]): MerchantSenderDefinition | null {
-  const matches = MERCHANT_SENDER_DEFINITIONS.filter((merchant) =>
-    isMerchantSender(domains, merchant.key));
+  const matches = MERCHANT_SENDER_DEFINITIONS.filter((merchant) => isMerchantSender(domains, merchant.key));
   return matches.length === 1 ? matches[0]! : null;
 }
 
