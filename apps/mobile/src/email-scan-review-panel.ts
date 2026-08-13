@@ -150,11 +150,31 @@ async function openReview(connectionId:string,windowDays:BuyFlowAuditWindow){
 }
 
 async function startAudit(connectionId:string,windowDays:BuyFlowAuditWindow,button:HTMLButtonElement){
-  button.disabled=true;button.textContent=`${windowDays} nap ellenőrzése indul…`;
+  button.disabled=true;button.textContent=`${windowDays} nap állapotának ellenőrzése…`;
   try{
+    const current=await request<AuditResponse>(`/api/email-connections/${encodeURIComponent(connectionId)}/audit?windowDays=${windowDays}`);
+    const alreadyWorking=Boolean(current.audit&&['pending','processing','retry'].includes(current.audit.status));
+    if(alreadyWorking){
+      await openReview(connectionId,windowDays);
+      return;
+    }
+
+    button.textContent=`${windowDays} nap ellenőrzése indul…`;
     await request(`/api/email-connections/${encodeURIComponent(connectionId)}/audit`,{method:'POST',body:JSON.stringify({windowDays})});
     await openReview(connectionId,windowDays);
-  }catch{window.alert(`Most nem sikerült elindítani a teljes ${windowDays} napos AI ellenőrzést.`)}
+  }catch{
+    try{
+      const latest=await request<AuditResponse>(`/api/email-connections/${encodeURIComponent(connectionId)}/audit?windowDays=${windowDays}`);
+      const working=Boolean(latest.audit&&['pending','processing','retry'].includes(latest.audit.status));
+      if(working){
+        await openReview(connectionId,windowDays);
+        return;
+      }
+    }catch{
+      // Fall through to the user-facing error.
+    }
+    window.alert(`Most nem sikerült elindítani a teljes ${windowDays} napos AI ellenőrzést.`);
+  }
   finally{button.disabled=false;button.textContent=`Teljes ${windowDays} napos AI ellenőrzés indítása`}
 }
 
