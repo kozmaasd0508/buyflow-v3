@@ -1,4 +1,5 @@
 import type { EmailExtraction } from '../ai/openai-email-extractor.js';
+import { isMerchantSender, merchantDisplayName } from '../email/sender-role.js';
 
 const PARSER_VERSION = 'deterministic-lifecycle-v1';
 
@@ -9,16 +10,6 @@ export interface AlzaLifecycleParseResult {
   lifecycleEvent: AlzaLifecycleEvent;
   parserVersion: string;
   reasons: string[];
-}
-
-function normalizeDomain(domain: string): string {
-  return domain.trim().toLowerCase().replace(/^www\./, '');
-}
-
-function domainMatches(domain: string, expected: string): boolean {
-  const normalized = normalizeDomain(domain);
-  const target = normalizeDomain(expected);
-  return normalized === target || normalized.endsWith(`.${target}`);
 }
 
 function normalizeText(value: string): string {
@@ -44,7 +35,7 @@ function extraction(input: {
 }): EmailExtraction {
   return {
     event_type: 'order_updated',
-    merchant: 'Alza.hu',
+    merchant: merchantDisplayName('alza'),
     merchant_legal_name: null,
     order_number: input.orderNumber,
     subtotal: null,
@@ -73,9 +64,7 @@ export function parseAlzaLifecycleEmail(input: {
   subject?: string | null;
   bodyText?: string | null;
 }): AlzaLifecycleParseResult | null {
-  if (!input.senderDomains.some((domain) => domainMatches(domain, 'alza.hu'))) {
-    return null;
-  }
+  if (!isMerchantSender(input.senderDomains, 'alza')) return null;
 
   const subject = normalizeText(input.subject ?? '');
   const body = normalizeText(input.bodyText ?? '');
