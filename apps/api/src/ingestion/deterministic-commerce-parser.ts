@@ -7,6 +7,7 @@ import {
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAboutYouCommerceEmail } from './aboutyou-commerce-adapter.js';
+import { parseMerchantPreAdviceEmail } from './pre-advice-commerce-adapter.js';
 import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
 
 const PARSER_VERSION = 'deterministic-commerce-v2';
@@ -47,10 +48,19 @@ const DELIVERED_PATTERNS = [
   /\batvetel megtortent\b/i,
 ];
 
+export type DeterministicShipmentPhase =
+  | 'shipment_created'
+  | 'shipped'
+  | 'in_transit'
+  | 'out_for_delivery'
+  | 'ready_for_pickup'
+  | 'delivered';
+
 export interface DeterministicCommerceParseResult {
   extraction: EmailExtraction;
   parserVersion: string;
   reasons: string[];
+  shipmentPhase?: DeterministicShipmentPhase;
 }
 
 export interface DeterministicEmailPreprocessResult {
@@ -372,6 +382,7 @@ export function parseDeterministicCommerceEmail(input: {
   bodyText?: string | null;
 }): DeterministicCommerceParseResult | null {
   return parseKnownCarrierEmail(input)
+    ?? parseMerchantPreAdviceEmail(input)
     ?? parseGymBeamEmail(input)
     ?? parseGyerekjatekboltEmail(input)
     ?? parseDorkoEmail(input)
@@ -424,11 +435,15 @@ export async function preprocessDeterministicNylasMessage(input: {
   const structuredResult = {
     schema_version: 2,
     ...parsed.extraction,
+    ...(parsed.shipmentPhase ? { shipment_phase: parsed.shipmentPhase } : {}),
     extraction_source: 'deterministic',
     parser_version: parsed.parserVersion,
     parser_reasons: parsed.reasons,
   };
   const validatedResult = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
+  if (parsed.shipmentPhase) {
+    validatedResult.shipment_phase = parsed.shipmentPhase;
+  }
 
   const { data: existing, error: existingError } = await db
     .from('source_emails')
