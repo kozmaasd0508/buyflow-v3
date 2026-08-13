@@ -7,6 +7,7 @@ import {
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAboutYouCommerceEmail } from './aboutyou-commerce-adapter.js';
+import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
 
 const PARSER_VERSION = 'deterministic-commerce-v2';
 
@@ -297,7 +298,8 @@ export function parseDeterministicCommerceEmail(input: {
   return parseKnownCarrierEmail(input)
     ?? parseGymBeamEmail(input)
     ?? parseGyerekjatekboltEmail(input)
-    ?? parseAboutYouCommerceEmail(input);
+    ?? parseAboutYouCommerceEmail(input)
+    ?? parseZalandoCommerceEmail(input);
 }
 
 export async function preprocessDeterministicNylasMessage(input: {
