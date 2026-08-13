@@ -287,6 +287,45 @@ function parseGyerekjatekboltEmail(input: {
     };
   }
 
+  const explicitDelivered = /\bjelenlegi allapot\s*:\s*rendeles kezbesitve\b/i.test(context)
+    || (/\bjelenlegi allapot\b/i.test(context) && /\brendeles kezbesitve\b/i.test(body));
+  if (explicitDelivered && orderMatch?.[1]) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'delivery',
+        merchant: 'Gyerekjatekbolt.com',
+        orderNumber: orderMatch[1],
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gyerekjatekbolt_sender',
+        'explicit_order_delivered_state',
+        'explicit_order_number',
+      ],
+    };
+  }
+
+  const explicitShippingState = /\bjelenlegi allapot\s*:\s*szallitas alatt\b/i.test(context);
+  const explicitCourierHandoff = /\brendeleset atadtuk a futarszolgalat reszere\b/i.test(body);
+  if (explicitShippingState && explicitCourierHandoff && orderMatch?.[1]) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'shipment',
+        merchant: 'Gyerekjatekbolt.com',
+        orderNumber: orderMatch[1],
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gyerekjatekbolt_sender',
+        'explicit_shipping_state',
+        'explicit_courier_handoff',
+        'explicit_order_number',
+      ],
+    };
+  }
+
   return null;
 }
 
