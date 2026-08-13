@@ -56,15 +56,17 @@ test('ignores clearly unrelated email', () => {
 });
 
 test('merchant registry uses exact trusted sender domains', () => {
-  assert.equal(registeredMerchantSenders().length, 5);
+  assert.equal(registeredMerchantSenders().length, 6);
   assert.equal(isMerchantSender(['service.gymbeam.hu'], 'gymbeam'), true);
   assert.equal(isMerchantSender(['GYEREKJATEKBOLT.COM.'], 'gyerekjatekbolt'), true);
   assert.equal(isMerchantSender(['alza.hu'], 'alza'), true);
   assert.equal(isMerchantSender(['aboutyou.hu'], 'aboutyou'), true);
   assert.equal(isMerchantSender(['service-mail.zalando.hu'], 'zalando'), true);
+  assert.equal(isMerchantSender(['dorko.hu'], 'dorko'), true);
   assert.equal(merchantDisplayName('alza'), 'Alza.hu');
   assert.equal(merchantDisplayName('aboutyou'), 'ABOUT YOU');
   assert.equal(merchantDisplayName('zalando'), 'Zalando');
+  assert.equal(merchantDisplayName('dorko'), 'Dorko');
   assert.equal(identifyMerchantSender(['service.gymbeam.hu'])?.key, 'gymbeam');
 
   assert.equal(isMerchantSender(['evil-alza.hu'], 'alza'), false);
@@ -75,6 +77,7 @@ test('merchant registry uses exact trusted sender domains', () => {
   assert.equal(isMerchantSender(['aboutyou.hu.attacker.com'], 'aboutyou'), false);
   assert.equal(isMerchantSender(['news2.zalando.com'], 'zalando'), false);
   assert.equal(isMerchantSender(['service-mail.zalando.hu.attacker.com'], 'zalando'), false);
+  assert.equal(isMerchantSender(['dorko.hu.attacker.com'], 'dorko'), false);
   assert.equal(identifyMerchantSender(['unknown.example']), null);
   assert.equal(identifyMerchantSender(['alza.hu', 'service.gymbeam.hu']), null);
 });
@@ -187,4 +190,80 @@ test('parses only successful Gyerekjatekbolt payment', () => {
     bodyText: 'A(z) 535574. számú rendelést NEM sikerült befizetnie.',
   });
   assert.equal(failed, null);
+});
+
+test('parses real Gyerekjatekbolt courier handoff as shipment', () => {
+  const result = parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Gyerekjatekbolt.com - a(z) 536066. számú rendelés állapota megváltozott',
+    bodyText: 'Rendelésszám: 536066\nRendelés dátuma: 2026. 08. 04. 13:27:23\nA megrendelés frissítésre került, jelenlegi állapot: Szállítás alatt\nRendelését átadtuk a futárszolgálat részére várhatóan a következő munkanapon kézbesítik Önnek.',
+  });
+  assert.ok(result);
+  assert.equal(result.extraction.event_type, 'shipment');
+  assert.equal(result.extraction.merchant, 'Gyerekjatekbolt.com');
+  assert.equal(result.extraction.order_number, '536066');
+});
+
+test('parses real Gyerekjatekbolt delivered state as delivery', () => {
+  const result = parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Gyerekjatekbolt.com – a(z) 536066. számú rendelés állapota megváltozott',
+    bodyText: 'Rendelésszám: 536066\nRendelés dátuma: 2026. 08. 04. 13:27:23\nA megrendelés frissítésre került, jelenlegi állapot:\nRendelés kézbesítve',
+  });
+  assert.ok(result);
+  assert.equal(result.extraction.event_type, 'delivery');
+  assert.equal(result.extraction.order_number, '536066');
+});
+
+test('does not promote Gyerekjatekbolt processing or weak shipping wording', () => {
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Gyerekjatekbolt.com – Rendelés 536066 – 14.960 Ft',
+    bodyText: 'RENDELÉS VISSZAIGAZOLÁS Megrendelése megérkezett, feldolgozása elkezdődött. Rendelésszám: #536066',
+  }), null);
+
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Rendelés frissítés',
+    bodyText: 'Rendelésszám: 536066. Jelenlegi állapot: Szállítás alatt.',
+  }), null);
+
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com.attacker.com'],
+    subject: 'Rendelés frissítés',
+    bodyText: 'Rendelésszám: 536066. Jelenlegi állapot: Szállítás alatt. Rendelését átadtuk a futárszolgálat részére.',
+  }), null);
+});
+
+test('parses a real Dorko dispatched order as shipment', () => {
+  const result = parseDeterministicCommerceEmail({
+    senderDomains: ['dorko.hu'],
+    subject: 'Dorko: rendelés elküldve',
+    bodyText: 'Értesítés: megrendelés elküldve\nRendelés azonosító: DK2001799\nA fenti azonosítójú megrendelése feladásra került a megadott címre.\nSzállítás módja: GLS Automata',
+  });
+  assert.ok(result);
+  assert.equal(result.extraction.event_type, 'shipment');
+  assert.equal(result.extraction.merchant, 'Dorko');
+  assert.equal(result.extraction.order_number, 'DK2001799');
+  assert.equal(result.extraction.carrier, 'GLS');
+});
+
+test('keeps Dorko confirmation and weak dispatch wording on fallback', () => {
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['dorko.hu'],
+    subject: 'Dorko: DK2001799 rendelés/foglalás visszaigazolás',
+    bodyText: 'Beérkezett hozzánk a rendelési/foglalási igénye a Dorko webáruházba. Rendelés azonosító: DK2001799',
+  }), null);
+
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['dorko.hu'],
+    subject: 'Dorko: rendelés elküldve',
+    bodyText: 'Rendelés azonosító: DK2001799',
+  }), null);
+
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['dorko.hu.attacker.com'],
+    subject: 'Dorko: rendelés elküldve',
+    bodyText: 'Értesítés: megrendelés elküldve Rendelés azonosító: DK2001799 A fenti azonosítójú megrendelése feladásra került a megadott címre.',
+  }), null);
 });

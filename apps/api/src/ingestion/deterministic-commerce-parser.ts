@@ -287,7 +287,83 @@ function parseGyerekjatekboltEmail(input: {
     };
   }
 
+  const explicitDelivered = /\bjelenlegi allapot\s*:\s*rendeles kezbesitve\b/i.test(context)
+    || (/\bjelenlegi allapot\b/i.test(context) && /\brendeles kezbesitve\b/i.test(body));
+  if (explicitDelivered && orderMatch?.[1]) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'delivery',
+        merchant: 'Gyerekjatekbolt.com',
+        orderNumber: orderMatch[1],
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gyerekjatekbolt_sender',
+        'explicit_order_delivered_state',
+        'explicit_order_number',
+      ],
+    };
+  }
+
+  const explicitShippingState = /\bjelenlegi allapot\s*:\s*szallitas alatt\b/i.test(context);
+  const explicitCourierHandoff = /\brendeleset atadtuk a futarszolgalat reszere\b/i.test(body);
+  if (explicitShippingState && explicitCourierHandoff && orderMatch?.[1]) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'shipment',
+        merchant: 'Gyerekjatekbolt.com',
+        orderNumber: orderMatch[1],
+        confidence: 0.99,
+      }),
+      parserVersion: PARSER_VERSION,
+      reasons: [
+        'known_gyerekjatekbolt_sender',
+        'explicit_shipping_state',
+        'explicit_courier_handoff',
+        'explicit_order_number',
+      ],
+    };
+  }
+
   return null;
+}
+
+function parseDorkoEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): DeterministicCommerceParseResult | null {
+  if (!input.senderDomains.some((domain) => domainMatches(domain, 'dorko.hu'))) return null;
+
+  const subject = normalizeText(input.subject ?? '');
+  const body = normalizeText(input.bodyText ?? '');
+  const context = `${subject}\n${body}`;
+
+  const explicitSentNotice = /\bertesites\s*:\s*megrendeles elkuldve\b/i.test(context)
+    || /\bdorko\s*:\s*rendeles elkuldve\b/i.test(subject);
+  const explicitDispatch = /\bmegrendelese feladasra kerult a megadott cimre\b/i.test(body);
+  if (!explicitSentNotice || !explicitDispatch) return null;
+
+  const orderMatch = body.match(/\brendeles azonosito\s*:\s*(DK\d{5,20})\b/i);
+  if (!orderMatch?.[1]) return null;
+
+  return {
+    extraction: baseExtraction({
+      eventType: 'shipment',
+      merchant: 'Dorko',
+      orderNumber: orderMatch[1].toUpperCase(),
+      carrier: detectCarrierFromText(context),
+      confidence: 0.99,
+    }),
+    parserVersion: PARSER_VERSION,
+    reasons: [
+      'known_dorko_sender',
+      'explicit_order_sent_notice',
+      'explicit_dispatch_sentence',
+      'explicit_order_number',
+    ],
+  };
 }
 
 export function parseDeterministicCommerceEmail(input: {
@@ -298,6 +374,7 @@ export function parseDeterministicCommerceEmail(input: {
   return parseKnownCarrierEmail(input)
     ?? parseGymBeamEmail(input)
     ?? parseGyerekjatekboltEmail(input)
+    ?? parseDorkoEmail(input)
     ?? parseAboutYouCommerceEmail(input)
     ?? parseZalandoCommerceEmail(input);
 }
