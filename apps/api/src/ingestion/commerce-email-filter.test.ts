@@ -188,3 +188,46 @@ test('parses only successful Gyerekjatekbolt payment', () => {
   });
   assert.equal(failed, null);
 });
+
+test('parses real Gyerekjatekbolt courier handoff as shipment', () => {
+  const result = parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Gyerekjatekbolt.com - a(z) 536066. számú rendelés állapota megváltozott',
+    bodyText: 'Rendelésszám: 536066\nRendelés dátuma: 2026. 08. 04. 13:27:23\nA megrendelés frissítésre került, jelenlegi állapot: Szállítás alatt\nRendelését átadtuk a futárszolgálat részére várhatóan a következő munkanapon kézbesítik Önnek.',
+  });
+  assert.ok(result);
+  assert.equal(result.extraction.event_type, 'shipment');
+  assert.equal(result.extraction.merchant, 'Gyerekjatekbolt.com');
+  assert.equal(result.extraction.order_number, '536066');
+});
+
+test('parses real Gyerekjatekbolt delivered state as delivery', () => {
+  const result = parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Gyerekjatekbolt.com – a(z) 536066. számú rendelés állapota megváltozott',
+    bodyText: 'Rendelésszám: 536066\nRendelés dátuma: 2026. 08. 04. 13:27:23\nA megrendelés frissítésre került, jelenlegi állapot:\nRendelés kézbesítve',
+  });
+  assert.ok(result);
+  assert.equal(result.extraction.event_type, 'delivery');
+  assert.equal(result.extraction.order_number, '536066');
+});
+
+test('does not promote Gyerekjatekbolt processing or weak shipping wording', () => {
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Gyerekjatekbolt.com – Rendelés 536066 – 14.960 Ft',
+    bodyText: 'RENDELÉS VISSZAIGAZOLÁS Megrendelése megérkezett, feldolgozása elkezdődött. Rendelésszám: #536066',
+  }), null);
+
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com'],
+    subject: 'Rendelés frissítés',
+    bodyText: 'Rendelésszám: 536066. Jelenlegi állapot: Szállítás alatt.',
+  }), null);
+
+  assert.equal(parseDeterministicCommerceEmail({
+    senderDomains: ['gyerekjatekbolt.com.attacker.com'],
+    subject: 'Rendelés frissítés',
+    bodyText: 'Rendelésszám: 536066. Jelenlegi állapot: Szállítás alatt. Rendelését átadtuk a futárszolgálat részére.',
+  }), null);
+});
