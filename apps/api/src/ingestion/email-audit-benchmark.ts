@@ -86,22 +86,31 @@ export async function processEmailForAuditBenchmark(input: {
   userId: string;
   emailConnectionId: string;
   email: NormalizedEmail;
+  gmailCategoryPurchases: boolean;
 }): Promise<AuditBenchmarkResult> {
   const db = getSupabaseAdmin() as any;
   const sourceEmailId = await ensureAuditSource(input);
   const filter = filterCommerceEmail(input.email);
-  const gmailCategoryPurchases = input.email.folders
-    .some((folder) => folder.toUpperCase() === 'CATEGORY_PURCHASES');
+  const gmailCategoryPurchases = input.gmailCategoryPurchases;
   const linkedPurchaseId = await linkedPurchaseForSource(input.userId, sourceEmailId);
 
   const { data: existingAudit, error: auditReadError } = await db
     .from('email_audit_results')
-    .select('id,ai_event_type,filter_relevant,linked_purchase_id,ai_error_code')
+    .select('id,ai_event_type,filter_relevant,linked_purchase_id,ai_error_code,gmail_category_purchases')
     .eq('job_id', input.jobId)
     .eq('source_email_id', sourceEmailId)
     .maybeSingle();
   if (auditReadError) throw new Error(`Audit result lookup failed: ${auditReadError.message}`);
   if (existingAudit) {
+    if (Boolean(existingAudit.gmail_category_purchases) !== gmailCategoryPurchases) {
+      const { error: updateError } = await db
+        .from('email_audit_results')
+        .update({ gmail_category_purchases: gmailCategoryPurchases })
+        .eq('id', existingAudit.id)
+        .eq('user_id', input.userId);
+      if (updateError) throw new Error(`Audit Gmail category repair failed: ${updateError.message}`);
+    }
+
     return {
       sourceEmailId,
       aiCalled: false,
