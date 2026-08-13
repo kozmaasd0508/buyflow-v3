@@ -1,5 +1,10 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
+import {
+  decideGmailPurchasesGate,
+  isMessageInGmailPurchases,
+} from '../ingestion/gmail-purchases-gate.js';
 import {
   processNylasMessage,
   type AutomaticPipelineResult,
@@ -13,11 +18,13 @@ interface WebhookInboxRow {
   grant_id: string;
   provider_message_id: string;
   status: string;
+  attempts: number;
 }
 
 export interface WebhookInboxProcessResult {
   claimed: boolean;
   pipeline?: AutomaticPipelineResult;
+  purchaseGate?: 'passed' | 'retry' | 'filtered';
 }
 
 function safeErrorCode(error: unknown): string {
@@ -63,7 +70,7 @@ export async function processWebhookInboxEvent(
 
   const { data: row, error: rowError } = await db
     .from('webhook_inbox')
-    .select('id,provider,event_type,grant_id,provider_message_id,status')
+    .select('id,provider,event_type,grant_id,provider_message_id,status,attempts')
     .eq('id', eventId)
     .single();
   if (rowError || !row) {
@@ -86,6 +93,62 @@ export async function processWebhookInboxEvent(
   }
 
   try {
+    const { data: connection, error: connectionError } = await db
+      .from('email_connections')
+      .select('id')
+      .eq('provider', 'nylas')
+      .eq('provider_account_id', event.grant_id)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (connectionError) {
+      throw new Error(`Webhook grant lookup failed: ${connectionError.message}`);
+    }
+    if (!connection) {
+      const { error: finishError } = await db.rpc('finish_webhook_inbox_event', {
+        p_id: eventId,
+        p_success: true,
+        p_error_code: null,
+      });
+      if (finishError) {
+        throw new Error(`Unknown webhook grant completion failed: ${finishError.message}`);
+      }
+      return { claimed: true };
+    }
+
+    const provider = createEmailProvider({
+      provider: 'nylas',
+      providerAccountId: event.grant_id,
+    });
+    const foundInPurchases = await isMessageInGmailPurchases(
+      provider,
+      event.provider_message_id,
+    );
+    const purchaseGate = decideGmailPurchasesGate(foundInPurchases, event.attempts);
+
+    if (purchaseGate === 'retry') {
+      const { error: retryError } = await db.rpc('finish_webhook_inbox_event', {
+        p_id: eventId,
+        p_success: false,
+        p_error_code: 'PurchasesCategoryPending',
+      });
+      if (retryError) {
+        throw new Error(`Webhook purchases gate retry scheduling failed: ${retryError.message}`);
+      }
+      return { claimed: true, purchaseGate: 'retry' };
+    }
+
+    if (purchaseGate === 'reject') {
+      const { error: finishError } = await db.rpc('finish_webhook_inbox_event', {
+        p_id: eventId,
+        p_success: true,
+        p_error_code: null,
+      });
+      if (finishError) {
+        throw new Error(`Webhook purchases gate completion failed: ${finishError.message}`);
+      }
+      return { claimed: true, purchaseGate: 'filtered' };
+    }
+
     const pipeline = await processNylasMessage({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
@@ -105,7 +168,7 @@ export async function processWebhookInboxEvent(
       throw new Error(`Webhook inbox completion failed: ${finishError.message}`);
     }
 
-    return { claimed: true, pipeline };
+    return { claimed: true, pipeline, purchaseGate: 'passed' };
   } catch (error) {
     await db.rpc('finish_webhook_inbox_event', {
       p_id: eventId,
@@ -122,12 +185,15 @@ export async function drainWebhookInbox(
 ): Promise<{ scanned: number; claimed: number; failed: number }> {
   const supabase = getSupabaseAdmin();
   const db = supabase as any;
+  const now = new Date().toISOString();
+  const staleCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
 
   const { data, error } = await db
     .from('webhook_inbox')
-    .select('id')
+    .select('id,status,next_attempt_at,locked_at')
     .in('status', ['pending', 'retry', 'processing'])
-    .order('created_at', { ascending: true })
+    .or(`and(status.in.(pending,retry),next_attempt_at.lte.${now}),and(status.eq.processing,locked_at.lt.${staleCutoff})`)
+    .order('next_attempt_at', { ascending: true })
     .limit(limit);
   if (error) {
     throw new Error(`Webhook inbox recovery scan failed: ${error.message}`);
