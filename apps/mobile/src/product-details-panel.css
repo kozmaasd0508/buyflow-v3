@@ -101,6 +101,14 @@
   font-size: 13px;
 }
 
+.buyflow-product-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .buyflow-product-bottom a {
   color: #8ddfff;
   font-size: 11px;
@@ -113,6 +121,34 @@
   text-decoration: underline;
 }
 
+.buyflow-product-remove {
+  border: 1px solid rgba(255, 124, 148, 0.28);
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: rgba(255, 88, 122, 0.1);
+  color: #ffc1cd;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.buyflow-product-remove:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.buyflow-product-override-note {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(115, 214, 255, 0.12);
+  border-radius: 13px;
+  background: rgba(75, 158, 255, 0.07);
+  color: rgba(218, 235, 250, 0.72);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 @media (max-width: 420px) {
   .buyflow-product-card {
     grid-template-columns: 56px minmax(0, 1fr);
@@ -122,5 +158,14 @@
     width: 56px;
     height: 56px;
     border-radius: 14px;
+  }
+
+  .buyflow-product-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .buyflow-product-actions {
+    justify-content: flex-start;
   }
 }
