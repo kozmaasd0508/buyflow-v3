@@ -4,6 +4,8 @@ const CARRIER_DOMAIN_TOKENS = [
   'dpd',
   'foxpost',
   'packeta',
+  'dhl',
+  'ups',
 ] as const;
 
 export type EmailSenderRole = 'carrier' | 'unknown';
