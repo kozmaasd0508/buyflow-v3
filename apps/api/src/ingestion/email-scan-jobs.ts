@@ -5,6 +5,7 @@ import {
   type AutomationMode,
 } from '../pipeline/automatic-email-pipeline.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from './automatic-targeted-recovery.js';
+import { processEmailForAuditBenchmark } from './email-audit-benchmark.js';
 
 interface EmailScanJobRow {
   id: string;
@@ -50,6 +51,10 @@ function normalizeSearchTerm(value: string): string {
     .trim();
 }
 
+function validAuditWindow(value: number): value is 7 | 30 | 90 {
+  return value === 7 || value === 30 || value === 90;
+}
+
 export async function enqueueInitialEmailScan(input: {
   userId: string;
   emailConnectionId: string;
@@ -74,21 +79,41 @@ export async function enqueueInitialEmailScan(input: {
 export async function enqueueFullAuditEmailScan(input: {
   userId: string;
   emailConnectionId: string;
+  windowDays?: 7 | 30 | 90;
 }): Promise<string> {
   const db = getSupabaseAdmin() as any;
-  const { data, error } = await db.rpc('enqueue_full_audit_email_scan', {
-    p_user_id: input.userId,
-    p_email_connection_id: input.emailConnectionId,
-    p_window_days: 7,
-  });
+  const windowDays = input.windowDays ?? 30;
+  if (!validAuditWindow(windowDays)) {
+    throw new Error('Full audit supports 7, 30, or 90 days');
+  }
+
+  const { data, error } = await db
+    .from('email_scan_jobs')
+    .insert({
+      user_id: input.userId,
+      email_connection_id: input.emailConnectionId,
+      kind: 'audit',
+      window_days: windowDays,
+      search_term: null,
+      automatic_dedupe_key: null,
+      status: 'pending',
+      attempts: 0,
+      next_attempt_at: new Date().toISOString(),
+      locked_at: null,
+      processed_at: null,
+      last_error_code: null,
+      result: null,
+    })
+    .select('id')
+    .single();
 
   if (error) {
     throw new Error(`Full audit email scan enqueue failed: ${error.message}`);
   }
-  if (typeof data !== 'string' || !data) {
+  if (typeof data?.id !== 'string' || !data.id) {
     throw new Error('Full audit email scan enqueue returned no job id');
   }
-  return data;
+  return data.id;
 }
 
 export async function enqueueTargetedEmailScan(input: {
@@ -181,7 +206,7 @@ export async function processEmailScanJob(
     } else if (scanJob.kind === 'audit') {
       query = `newer_than:${windowDays}d -in:spam -in:trash`;
       pageSize = 50;
-      maxPages = 20;
+      maxPages = windowDays <= 7 ? 20 : windowDays <= 30 ? 50 : 100;
     } else {
       query = `category:purchases newer_than:${windowDays}d -in:spam -in:trash`;
       pageSize = 50;
@@ -215,6 +240,22 @@ export async function processEmailScanJob(
 
       for (const email of page.messages) {
         result.checked += 1;
+
+        if (scanJob.kind === 'audit') {
+          const audit = await processEmailForAuditBenchmark({
+            jobId: scanJob.id,
+            userId: scanJob.user_id,
+            emailConnectionId: scanJob.email_connection_id,
+            email,
+          });
+          result.aiCalls += audit.aiCalled ? 1 : 0;
+          if (audit.failed) result.review += 1;
+          else if (audit.linkedPurchaseId) result.processed += 1;
+          else if (audit.aiEventType === 'other') result.ignored += 1;
+          else result.unlinked += 1;
+          continue;
+        }
+
         const pipeline = await processNylasMessage({
           grantId: emailConnection.provider_account_id,
           messageId: email.providerMessageId,
@@ -239,6 +280,12 @@ export async function processEmailScanJob(
         else if (pipeline.status === 'unlinked') result.unlinked += 1;
         else result.review += 1;
       }
+
+      await db
+        .from('email_scan_jobs')
+        .update({ locked_at: new Date().toISOString() })
+        .eq('id', scanJob.id)
+        .eq('status', 'processing');
 
       cursor = page.nextCursor;
     } while (cursor && pages < maxPages);
