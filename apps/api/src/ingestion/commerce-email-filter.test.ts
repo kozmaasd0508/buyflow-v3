@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NormalizedEmail } from '../email/types.js';
+import {
+  identifyMerchantSender,
+  isMerchantSender,
+  merchantDisplayName,
+  registeredMerchantSenders,
+} from '../email/sender-role.js';
 import { filterCommerceEmail } from './commerce-email-filter.js';
 import {
   detectCarrierFromDomains,
@@ -47,6 +53,22 @@ test('ignores clearly unrelated email', () => {
   const result = filterCommerceEmail(email({ subject: 'Weekly team notes', snippet: 'Meeting recap' }));
   assert.equal(result.relevant, false);
   assert.deepEqual(result.reasons, []);
+});
+
+test('merchant registry uses exact trusted sender domains', () => {
+  assert.equal(registeredMerchantSenders().length, 3);
+  assert.equal(isMerchantSender(['service.gymbeam.hu'], 'gymbeam'), true);
+  assert.equal(isMerchantSender(['GYEREKJATEKBOLT.COM.'], 'gyerekjatekbolt'), true);
+  assert.equal(isMerchantSender(['alza.hu'], 'alza'), true);
+  assert.equal(merchantDisplayName('alza'), 'Alza.hu');
+  assert.equal(identifyMerchantSender(['service.gymbeam.hu'])?.key, 'gymbeam');
+
+  assert.equal(isMerchantSender(['evil-alza.hu'], 'alza'), false);
+  assert.equal(isMerchantSender(['alza.hu.attacker.com'], 'alza'), false);
+  assert.equal(isMerchantSender(['letter.alza.hu'], 'alza'), false);
+  assert.equal(isMerchantSender(['gymbeam.hu'], 'gymbeam'), false);
+  assert.equal(identifyMerchantSender(['unknown.example']), null);
+  assert.equal(identifyMerchantSender(['alza.hu', 'service.gymbeam.hu']), null);
 });
 
 test('detects supported carrier sender domains', () => {
