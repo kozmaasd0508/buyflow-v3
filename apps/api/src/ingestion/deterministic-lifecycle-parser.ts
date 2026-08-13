@@ -13,7 +13,8 @@ export type DeterministicLifecycleEvent =
   | 'delayed'
   | 'order_processing'
   | 'order_packing'
-  | 'ready_to_ship';
+  | 'ready_to_ship'
+  | 'shipped';
 
 export interface DeterministicLifecycleParseResult {
   extraction: EmailExtraction;
@@ -158,8 +159,31 @@ function parseMarketa(input: { senderDomains: string[]; subject?: string | null;
   };
 }
 
+function parseWebArena(input: { senderDomains: string[]; subject?: string | null; bodyText?: string | null }): DeterministicLifecycleParseResult | null {
+  if (!input.senderDomains.map(normalizeSenderDomain).includes('webarena.hu')) return null;
+  const subject = normalizeText(input.subject ?? '');
+  const body = normalizeText(input.bodyText ?? '');
+  const context = `${subject}\n${body}`;
+
+  if (!/\brendeles allapotvaltozas\b/i.test(subject)) return null;
+  const orderMatch = context.match(/\brendelesszam\s*[:#-]?\s*#?(\d{5,12})\b/i);
+  if (!orderMatch?.[1]) return null;
+  if (!/\bjelenlegi allapot\s*:\s*elkuldve\b/i.test(body)) return null;
+
+  return {
+    extraction: lifecycleExtraction({ merchant: 'WebAréna', orderNumber: orderMatch[1] }),
+    lifecycleEvent: 'shipped',
+    parserVersion: PARSER_VERSION,
+    reasons: ['exact_webarena_sender', 'explicit_order_status_subject', 'explicit_shipped_state', 'explicit_order_number'],
+  };
+}
+
 export function parseDeterministicLifecycleEmail(input: { senderDomains: string[]; subject?: string | null; bodyText?: string | null }): DeterministicLifecycleParseResult | null {
-  return parseGyerekjatekbolt(input) ?? parseGymBeam(input) ?? parseMarketa(input) ?? parseAlzaLifecycleEmail(input);
+  return parseGyerekjatekbolt(input)
+    ?? parseGymBeam(input)
+    ?? parseMarketa(input)
+    ?? parseWebArena(input)
+    ?? parseAlzaLifecycleEmail(input);
 }
 
 export async function preprocessDeterministicLifecycleNylasMessage(input: { grantId: string; messageId: string }): Promise<DeterministicLifecyclePreprocessResult> {
