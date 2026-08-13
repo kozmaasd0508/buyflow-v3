@@ -56,17 +56,21 @@ test('ignores clearly unrelated email', () => {
 });
 
 test('merchant registry uses exact trusted sender domains', () => {
-  assert.equal(registeredMerchantSenders().length, 3);
+  assert.equal(registeredMerchantSenders().length, 4);
   assert.equal(isMerchantSender(['service.gymbeam.hu'], 'gymbeam'), true);
   assert.equal(isMerchantSender(['GYEREKJATEKBOLT.COM.'], 'gyerekjatekbolt'), true);
   assert.equal(isMerchantSender(['alza.hu'], 'alza'), true);
+  assert.equal(isMerchantSender(['aboutyou.hu'], 'aboutyou'), true);
   assert.equal(merchantDisplayName('alza'), 'Alza.hu');
+  assert.equal(merchantDisplayName('aboutyou'), 'ABOUT YOU');
   assert.equal(identifyMerchantSender(['service.gymbeam.hu'])?.key, 'gymbeam');
 
   assert.equal(isMerchantSender(['evil-alza.hu'], 'alza'), false);
   assert.equal(isMerchantSender(['alza.hu.attacker.com'], 'alza'), false);
   assert.equal(isMerchantSender(['letter.alza.hu'], 'alza'), false);
   assert.equal(isMerchantSender(['gymbeam.hu'], 'gymbeam'), false);
+  assert.equal(isMerchantSender(['aboutyou.com'], 'aboutyou'), false);
+  assert.equal(isMerchantSender(['aboutyou.hu.attacker.com'], 'aboutyou'), false);
   assert.equal(identifyMerchantSender(['unknown.example']), null);
   assert.equal(identifyMerchantSender(['alza.hu', 'service.gymbeam.hu']), null);
 });

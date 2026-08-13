@@ -6,6 +6,7 @@ import {
   type EmailExtraction,
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
+import { parseAboutYouCommerceEmail } from './aboutyou-commerce-adapter.js';
 
 const PARSER_VERSION = 'deterministic-commerce-v2';
 
@@ -295,7 +296,8 @@ export function parseDeterministicCommerceEmail(input: {
 }): DeterministicCommerceParseResult | null {
   return parseKnownCarrierEmail(input)
     ?? parseGymBeamEmail(input)
-    ?? parseGyerekjatekboltEmail(input);
+    ?? parseGyerekjatekboltEmail(input)
+    ?? parseAboutYouCommerceEmail(input);
 }
 
 export async function preprocessDeterministicNylasMessage(input: {
