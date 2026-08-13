@@ -37,7 +37,7 @@ const MERCHANT_SENDER_DEFINITIONS: readonly MerchantSenderDefinition[] = [
   {
     key: 'aboutyou',
     displayName: 'ABOUT YOU',
-    exactSenderDomains: ['aboutyou.hu', 'aboutyou.com'],
+    exactSenderDomains: ['aboutyou.hu'],
   },
 ] as const;
 
