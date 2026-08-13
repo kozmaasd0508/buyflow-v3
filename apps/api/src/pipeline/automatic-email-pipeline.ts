@@ -21,6 +21,7 @@ import {
 } from '../resolution/purchase-resolution.js';
 import {
   resolveShipmentCandidates,
+  type ShipmentEvidencePhase,
   type ShipmentPurchaseIdentity,
   type ShipmentResolutionEvidence,
 } from '../resolution/shipment-resolution.js';
@@ -90,6 +91,15 @@ const ALLOWED_EVENT_TYPES = new Set<ResolutionEventType>([
   'other',
 ]);
 
+const SHIPMENT_EVIDENCE_PHASES = new Set<ShipmentEvidencePhase>([
+  'shipment_created',
+  'shipped',
+  'in_transit',
+  'out_for_delivery',
+  'ready_for_pickup',
+  'delivered',
+]);
+
 function senderDomain(fromAddress: string | null): string {
   if (!fromAddress) return '';
   const match = fromAddress.toLowerCase().match(/@([^>\s,;]+)/);
@@ -107,6 +117,13 @@ function senderDomains(email: NormalizedEmail): string[] {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function shipmentPhaseOrNull(value: unknown): ShipmentEvidencePhase | null {
+  const phase = stringOrNull(value);
+  return phase && SHIPMENT_EVIDENCE_PHASES.has(phase as ShipmentEvidencePhase)
+    ? phase as ShipmentEvidencePhase
+    : null;
 }
 
 function numberOrNull(value: unknown): number | null {
@@ -205,6 +222,7 @@ function toShipmentEvidence(row: SourceRow): ShipmentResolutionEvidence | null {
     userId: row.user_id,
     senderDomain: senderDomain(row.from_address),
     eventType: result.event_type,
+    shipmentPhase: shipmentPhaseOrNull(result.shipment_phase),
     merchant: stringOrNull(result.merchant),
     orderNumber: stringOrNull(result.order_number),
     trackingNumber: stringOrNull(result.tracking_number),
@@ -465,7 +483,9 @@ async function reconcileUser(userId: string, mode: AutomationMode) {
       );
       if (!merchantAnchor) continue;
 
-      const shippedAt = earliest(evidence.filter((row) => row.eventType === 'shipment'));
+      const shippedAt = earliest(evidence.filter(
+        (row) => row.eventType === 'shipment' && row.shipmentPhase !== 'shipment_created',
+      ));
       const deliveredAt = earliest(evidence.filter((row) => row.eventType === 'delivery'));
       const lastEventAt = latest(evidence);
       if (!shippedAt || !lastEventAt) continue;
