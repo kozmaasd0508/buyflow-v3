@@ -4,6 +4,17 @@ import type { DeterministicLifecycleEvent } from './deterministic-lifecycle-pars
 const TRUSTED_VALIDATION = new Set(['validated', 'guardrailed']);
 const TERMINAL_STATES = new Set(['cancelled', 'refunded', 'returned', 'delivered']);
 const PHYSICAL_PROGRESS_STATES = new Set(['in_transit', 'shipped']);
+const ORDER_PROGRESS_EVENTS = new Set<DeterministicLifecycleEvent>([
+  'order_processing',
+  'order_packing',
+  'ready_to_ship',
+]);
+const SUPPORTED_LIFECYCLE_EVENTS = new Set<DeterministicLifecycleEvent>([
+  'payment_failed',
+  'cancelled',
+  'delayed',
+  ...ORDER_PROGRESS_EVENTS,
+]);
 
 export interface LifecyclePurchaseStateInput {
   lifecycleEvent: DeterministicLifecycleEvent;
@@ -29,9 +40,13 @@ function isAfter(left: string | null, right: string): boolean {
   return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime > rightTime;
 }
 
-export function decideLifecyclePurchasePatch(
-  input: LifecyclePurchaseStateInput,
-): LifecyclePurchasePatch {
+function recoverFromNewerShipment(input: LifecyclePurchaseStateInput): LifecyclePurchasePatch | null {
+  if (!isAfter(input.latestShipmentEventAt, input.sourceReceivedAt)) return null;
+  const recoveredState = input.latestShipmentStatus === 'delivered' ? 'delivered' : 'in_transit';
+  return input.currentState === recoveredState ? {} : { current_state: recoveredState };
+}
+
+export function decideLifecyclePurchasePatch(input: LifecyclePurchaseStateInput): LifecyclePurchasePatch {
   const patch: LifecyclePurchasePatch = {};
 
   if (input.lifecycleEvent === 'payment_failed') {
@@ -40,7 +55,6 @@ export function decideLifecyclePurchasePatch(
       return patch;
     }
     if (input.currentState === 'paid') return patch;
-
     if (input.currentPaymentStatus !== 'failed') patch.payment_status = 'failed';
     if (
       !TERMINAL_STATES.has(input.currentState)
@@ -57,28 +71,31 @@ export function decideLifecyclePurchasePatch(
       TERMINAL_STATES.has(input.currentState)
       || PHYSICAL_PROGRESS_STATES.has(input.currentState)
       || input.hasShipment
-    ) {
-      return patch;
-    }
+    ) return patch;
     if (input.currentState !== 'cancelled') patch.current_state = 'cancelled';
     if (!input.currentCancelledAt) patch.cancelled_at = input.sourceReceivedAt;
     return patch;
   }
 
-  if (
-    TERMINAL_STATES.has(input.currentState)
-    || input.currentState === 'payment_failed'
-  ) {
+  if (ORDER_PROGRESS_EVENTS.has(input.lifecycleEvent)) {
+    if (
+      TERMINAL_STATES.has(input.currentState)
+      || PHYSICAL_PROGRESS_STATES.has(input.currentState)
+      || input.currentState === 'payment_failed'
+      || input.currentPaymentStatus === 'failed'
+    ) return patch;
+
+    const recovered = recoverFromNewerShipment(input);
+    if (recovered) return recovered;
+
+    if (input.currentState !== 'processing') patch.current_state = 'processing';
     return patch;
   }
 
-  if (isAfter(input.latestShipmentEventAt, input.sourceReceivedAt)) {
-    const recoveredState = input.latestShipmentStatus === 'delivered'
-      ? 'delivered'
-      : 'in_transit';
-    if (input.currentState !== recoveredState) patch.current_state = recoveredState;
-    return patch;
-  }
+  if (TERMINAL_STATES.has(input.currentState) || input.currentState === 'payment_failed') return patch;
+
+  const recovered = recoverFromNewerShipment(input);
+  if (recovered) return recovered;
 
   if (input.currentState !== 'delayed') patch.current_state = 'delayed';
   return patch;
@@ -96,14 +113,10 @@ function fromDomain(fromAddress: string | null): string | null {
   return at >= 0 ? normalizeDomain(fromAddress.slice(at + 1)) : null;
 }
 
-function latestShipmentEvent(rows: Array<Record<string, unknown>>): {
-  status: string | null;
-  at: string | null;
-} {
+function latestShipmentEvent(rows: Array<Record<string, unknown>>): { status: string | null; at: string | null } {
   let latestAt: string | null = null;
   let latestStatus: string | null = null;
   let latestTime = Number.NEGATIVE_INFINITY;
-
   for (const row of rows) {
     const candidates = [row.last_event_at, row.delivered_at, row.shipped_at]
       .filter((value): value is string => typeof value === 'string');
@@ -116,7 +129,6 @@ function latestShipmentEvent(rows: Array<Record<string, unknown>>): {
       }
     }
   }
-
   return { status: latestStatus, at: latestAt };
 }
 
@@ -131,21 +143,18 @@ export async function reconcileDeterministicLifecycleStatesForGrant(
     .eq('provider_account_id', grantId)
     .eq('status', 'active')
     .maybeSingle();
-  if (connectionError) {
-    throw new Error(`Lifecycle reconciliation grant lookup failed: ${connectionError.message}`);
-  }
+  if (connectionError) throw new Error(`Lifecycle reconciliation grant lookup failed: ${connectionError.message}`);
   if (!connection?.user_id) return { scanned: 0, applied: 0 };
 
+  const classifications = [...SUPPORTED_LIFECYCLE_EVENTS];
   const { data: sources, error: sourceError } = await db
     .from('source_emails')
     .select('id,user_id,from_address,received_at,classification,validated_result,validation_status')
     .eq('user_id', connection.user_id)
-    .in('classification', ['payment_failed', 'cancelled', 'delayed'])
+    .in('classification', classifications)
     .order('received_at', { ascending: true })
     .limit(200);
-  if (sourceError) {
-    throw new Error(`Lifecycle reconciliation source scan failed: ${sourceError.message}`);
-  }
+  if (sourceError) throw new Error(`Lifecycle reconciliation source scan failed: ${sourceError.message}`);
 
   let applied = 0;
   for (const source of (sources ?? []) as Array<Record<string, any>>) {
@@ -157,15 +166,14 @@ export async function reconcileDeterministicLifecycleStatesForGrant(
     const confidence = Number(result.confidence);
     if (
       !TRUSTED_VALIDATION.has(validationStatus)
-      || !['payment_failed', 'cancelled', 'delayed'].includes(String(lifecycleEvent))
+      || !lifecycleEvent
+      || !SUPPORTED_LIFECYCLE_EVENTS.has(lifecycleEvent)
       || result.event_type !== 'order_updated'
       || result.extraction_source !== 'deterministic'
       || result.parser_version !== 'deterministic-lifecycle-v1'
       || !Number.isFinite(confidence)
       || confidence < 0.95
-    ) {
-      continue;
-    }
+    ) continue;
 
     const orderNumber = typeof result.order_number === 'string' ? result.order_number.trim() : '';
     const sourceDomain = fromDomain(typeof source.from_address === 'string' ? source.from_address : null);
@@ -176,9 +184,7 @@ export async function reconcileDeterministicLifecycleStatesForGrant(
       .select('id,user_id,merchant_domain,order_number,current_state,payment_status,cancelled_at')
       .eq('user_id', connection.user_id)
       .eq('order_number', orderNumber);
-    if (purchaseError) {
-      throw new Error(`Lifecycle reconciliation purchase lookup failed: ${purchaseError.message}`);
-    }
+    if (purchaseError) throw new Error(`Lifecycle reconciliation purchase lookup failed: ${purchaseError.message}`);
 
     const matches = ((purchases ?? []) as Array<Record<string, any>>)
       .filter((purchase) => normalizeDomain(purchase.merchant_domain ?? null) === sourceDomain);
@@ -190,13 +196,11 @@ export async function reconcileDeterministicLifecycleStatesForGrant(
       .select('status,shipped_at,delivered_at,last_event_at')
       .eq('user_id', connection.user_id)
       .eq('purchase_id', purchase.id);
-    if (shipmentError) {
-      throw new Error(`Lifecycle reconciliation shipment lookup failed: ${shipmentError.message}`);
-    }
+    if (shipmentError) throw new Error(`Lifecycle reconciliation shipment lookup failed: ${shipmentError.message}`);
 
     const latest = latestShipmentEvent((shipments ?? []) as Array<Record<string, unknown>>);
     const patch = decideLifecyclePurchasePatch({
-      lifecycleEvent: lifecycleEvent!,
+      lifecycleEvent,
       sourceReceivedAt: source.received_at,
       currentState: String(purchase.current_state ?? 'unknown'),
       currentPaymentStatus: typeof purchase.payment_status === 'string' ? purchase.payment_status : null,
@@ -212,9 +216,7 @@ export async function reconcileDeterministicLifecycleStatesForGrant(
       .update(patch)
       .eq('id', purchase.id)
       .eq('user_id', connection.user_id);
-    if (updateError) {
-      throw new Error(`Lifecycle reconciliation purchase update failed: ${updateError.message}`);
-    }
+    if (updateError) throw new Error(`Lifecycle reconciliation purchase update failed: ${updateError.message}`);
     applied += 1;
   }
 
