@@ -5,6 +5,7 @@ import {
   type EmailExtraction,
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
+import { parseAlzaLifecycleEmail } from './alza-lifecycle-adapter.js';
 
 const PARSER_VERSION = 'deterministic-lifecycle-v1';
 
@@ -197,7 +198,9 @@ export function parseDeterministicLifecycleEmail(input: {
   subject?: string | null;
   bodyText?: string | null;
 }): DeterministicLifecycleParseResult | null {
-  return parseGyerekjatekbolt(input) ?? parseGymBeam(input);
+  return parseGyerekjatekbolt(input)
+    ?? parseGymBeam(input)
+    ?? parseAlzaLifecycleEmail(input);
 }
 
 export async function preprocessDeterministicLifecycleNylasMessage(input: {
