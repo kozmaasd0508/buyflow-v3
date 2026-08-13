@@ -49,7 +49,7 @@ function publicProduct(row: any) {
 async function hiddenProductKeys(db: any, userId: string, purchaseId: string) {
   const { data, error } = await db
     .from('ai_processing_runs')
-    .select('result')
+    .select('output_json')
     .eq('user_id', userId)
     .eq('purchase_id', purchaseId)
     .eq('purpose', 'other')
@@ -61,7 +61,7 @@ async function hiddenProductKeys(db: any, userId: string, purchaseId: string) {
   const ids = new Set<string>();
   const sourceKeys = new Set<string>();
   for (const row of data ?? []) {
-    const result = objectOrNull(row.result);
+    const result = objectOrNull(row.output_json);
     if (result?.action !== 'hide_product') continue;
     if (typeof result.product_id === 'string') ids.add(result.product_id);
     if (typeof result.source_key === 'string' && result.source_key) sourceKeys.add(result.source_key);
@@ -154,9 +154,9 @@ export async function registerProductActionRoutes(app: FastifyInstance) {
           status: 'completed',
           input_tokens: 0,
           output_tokens: 0,
-          estimated_cost: 0,
+          estimated_cost_usd: 0,
           confidence: 1,
-          result: {
+          output_json: {
             action: 'hide_product',
             product_id: product.id,
             source_key: product.source_key ?? null,
