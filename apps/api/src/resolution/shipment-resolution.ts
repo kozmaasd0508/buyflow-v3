@@ -1,12 +1,20 @@
 import { isCarrierSenderDomain } from '../validation/email-extraction-validator.js';
 
 export type ShipmentEventType = 'shipment' | 'delivery';
+export type ShipmentEvidencePhase =
+  | 'shipment_created'
+  | 'shipped'
+  | 'in_transit'
+  | 'out_for_delivery'
+  | 'ready_for_pickup'
+  | 'delivered';
 
 export interface ShipmentResolutionEvidence {
   sourceEmailId: string;
   userId: string;
   senderDomain: string;
   eventType: ShipmentEventType;
+  shipmentPhase?: ShipmentEvidencePhase | null;
   merchant: string | null;
   orderNumber: string | null;
   trackingNumber: string | null;
@@ -34,11 +42,12 @@ export interface ShipmentResolutionCandidate {
   carrierSlug: string | null;
   purchaseId: string | null;
   decision: ShipmentResolutionDecision;
-  recommendedStatus: 'in_transit' | 'delivered';
+  recommendedStatus: 'shipment_created' | 'in_transit' | 'delivered';
   confidence: number;
   evidenceCount: number;
   merchantAnchorCount: number;
   carrierEvidenceCount: number;
+  physicalShipmentEvidenceCount: number;
   reasons: string[];
   sourceEmailIds: string[];
 }
@@ -84,6 +93,10 @@ function purchaseKey(
 
 function trackingKey(userId: string, trackingNumber: string): string {
   return `${userId}::${trackingNumber}`;
+}
+
+function isPhysicalShipmentEvidence(row: ShipmentResolutionEvidence): boolean {
+  return row.eventType === 'shipment' && row.shipmentPhase !== 'shipment_created';
 }
 
 export function resolveShipmentCandidates(
@@ -136,9 +149,9 @@ export function resolveShipmentCandidates(
       const slug = normalizeCarrierSlug(row.carrier);
       if (slug) carrierSlugs.add(slug);
 
-      // Only a non-carrier merchant email can anchor a shipment to a Purchase.
-      // Carrier emails can corroborate an already-anchored tracking number, but
-      // their order-like identifiers are never trusted for Purchase matching.
+      // A shipment_created merchant email is still valuable as a safe
+      // purchase↔tracking anchor. It must not, however, count as proof that
+      // the parcel has physically entered the carrier network.
       if (carrierSender || !row.orderNumber) continue;
 
       const identityKey = purchaseKey(userId, senderDomain, row.orderNumber);
@@ -155,7 +168,10 @@ export function resolveShipmentCandidates(
       }
     }
 
-    const delivered = sorted.some((row) => row.eventType === 'delivery');
+    const delivered = sorted.some(
+      (row) => row.eventType === 'delivery' || row.shipmentPhase === 'delivered',
+    );
+    const physicalShipmentEvidenceCount = sorted.filter(isPhysicalShipmentEvidence).length;
     const strongestConfidence = sorted.reduce(
       (max, row) => Math.max(max, row.confidence),
       0,
@@ -170,6 +186,9 @@ export function resolveShipmentCandidates(
       reasons.push('merchant_order_anchor_matches_existing_purchase');
       if (carrierEvidenceCount > 0) {
         reasons.push('tracking_corroborated_by_carrier_evidence');
+      }
+      if (physicalShipmentEvidenceCount === 0 && !delivered) {
+        reasons.push('shipment_created_without_physical_progress');
       }
     } else if (anchorPurchaseIds.size > 1) {
       decision = 'review';
@@ -186,11 +205,16 @@ export function resolveShipmentCandidates(
       carrierSlug: carrierSlugs.size === 1 ? [...carrierSlugs][0] ?? null : null,
       purchaseId,
       decision,
-      recommendedStatus: delivered ? 'delivered' : 'in_transit',
+      recommendedStatus: delivered
+        ? 'delivered'
+        : physicalShipmentEvidenceCount > 0
+          ? 'in_transit'
+          : 'shipment_created',
       confidence: strongestConfidence,
       evidenceCount: sorted.length,
       merchantAnchorCount,
       carrierEvidenceCount,
+      physicalShipmentEvidenceCount,
       reasons,
       sourceEmailIds: sorted.map((row) => row.sourceEmailId),
     });

@@ -16,6 +16,7 @@ function candidate(overrides: Partial<ShipmentResolutionCandidate> = {}): Shipme
     evidenceCount: 3,
     merchantAnchorCount: 1,
     carrierEvidenceCount: 2,
+    physicalShipmentEvidenceCount: 1,
     reasons: [],
     sourceEmailIds: ['email-1', 'email-2', 'email-3'],
     ...overrides,
@@ -26,6 +27,16 @@ test('accepts exactly one strongly corroborated linkable shipment', () => {
   const selected = selectControlledShipmentCandidate([candidate()]);
   assert.equal(selected.purchaseId, 'purchase-1');
   assert.equal(selected.trackingNumber, 'TRACK123');
+});
+
+test('rejects shipment-created candidate before physical progress', () => {
+  assert.throws(
+    () => selectControlledShipmentCandidate([candidate({
+      recommendedStatus: 'shipment_created',
+      physicalShipmentEvidenceCount: 0,
+    })]),
+    /no physical shipment progress/,
+  );
 });
 
 test('rejects multiple linkable shipment candidates', () => {

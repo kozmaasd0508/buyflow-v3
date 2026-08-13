@@ -20,6 +20,12 @@ export function selectControlledShipmentCandidate(
   if (!candidate.carrierSlug) {
     throw new Error('Controlled shipment candidate has no unambiguous carrier');
   }
+  if (candidate.recommendedStatus === 'shipment_created') {
+    throw new Error('Controlled shipment candidate has no physical shipment progress');
+  }
+  if (candidate.physicalShipmentEvidenceCount < 1) {
+    throw new Error('Controlled shipment candidate has no physical shipment evidence');
+  }
   if (candidate.evidenceCount < 3) {
     throw new Error('Controlled shipment candidate has insufficient evidence');
   }

@@ -17,6 +17,7 @@ type WritableShipmentCandidate = ShipmentResolutionCandidate & {
   trackingNumber: string;
   carrierSlug: string;
   decision: 'linkable';
+  recommendedStatus: 'in_transit' | 'delivered';
 };
 
 type WritableDocumentCandidate = DocumentResolutionCandidate & {
@@ -76,6 +77,8 @@ export function canAutomaticallyWriteShipment(
     Boolean(candidate.purchaseId) &&
     Boolean(candidate.trackingNumber) &&
     Boolean(candidate.carrierSlug) &&
+    candidate.recommendedStatus !== 'shipment_created' &&
+    candidate.physicalShipmentEvidenceCount >= 1 &&
     candidate.evidenceCount >= 3 &&
     candidate.merchantAnchorCount >= 1 &&
     candidate.carrierEvidenceCount >= 2
