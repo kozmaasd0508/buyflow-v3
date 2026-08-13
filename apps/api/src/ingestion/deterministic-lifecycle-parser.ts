@@ -4,6 +4,7 @@ import {
   htmlToCompactText,
   type EmailExtraction,
 } from '../ai/openai-email-extractor.js';
+import { isMerchantSender, merchantDisplayName } from '../email/sender-role.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAlzaLifecycleEmail } from './alza-lifecycle-adapter.js';
 
@@ -26,16 +27,6 @@ export interface DeterministicLifecyclePreprocessResult {
   sourceEmailId?: string;
   lifecycleEvent?: DeterministicLifecycleEvent;
   parserVersion?: string;
-}
-
-function normalizeDomain(domain: string): string {
-  return domain.trim().toLowerCase().replace(/^www\./, '');
-}
-
-function domainMatches(domain: string, expected: string): boolean {
-  const normalized = normalizeDomain(domain);
-  const target = normalizeDomain(expected);
-  return normalized === target || normalized.endsWith(`.${target}`);
 }
 
 function normalizeText(value: string): string {
@@ -100,9 +91,7 @@ function parseGyerekjatekbolt(input: {
   subject?: string | null;
   bodyText?: string | null;
 }): DeterministicLifecycleParseResult | null {
-  if (!input.senderDomains.some((domain) => domainMatches(domain, 'gyerekjatekbolt.com'))) {
-    return null;
-  }
+  if (!isMerchantSender(input.senderDomains, 'gyerekjatekbolt')) return null;
 
   const subject = normalizeText(input.subject ?? '');
   const body = normalizeText(input.bodyText ?? '');
@@ -120,7 +109,7 @@ function parseGyerekjatekbolt(input: {
   if (explicitPaymentFailure) {
     return {
       extraction: lifecycleExtraction({
-        merchant: 'Gyerekjatekbolt.com',
+        merchant: merchantDisplayName('gyerekjatekbolt'),
         orderNumber,
         paymentStatus: 'failed',
       }),
@@ -143,7 +132,7 @@ function parseGyerekjatekbolt(input: {
   if (explicitCancellation) {
     return {
       extraction: lifecycleExtraction({
-        merchant: 'Gyerekjatekbolt.com',
+        merchant: merchantDisplayName('gyerekjatekbolt'),
         orderNumber,
       }),
       lifecycleEvent: 'cancelled',
@@ -164,9 +153,7 @@ function parseGymBeam(input: {
   subject?: string | null;
   bodyText?: string | null;
 }): DeterministicLifecycleParseResult | null {
-  if (!input.senderDomains.some((domain) => domainMatches(domain, 'service.gymbeam.hu'))) {
-    return null;
-  }
+  if (!isMerchantSender(input.senderDomains, 'gymbeam')) return null;
 
   const subject = normalizeText(input.subject ?? '');
   const body = normalizeText(input.bodyText ?? '');
@@ -179,7 +166,7 @@ function parseGymBeam(input: {
 
   return {
     extraction: lifecycleExtraction({
-      merchant: 'GymBeam',
+      merchant: merchantDisplayName('gymbeam'),
       orderNumber: delayMatch[1],
     }),
     lifecycleEvent: 'delayed',
