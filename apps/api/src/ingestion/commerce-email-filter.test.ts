@@ -68,6 +68,7 @@ test('merchant registry uses exact trusted sender domains', () => {
   assert.equal(isMerchantSender(['letter.alza.hu'], 'alza'), false);
   assert.equal(isMerchantSender(['gymbeam.hu'], 'gymbeam'), false);
   assert.equal(identifyMerchantSender(['unknown.example']), null);
+  assert.equal(identifyMerchantSender(['alza.hu', 'service.gymbeam.hu']), null);
 });
 
 test('detects supported carrier sender domains', () => {
