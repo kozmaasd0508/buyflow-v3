@@ -3,6 +3,22 @@ import { isCarrierSenderDomain } from '../email/sender-role.js';
 
 const PARSER_VERSION = 'generic-order-confirmation-v1';
 
+const SHARED_PLATFORM_SENDER_DOMAINS = [
+  'shopifyemail.com',
+  'my.store-emails.com',
+  'squarespace.info',
+] as const;
+
+const COMMON_SECOND_LEVEL_SUFFIXES = new Set([
+  'ac',
+  'co',
+  'com',
+  'edu',
+  'gov',
+  'net',
+  'org',
+]);
+
 export interface GenericOrderParseResult {
   extraction: EmailExtraction;
   parserVersion: string;
@@ -21,10 +37,28 @@ function normalizeDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
 }
 
+function domainMatches(domain: string, expected: string): boolean {
+  const normalized = normalizeDomain(domain);
+  const target = normalizeDomain(expected);
+  return normalized === target || normalized.endsWith(`.${target}`);
+}
+
+export function isSharedPlatformSenderDomain(domain: string): boolean {
+  return SHARED_PLATFORM_SENDER_DOMAINS.some((shared) => domainMatches(domain, shared));
+}
+
 function merchantFromDomain(domain: string): string {
   const normalized = normalizeDomain(domain);
-  const labels = normalized.split('.');
-  const root = (labels.length >= 2 ? labels[labels.length - 2] : normalized) ?? normalized;
+  const labels = normalized.split('.').filter(Boolean);
+  const last = labels.at(-1) ?? '';
+  const second = labels.at(-2) ?? '';
+  const third = labels.at(-3) ?? '';
+  const multiLabelCountrySuffix =
+    last.length === 2 &&
+    COMMON_SECOND_LEVEL_SUFFIXES.has(second) &&
+    Boolean(third);
+  const root = multiLabelCountrySuffix ? third : (second || last || normalized);
+
   return root
     .split(/[-_]+/)
     .filter(Boolean)
@@ -225,7 +259,13 @@ export function parseGenericOrderConfirmationEmail(input: {
   bodyText?: string | null;
 }): GenericOrderParseResult | null {
   const domains = input.senderDomains.map(normalizeDomain).filter(Boolean);
-  if (domains.length === 0 || domains.some(isCarrierSenderDomain)) return null;
+  if (
+    domains.length === 0 ||
+    domains.some(isCarrierSenderDomain) ||
+    domains.some(isSharedPlatformSenderDomain)
+  ) {
+    return null;
+  }
 
   const subject = normalizeText(input.subject ?? '');
   const body = normalizeText(input.bodyText ?? '');
