@@ -1,0 +1,42 @@
+.buyflow-detail-overview { width: 100%; }
+.buyflow-status-card {
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(26,33,56,.9), rgba(12,17,32,.82));
+  box-shadow: 0 18px 46px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.buyflow-status-card::before {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -80px;
+  top: -100px;
+  border-radius: 999px;
+  background: rgba(129,146,255,.22);
+  filter: blur(26px);
+  pointer-events: none;
+}
+.buyflow-status-card.success::before { background: rgba(85,215,165,.2); }
+.buyflow-status-card.warning::before { background: rgba(244,183,92,.2); }
+.buyflow-status-card.danger::before { background: rgba(255,123,145,.2); }
+.buyflow-status-kicker { color: #a6b0ff; font-size: 10px; font-weight: 850; letter-spacing: .17em; }
+.buyflow-status-main { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-top: 9px; }
+.buyflow-status-main h2 { margin: 0; font-size: clamp(21px, 5vw, 28px); letter-spacing: -.025em; }
+.buyflow-status-main p { max-width: 620px; margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.buyflow-status-pill { flex: 0 0 auto; padding: 7px 10px; border: 1px solid rgba(129,146,255,.28); border-radius: 999px; background: rgba(129,146,255,.12); color: #dbe0ff; font-size: 10px; font-weight: 800; }
+.buyflow-status-card.success .buyflow-status-pill { border-color: rgba(85,215,165,.28); background: rgba(85,215,165,.12); color: #bdf4df; }
+.buyflow-status-card.warning .buyflow-status-pill { border-color: rgba(244,183,92,.28); background: rgba(244,183,92,.12); color: #ffe1a9; }
+.buyflow-status-card.danger .buyflow-status-pill { border-color: rgba(255,123,145,.28); background: rgba(255,123,145,.12); color: #ffc2cd; }
+.buyflow-status-grid { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.buyflow-status-grid > div { min-width: 0; padding: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 16px; background: rgba(255,255,255,.04); }
+.buyflow-status-grid small, .buyflow-status-grid strong { display: block; }
+.buyflow-status-grid small { margin-bottom: 5px; color: #8992aa; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.buyflow-status-grid strong { overflow: hidden; color: #f5f7ff; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.buyflow-status-grid .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+.buyflow-status-updated { position: relative; margin-top: 12px; color: #7f889f; font-size: 10px; }
+@media (min-width: 720px) { .buyflow-status-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .buyflow-status-main { flex-direction: column; } .buyflow-status-pill { align-self: flex-start; } }
