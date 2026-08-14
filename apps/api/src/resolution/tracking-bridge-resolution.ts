@@ -23,6 +23,7 @@ export interface TrackingBridgeMerchantAnchor {
   userId: string;
   eventType: TrackingBridgeEventType;
   carrier: string | null;
+  trackingNumber?: string | null;
   confidence: number;
   receivedAt: string;
 }
@@ -57,6 +58,10 @@ const MAX_BRIDGE_HOURS = 36;
 const MIN_TRACKING_LENGTH = 10;
 const MIN_EVIDENCE_CONFIDENCE = 0.85;
 const MIN_ANCHOR_CONFIDENCE = 0.8;
+const MIN_EXACT_TRACKING_ANCHOR_CONFIDENCE = 0.75;
+const LEGAL_SUFFIXES = new Set([
+  'kft', 'zrt', 'nyrt', 'bt', 'rt', 'gmbh', 'ltd', 'llc', 'inc', 'ag', 'sro', 'as', 'oy', 'ab',
+]);
 
 function normalizeTracking(value: string | null | undefined): string {
   return (value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -72,11 +77,69 @@ function normalizeParty(value: string | null | undefined): string {
     .trim();
 }
 
+function corePartyTokens(value: string): string[] {
+  const tokens = value.split(' ').filter(Boolean);
+  while (tokens.length > 1 && LEGAL_SUFFIXES.has(tokens[tokens.length - 1]!)) tokens.pop();
+  return tokens;
+}
+
+function oneEditApart(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (Math.min(a.length, b.length) < 4) return false;
+
+  if (a.length === b.length) {
+    let differences = 0;
+    for (let i = 0; i < a.length; i += 1) {
+      if (a[i] !== b[i]) differences += 1;
+      if (differences > 1) return false;
+    }
+    return differences === 1;
+  }
+
+  const shorter = a.length < b.length ? a : b;
+  const longer = a.length < b.length ? b : a;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < shorter.length && j < longer.length) {
+    if (shorter[i] === longer[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    j += 1;
+  }
+  return true;
+}
+
+function strictLegalNameLooksSame(left: string, right: string): boolean {
+  const leftTokens = corePartyTokens(left);
+  const rightTokens = corePartyTokens(right);
+  if (leftTokens.length < 2 || leftTokens.length !== rightTokens.length) return false;
+
+  let approximateTokens = 0;
+  for (let i = 0; i < leftTokens.length; i += 1) {
+    const a = leftTokens[i]!;
+    const b = rightTokens[i]!;
+    if (a === b) continue;
+    if (!oneEditApart(a, b)) return false;
+    approximateTokens += 1;
+    if (approximateTokens > 1) return false;
+  }
+  return approximateTokens === 1;
+}
+
 function partyLooksSame(a: string | null | undefined, b: string | null | undefined): boolean {
   const left = normalizeParty(a);
   const right = normalizeParty(b);
   if (!left || !right) return false;
-  return left === right || (left.length >= 5 && right.length >= 5 && (left.includes(right) || right.includes(left)));
+  if (left === right || (left.length >= 5 && right.length >= 5 && (left.includes(right) || right.includes(left)))) {
+    return true;
+  }
+  return strictLegalNameLooksSame(left, right);
 }
 
 function instant(value: string): number | null {
@@ -115,6 +178,15 @@ function hasConflictingExistingTracking(
     const existingTracking = normalizeTracking(shipment.trackingNumber);
     return Boolean(existingTracking && existingTracking !== trackingNumber);
   });
+}
+
+function trustedAnchorForTracking(anchor: TrackingBridgeMerchantAnchor, trackingNumber: string): boolean {
+  if (anchor.confidence >= MIN_ANCHOR_CONFIDENCE) return true;
+  return (
+    anchor.confidence >= MIN_EXACT_TRACKING_ANCHOR_CONFIDENCE &&
+    normalizeTracking(anchor.trackingNumber).length >= MIN_TRACKING_LENGTH &&
+    normalizeTracking(anchor.trackingNumber) === trackingNumber
+  );
 }
 
 export function resolveTrackingBridgeCandidates(
@@ -186,7 +258,7 @@ export function resolveTrackingBridgeCandidates(
         (anchor) =>
           anchor.userId === first.userId &&
           anchor.purchaseId === purchase.purchaseId &&
-          anchor.confidence >= MIN_ANCHOR_CONFIDENCE,
+          trustedAnchorForTracking(anchor, trackingNumber),
       );
 
       const shipmentAnchors = purchaseAnchors.filter((anchor) =>
@@ -209,6 +281,9 @@ export function resolveTrackingBridgeCandidates(
       const explicitShipmentCarrierMatch = shipmentAnchors.some(
         (anchor) => normalizeCarrierSlug(anchor.carrier) === carrierSlug,
       );
+      const exactMerchantTrackingMatch = shipmentAnchors.some(
+        (anchor) => normalizeTracking(anchor.trackingNumber) === trackingNumber,
+      );
 
       if (!expectedCarrierMatch && !explicitShipmentCarrierMatch) continue;
 
@@ -218,6 +293,7 @@ export function resolveTrackingBridgeCandidates(
       const purchaseReasons = ['trusted_merchant_shipment_precedes_cluster_carrier_event'];
       if (expectedCarrierMatch) purchaseReasons.push('purchase_expected_carrier_matches');
       if (explicitShipmentCarrierMatch) purchaseReasons.push('merchant_shipment_names_same_carrier');
+      if (exactMerchantTrackingMatch) purchaseReasons.push('merchant_shipment_exact_tracking_match');
       if (deliveryAnchors.length > 0) purchaseReasons.push('merchant_delivery_corroborates_bridge');
       if (consignorMatch) purchaseReasons.push('carrier_consignor_matches_purchase_merchant');
       candidatePurchases.push({
