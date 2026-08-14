@@ -46,6 +46,7 @@ export interface TrackingBridgeCandidate {
   decision: TrackingBridgeDecision;
   confidence: number;
   sourceEmailIds: string[];
+  shipmentProofSourceEmailIds: string[];
   reasons: string[];
 }
 
@@ -68,6 +69,11 @@ function hourDistance(later: string, earlier: string): number | null {
   const right = instant(earlier);
   if (left === null || right === null) return null;
   return (left - right) / 3_600_000;
+}
+
+function followsWithinBridgeWindow(later: string, earlier: string): boolean {
+  const lag = hourDistance(later, earlier);
+  return lag !== null && lag >= 0 && lag <= MAX_BRIDGE_HOURS;
 }
 
 function clusterKey(row: TrackingBridgeEvidence): string | null {
@@ -130,12 +136,18 @@ export function resolveTrackingBridgeCandidates(
         decision: 'review',
         confidence,
         sourceEmailIds: sorted.map((row) => row.sourceEmailId),
+        shipmentProofSourceEmailIds: [],
         reasons: ['carrier_evidence_below_bridge_threshold'],
       });
       continue;
     }
 
-    const candidatePurchases: Array<{ purchaseId: string; reasons: string[] }> = [];
+    const carrierShipmentRows = sorted.filter((row) => row.eventType === 'shipment');
+    const candidatePurchases: Array<{
+      purchaseId: string;
+      reasons: string[];
+      shipmentProofSourceEmailIds: string[];
+    }> = [];
 
     for (const purchase of purchases) {
       if (purchase.userId !== first.userId) continue;
@@ -147,18 +159,26 @@ export function resolveTrackingBridgeCandidates(
           anchor.purchaseId === purchase.purchaseId &&
           anchor.confidence >= MIN_ANCHOR_CONFIDENCE,
       );
-      const shipmentAnchors = purchaseAnchors.filter((anchor) => {
-        if (anchor.eventType !== 'shipment') return false;
-        const lag = hourDistance(first.receivedAt, anchor.receivedAt);
-        return lag !== null && lag >= 0 && lag <= MAX_BRIDGE_HOURS;
-      });
+
+      // V2.2 evaluates the whole tracking cluster, not only its first event.
+      // A carrier may send pre-advice before the merchant's final "shipped" email.
+      // The cluster becomes linkable only when a later carrier shipment event with
+      // the exact same tracking identity follows a trusted merchant shipment anchor.
+      const shipmentAnchors = purchaseAnchors.filter((anchor) =>
+        anchor.eventType === 'shipment' &&
+        carrierShipmentRows.some((row) => followsWithinBridgeWindow(row.receivedAt, anchor.receivedAt)),
+      );
       if (shipmentAnchors.length === 0) continue;
 
-      const deliveryAnchors = purchaseAnchors.filter((anchor) => {
-        if (anchor.eventType !== 'delivery') return false;
-        const lag = hourDistance(anchor.receivedAt, first.receivedAt);
-        return lag !== null && lag >= 0 && lag <= MAX_BRIDGE_HOURS;
-      });
+      const shipmentProofRows = carrierShipmentRows.filter((row) =>
+        shipmentAnchors.some((anchor) => followsWithinBridgeWindow(row.receivedAt, anchor.receivedAt)),
+      );
+      if (shipmentProofRows.length === 0) continue;
+
+      const deliveryAnchors = purchaseAnchors.filter((anchor) =>
+        anchor.eventType === 'delivery' &&
+        sorted.some((row) => followsWithinBridgeWindow(anchor.receivedAt, row.receivedAt)),
+      );
 
       const expectedCarrierMatch = normalizeCarrierSlug(purchase.expectedCarrier) === carrierSlug;
       const explicitShipmentCarrierMatch = shipmentAnchors.some(
@@ -174,24 +194,30 @@ export function resolveTrackingBridgeCandidates(
       const strongBridge = explicitShipmentCarrierMatch || (expectedCarrierMatch && deliveryAnchors.length > 0);
       if (!strongBridge) continue;
 
-      const purchaseReasons = ['trusted_merchant_shipment_precedes_carrier_event'];
+      const purchaseReasons = ['trusted_merchant_shipment_precedes_cluster_carrier_event'];
       if (expectedCarrierMatch) purchaseReasons.push('purchase_expected_carrier_matches');
       if (explicitShipmentCarrierMatch) purchaseReasons.push('merchant_shipment_names_same_carrier');
       if (deliveryAnchors.length > 0) purchaseReasons.push('merchant_delivery_corroborates_bridge');
-      candidatePurchases.push({ purchaseId: purchase.purchaseId, reasons: purchaseReasons });
+      candidatePurchases.push({
+        purchaseId: purchase.purchaseId,
+        reasons: purchaseReasons,
+        shipmentProofSourceEmailIds: shipmentProofRows.map((row) => row.sourceEmailId),
+      });
     }
 
     if (candidatePurchases.length === 1) {
+      const match = candidatePurchases[0]!;
       results.push({
         key,
         userId: first.userId,
-        purchaseId: candidatePurchases[0]!.purchaseId,
+        purchaseId: match.purchaseId,
         trackingNumber,
         carrierSlug,
         decision: 'linkable',
         confidence,
         sourceEmailIds: sorted.map((row) => row.sourceEmailId),
-        reasons: candidatePurchases[0]!.reasons,
+        shipmentProofSourceEmailIds: match.shipmentProofSourceEmailIds,
+        reasons: match.reasons,
       });
       continue;
     }
@@ -206,6 +232,7 @@ export function resolveTrackingBridgeCandidates(
         decision: 'review',
         confidence,
         sourceEmailIds: sorted.map((row) => row.sourceEmailId),
+        shipmentProofSourceEmailIds: [],
         reasons: ['tracking_bridge_matches_multiple_purchases'],
       });
       continue;
@@ -221,6 +248,7 @@ export function resolveTrackingBridgeCandidates(
       decision: 'unmatched',
       confidence,
       sourceEmailIds: sorted.map((row) => row.sourceEmailId),
+      shipmentProofSourceEmailIds: [],
       reasons,
     });
   }
