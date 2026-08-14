@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
+import { applyUserProductOverrides, loadUserProductOverrideRuns } from './product-user-overrides.js';
 
 function publicPurchase(row: any) {
   return {
@@ -142,7 +143,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
           .order('created_at', { ascending: false }),
         supabase
           .from('products')
-          .select('id,purchase_id,name')
+          .select('id,purchase_id,name,source_key')
           .in('purchase_id', purchaseIds)
           .order('created_at', { ascending: true }),
       ]);
@@ -154,7 +155,14 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
 
       shipmentRows = shipmentResult.data ?? [];
       documentRows = documentResult.data ?? [];
-      productRows = productResult.data ?? [];
+
+      try {
+        const overrides = await loadUserProductOverrideRuns(supabase, user.id, purchaseIds);
+        productRows = applyUserProductOverrides(productResult.data ?? [], overrides);
+      } catch (error) {
+        request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to load purchase list product overrides');
+        return reply.code(500).send({ error: 'purchase_list_unavailable' });
+      }
     }
 
     return {
@@ -212,13 +220,22 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         .order('created_at', { ascending: false }),
       supabase
         .from('products')
-        .select('id,purchase_id,name,brand,model,variant,sku,gtin,category,quantity,unit_price,total_price,currency,product_url,image_url,created_at,updated_at')
+        .select('id,purchase_id,name,brand,model,variant,sku,gtin,category,quantity,unit_price,total_price,currency,product_url,image_url,source_key,created_at,updated_at')
         .eq('purchase_id', purchaseId)
         .order('created_at', { ascending: true }),
     ]);
 
     if (shipmentResult.error || documentResult.error || productResult.error) {
       request.log.error({ errorType: 'PurchaseDetailChildReadError' }, 'Failed to load purchase detail children');
+      return reply.code(500).send({ error: 'purchase_unavailable' });
+    }
+
+    let products: any[];
+    try {
+      const overrides = await loadUserProductOverrideRuns(supabase, user.id, [purchaseId]);
+      products = applyUserProductOverrides(productResult.data ?? [], overrides);
+    } catch (error) {
+      request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to load purchase detail product overrides');
       return reply.code(500).send({ error: 'purchase_unavailable' });
     }
 
@@ -233,7 +250,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         expectedCarrier: purchase.expected_carrier,
         paidAt: purchase.paid_at,
         cancelledAt: purchase.cancelled_at,
-        products: (productResult.data ?? []).map(publicProduct),
+        products: products.map(publicProduct),
         shipments: (shipmentResult.data ?? []).map(publicShipment),
         documents: (documentResult.data ?? []).map(publicDocument),
       },
