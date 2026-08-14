@@ -1,10 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
-
-const USER_OVERRIDE_PROVIDER = 'buyflow_user';
-const USER_OVERRIDE_MODEL = 'manual_override';
-const USER_OVERRIDE_VERSION = 'user-product-override-v1';
+import {
+  applyUserProductOverrides,
+  loadUserProductOverrideRuns,
+  USER_OVERRIDE_MODEL,
+  USER_OVERRIDE_PROVIDER,
+  USER_OVERRIDE_VERSION,
+} from './product-user-overrides.js';
 
 async function requireUser(request: FastifyRequest, reply: FastifyReply) {
   const user = await resolveAuthenticatedApiUser(request.headers.authorization);
@@ -46,27 +49,122 @@ function publicProduct(row: any) {
   };
 }
 
-async function hiddenProductKeys(db: any, userId: string, purchaseId: string) {
-  const { data, error } = await db
-    .from('ai_processing_runs')
-    .select('result')
-    .eq('user_id', userId)
-    .eq('purchase_id', purchaseId)
-    .eq('purpose', 'other')
-    .eq('provider', USER_OVERRIDE_PROVIDER)
-    .eq('prompt_version', USER_OVERRIDE_VERSION)
-    .order('created_at', { ascending: true });
-  if (error) throw new Error(`User product overrides read failed: ${error.message}`);
+function normalizedNullableText(value: unknown, maxLength = 500): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim();
+  if (!text) return null;
+  if (text.length > maxLength) return undefined;
+  return text;
+}
 
-  const ids = new Set<string>();
-  const sourceKeys = new Set<string>();
-  for (const row of data ?? []) {
-    const result = objectOrNull(row.result);
-    if (result?.action !== 'hide_product') continue;
-    if (typeof result.product_id === 'string') ids.add(result.product_id);
-    if (typeof result.source_key === 'string' && result.source_key) sourceKeys.add(result.source_key);
+function normalizedNullableNumber(
+  value: unknown,
+  options: { min: number; max: number },
+): number | null | undefined {
+  if (value === null || value === '') return null;
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value)
+      : Number.NaN;
+  if (!Number.isFinite(numeric) || numeric < options.min || numeric > options.max) return undefined;
+  return numeric;
+}
+
+function productEditChanges(body: unknown): Record<string, unknown> | null {
+  const input = objectOrNull(body);
+  if (!input) return null;
+
+  const changes: Record<string, unknown> = {};
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(input, key);
+
+  if (has('name')) {
+    const name = normalizedNullableText(input.name);
+    if (!name) return null;
+    changes.name = name;
   }
-  return { ids, sourceKeys };
+
+  for (const key of ['brand', 'model', 'variant', 'sku', 'gtin', 'category'] as const) {
+    if (!has(key)) continue;
+    const value = normalizedNullableText(input[key]);
+    if (value === undefined) return null;
+    changes[key] = value;
+  }
+
+  if (has('quantity')) {
+    const value = normalizedNullableNumber(input.quantity, { min: 0.001, max: 1000 });
+    if (value === undefined) return null;
+    changes.quantity = value;
+  }
+
+  if (has('unitPrice')) {
+    const value = normalizedNullableNumber(input.unitPrice, { min: 0, max: 1_000_000_000 });
+    if (value === undefined) return null;
+    changes.unit_price = value;
+  }
+
+  if (has('totalPrice')) {
+    const value = normalizedNullableNumber(input.totalPrice, { min: 0, max: 1_000_000_000 });
+    if (value === undefined) return null;
+    changes.total_price = value;
+  }
+
+  if (has('currency')) {
+    const value = normalizedNullableText(input.currency, 3);
+    if (value === undefined) return null;
+    if (value !== null && !/^[A-Za-z]{3}$/.test(value)) return null;
+    changes.currency = value?.toUpperCase() ?? null;
+  }
+
+  return Object.keys(changes).length > 0 ? changes : null;
+}
+
+async function ownedProduct(db: any, userId: string, productId: string) {
+  const { data: product, error: productError } = await db
+    .from('products')
+    .select('id,purchase_id,name,brand,model,variant,sku,gtin,category,quantity,unit_price,total_price,currency,product_url,image_url,source_key,created_at,updated_at')
+    .eq('id', productId)
+    .maybeSingle();
+  if (productError) throw new Error(`Product read failed: ${productError.message}`);
+  if (!product) return null;
+
+  const { data: purchase, error: purchaseError } = await db
+    .from('purchases')
+    .select('id')
+    .eq('id', product.purchase_id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (purchaseError) throw new Error(`Purchase ownership read failed: ${purchaseError.message}`);
+  if (!purchase) return null;
+
+  return product;
+}
+
+async function insertUserOverride(
+  db: any,
+  input: {
+    userId: string;
+    purchaseId: string;
+    result: Record<string, unknown>;
+  },
+) {
+  const { error } = await db.from('ai_processing_runs').insert({
+    user_id: input.userId,
+    source_email_id: null,
+    purchase_id: input.purchaseId,
+    purpose: 'other',
+    provider: USER_OVERRIDE_PROVIDER,
+    model: USER_OVERRIDE_MODEL,
+    prompt_version: USER_OVERRIDE_VERSION,
+    status: 'completed',
+    input_tokens: 0,
+    output_tokens: 0,
+    estimated_cost: 0,
+    confidence: 1,
+    result: input.result,
+  });
+  if (error) throw new Error(`User product override insert failed: ${error.message}`);
 }
 
 export async function registerProductActionRoutes(app: FastifyInstance) {
@@ -97,12 +195,12 @@ export async function registerProductActionRoutes(app: FastifyInstance) {
       if (productsError) return reply.code(500).send({ error: 'products_unavailable' });
 
       try {
-        const hidden = await hiddenProductKeys(db, user.id, purchase.id);
-        const products = (rows ?? []).filter((row: any) =>
-          !hidden.ids.has(row.id) &&
-          !(typeof row.source_key === 'string' && hidden.sourceKeys.has(row.source_key)),
-        );
-        return { products: products.map(publicProduct), hiddenCount: (rows ?? []).length - products.length };
+        const overrides = await loadUserProductOverrideRuns(db, user.id, [purchase.id]);
+        const products = applyUserProductOverrides(rows ?? [], overrides);
+        return {
+          products: products.map(publicProduct),
+          hiddenCount: (rows ?? []).length - products.length,
+        };
       } catch (error) {
         request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to apply user product overrides');
         return reply.code(500).send({ error: 'products_unavailable' });
@@ -120,42 +218,19 @@ export async function registerProductActionRoutes(app: FastifyInstance) {
       }
 
       const db = getSupabaseAdmin() as any;
-      const { data: product, error: productError } = await db
-        .from('products')
-        .select('id,purchase_id,name,source_key')
-        .eq('id', request.params.id)
-        .maybeSingle();
-      if (productError) return reply.code(500).send({ error: 'product_update_unavailable' });
-      if (!product) return reply.code(404).send({ error: 'product_not_found' });
-
-      const { data: purchase, error: purchaseError } = await db
-        .from('purchases')
-        .select('id')
-        .eq('id', product.purchase_id)
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (purchaseError) return reply.code(500).send({ error: 'product_update_unavailable' });
-      if (!purchase) return reply.code(404).send({ error: 'product_not_found' });
-
       try {
-        const hidden = await hiddenProductKeys(db, user.id, product.purchase_id);
-        if (hidden.ids.has(product.id) || (product.source_key && hidden.sourceKeys.has(product.source_key))) {
+        const product = await ownedProduct(db, user.id, request.params.id);
+        if (!product) return reply.code(404).send({ error: 'product_not_found' });
+
+        const overrides = await loadUserProductOverrideRuns(db, user.id, [product.purchase_id]);
+        const visible = applyUserProductOverrides([product], overrides);
+        if (visible.length === 0) {
           return { ok: true, alreadyHidden: true };
         }
 
-        const { error: insertError } = await db.from('ai_processing_runs').insert({
-          user_id: user.id,
-          source_email_id: null,
-          purchase_id: product.purchase_id,
-          purpose: 'other',
-          provider: USER_OVERRIDE_PROVIDER,
-          model: USER_OVERRIDE_MODEL,
-          prompt_version: USER_OVERRIDE_VERSION,
-          status: 'completed',
-          input_tokens: 0,
-          output_tokens: 0,
-          estimated_cost: 0,
-          confidence: 1,
+        await insertUserOverride(db, {
+          userId: user.id,
+          purchaseId: product.purchase_id,
           result: {
             action: 'hide_product',
             product_id: product.id,
@@ -163,10 +238,57 @@ export async function registerProductActionRoutes(app: FastifyInstance) {
             product_name: product.name,
           },
         });
-        if (insertError) throw new Error(insertError.message);
         return { ok: true, alreadyHidden: false };
       } catch (error) {
-        request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to save user product override');
+        request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to save user product hide override');
+        return reply.code(500).send({ error: 'product_update_unavailable' });
+      }
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: unknown }>(
+    '/api/products/:id',
+    async (request, reply) => {
+      const user = await requireUser(request, reply);
+      if (!user) return;
+      if (!uuid(request.params.id)) {
+        return reply.code(400).send({ error: 'invalid_product_id' });
+      }
+
+      const changes = productEditChanges(request.body);
+      if (!changes) {
+        return reply.code(400).send({ error: 'invalid_product_update' });
+      }
+
+      const db = getSupabaseAdmin() as any;
+      try {
+        const product = await ownedProduct(db, user.id, request.params.id);
+        if (!product) return reply.code(404).send({ error: 'product_not_found' });
+
+        const overrides = await loadUserProductOverrideRuns(db, user.id, [product.purchase_id]);
+        const visible = applyUserProductOverrides([product], overrides);
+        const visibleProduct = visible[0];
+        if (!visibleProduct) {
+          return reply.code(409).send({ error: 'product_hidden' });
+        }
+
+        await insertUserOverride(db, {
+          userId: user.id,
+          purchaseId: product.purchase_id,
+          result: {
+            action: 'edit_product',
+            product_id: product.id,
+            source_key: product.source_key ?? null,
+            changes,
+          },
+        });
+
+        return {
+          ok: true,
+          product: publicProduct({ ...visibleProduct, ...changes }),
+        };
+      } catch (error) {
+        request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to save user product edit override');
         return reply.code(500).send({ error: 'product_update_unavailable' });
       }
     },
