@@ -111,8 +111,7 @@ export function resolveTrackingBridgeCandidates(
   for (const [key, rows] of groups) {
     const sorted = [...rows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
     const first = sorted[0];
-    const last = sorted[sorted.length - 1];
-    if (!first || !last) continue;
+    if (!first) continue;
 
     const trackingNumber = normalizeTracking(first.trackingNumber);
     const carrierSlug = normalizeCarrierSlug(first.carrier);
