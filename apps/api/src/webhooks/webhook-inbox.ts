@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
+import { guardNylasMessageWhenAiDisabled } from '../ingestion/deterministic-ai-off-fallback.js';
 import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
 import { preprocessDeterministicLifecycleNylasMessage } from '../ingestion/deterministic-lifecycle-parser.js';
 import { reconcileDeterministicLifecycleStatesForGrant } from '../ingestion/deterministic-lifecycle-state.js';
@@ -157,10 +158,20 @@ export async function processWebhookInboxEvent(
       messageId: event.provider_message_id,
     });
 
+    let commerceMatched = false;
     if (!lifecyclePreprocess.matched) {
-      await preprocessDeterministicNylasMessage({
+      const commercePreprocess = await preprocessDeterministicNylasMessage({
         grantId: event.grant_id,
         messageId: event.provider_message_id,
+      });
+      commerceMatched = commercePreprocess.matched;
+    }
+
+    if (!lifecyclePreprocess.matched && !commerceMatched) {
+      await guardNylasMessageWhenAiDisabled({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+        sourceQuery: 'webhook:message.created',
       });
     }
 
