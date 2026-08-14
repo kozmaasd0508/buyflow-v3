@@ -149,3 +149,51 @@ test('low-confidence carrier cluster goes to review rather than linking', () => 
   assert.ok(candidate);
   assert.equal(candidate.decision, 'review');
 });
+
+test('tracked merchant anchor can never bridge a different Express One tracking identity', () => {
+  const wrongTracking = '605855685055000013605231';
+  const correctTracking = '605855685836000013605231';
+  const [candidate] = resolveTrackingBridgeCandidates(
+    [purchase({ expectedCarrier: 'Express One' })],
+    [],
+    [anchor({
+      trackingNumber: correctTracking,
+      carrier: 'Express One',
+      confidence: 0.86,
+      receivedAt: '2026-07-15T06:55:18.000Z',
+    })],
+    [evidence({
+      trackingNumber: wrongTracking,
+      carrier: 'Express One',
+      confidence: 0.90,
+      receivedAt: '2026-07-16T08:25:00.000Z',
+    })],
+  );
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'unmatched');
+  assert.equal(candidate.purchaseId, null);
+});
+
+test('exact tracked merchant anchor still bridges its own Express One cluster', () => {
+  const tracking = '605855685836000013605231';
+  const [candidate] = resolveTrackingBridgeCandidates(
+    [purchase({ expectedCarrier: 'Express One' })],
+    [],
+    [anchor({
+      trackingNumber: tracking,
+      carrier: 'Express One',
+      confidence: 0.78,
+      receivedAt: '2026-07-15T06:55:18.000Z',
+    })],
+    [evidence({
+      trackingNumber: tracking,
+      carrier: 'Express One',
+      confidence: 0.93,
+      receivedAt: '2026-07-15T21:20:43.000Z',
+    })],
+  );
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'linkable');
+  assert.equal(candidate.purchaseId, 'purchase-1');
+  assert.ok(candidate.reasons.includes('merchant_shipment_exact_tracking_match'));
+});
