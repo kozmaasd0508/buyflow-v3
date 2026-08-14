@@ -1,14 +1,10 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
-import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
 import { guardNylasMessageWhenAiDisabled } from '../ingestion/deterministic-ai-off-fallback.js';
 import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
 import { preprocessDeterministicLifecycleNylasMessage } from '../ingestion/deterministic-lifecycle-parser.js';
 import { reconcileDeterministicLifecycleStatesForGrant } from '../ingestion/deterministic-lifecycle-state.js';
-import {
-  decideGmailPurchasesGate,
-  isMessageInGmailPurchases,
-} from '../ingestion/gmail-purchases-gate.js';
+import { preprocessLimoneOrderNylasMessage } from '../ingestion/limone-order-adapter.js';
 import {
   processNylasMessage,
   type AutomaticPipelineResult,
@@ -131,47 +127,25 @@ export async function processWebhookInboxEvent(
       return { claimed: true };
     }
 
-    const provider = createEmailProvider({
-      provider: 'nylas',
-      providerAccountId: event.grant_id,
-    });
-    const foundInPurchases = await isMessageInGmailPurchases(
-      provider,
-      event.provider_message_id,
-    );
-    const purchaseGate = decideGmailPurchasesGate(foundInPurchases, event.attempts);
-
-    if (purchaseGate === 'retry') {
-      const { error: retryError } = await db.rpc('finish_webhook_inbox_event', {
-        p_id: eventId,
-        p_success: false,
-        p_error_code: 'PurchasesCategoryPending',
-      });
-      if (retryError) {
-        throw new Error(`Webhook purchases gate retry scheduling failed: ${retryError.message}`);
-      }
-      return { claimed: true, purchaseGate: 'retry' };
-    }
-
-    if (purchaseGate === 'reject') {
-      const { error: finishError } = await db.rpc('finish_webhook_inbox_event', {
-        p_id: eventId,
-        p_success: true,
-        p_error_code: null,
-      });
-      if (finishError) {
-        throw new Error(`Webhook purchases gate completion failed: ${finishError.message}`);
-      }
-      return { claimed: true, purchaseGate: 'filtered' };
-    }
-
+    // Gmail category labels are advisory only. Real purchase confirmations can land in
+    // Personal, Updates, or other categories, so every signed message.created event
+    // reaches the deterministic commerce filters instead of being rejected here.
     const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
     });
 
-    let commerceMatched = false;
+    let limoneMatched = false;
     if (!lifecyclePreprocess.matched) {
+      const limonePreprocess = await preprocessLimoneOrderNylasMessage({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+      });
+      limoneMatched = limonePreprocess.matched;
+    }
+
+    let commerceMatched = false;
+    if (!lifecyclePreprocess.matched && !limoneMatched) {
       const commercePreprocess = await preprocessDeterministicNylasMessage({
         grantId: event.grant_id,
         messageId: event.provider_message_id,
@@ -179,7 +153,8 @@ export async function processWebhookInboxEvent(
       commerceMatched = commercePreprocess.matched;
     }
 
-    const aiOffGuard = !lifecyclePreprocess.matched && !commerceMatched
+    const deterministicMatched = lifecyclePreprocess.matched || limoneMatched || commerceMatched;
+    const aiOffGuard = !deterministicMatched
       ? await guardNylasMessageWhenAiDisabled({
         grantId: event.grant_id,
         messageId: event.provider_message_id,

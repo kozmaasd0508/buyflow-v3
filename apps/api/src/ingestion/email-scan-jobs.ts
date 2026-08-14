@@ -11,6 +11,7 @@ import { guardNylasMessageWhenAiDisabled } from './deterministic-ai-off-fallback
 import { preprocessDeterministicNylasMessage } from './deterministic-commerce-parser.js';
 import { preprocessDeterministicLifecycleNylasMessage } from './deterministic-lifecycle-parser.js';
 import { processEmailForAuditBenchmark } from './email-audit-benchmark.js';
+import { preprocessLimoneOrderNylasMessage } from './limone-order-adapter.js';
 
 interface EmailScanJobRow {
   id: string;
@@ -259,9 +260,12 @@ export async function processEmailScanJob(
       pageSize = 50;
       maxPages = windowDays <= 7 ? 20 : windowDays <= 30 ? 50 : 100;
     } else {
-      query = `category:purchases newer_than:${windowDays}d -in:spam -in:trash`;
+      // Gmail's Purchases category is not authoritative: real order confirmations
+      // can be classified as Personal or Updates. Scan the full safe time window
+      // and let deterministic commerce filters decide what is relevant.
+      query = `newer_than:${windowDays}d -in:spam -in:trash`;
       pageSize = 50;
-      maxPages = 20;
+      maxPages = windowDays <= 7 ? 20 : windowDays <= 30 ? 50 : 100;
     }
 
     const effectiveMode: AutomationMode = scanJob.kind === 'audit' ? 'observe' : mode;
@@ -301,8 +305,17 @@ export async function processEmailScanJob(
           messageId: email.providerMessageId,
         });
 
-        let commerceMatched = false;
+        let limoneMatched = false;
         if (!lifecyclePreprocess.matched) {
+          const limonePreprocess = await preprocessLimoneOrderNylasMessage({
+            grantId: emailConnection.provider_account_id,
+            messageId: email.providerMessageId,
+          });
+          limoneMatched = limonePreprocess.matched;
+        }
+
+        let commerceMatched = false;
+        if (!lifecyclePreprocess.matched && !limoneMatched) {
           const commercePreprocess = await preprocessDeterministicNylasMessage({
             grantId: emailConnection.provider_account_id,
             messageId: email.providerMessageId,
@@ -310,7 +323,8 @@ export async function processEmailScanJob(
           commerceMatched = commercePreprocess.matched;
         }
 
-        const aiOffGuard = !lifecyclePreprocess.matched && !commerceMatched
+        const deterministicMatched = lifecyclePreprocess.matched || limoneMatched || commerceMatched;
+        const aiOffGuard = !deterministicMatched
           ? await guardNylasMessageWhenAiDisabled({
             grantId: emailConnection.provider_account_id,
             messageId: email.providerMessageId,
