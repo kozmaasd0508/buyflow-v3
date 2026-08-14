@@ -180,7 +180,13 @@ function hasConflictingExistingTracking(
   });
 }
 
+function trackedAnchorCompatible(anchor: TrackingBridgeMerchantAnchor, trackingNumber: string): boolean {
+  const anchorTracking = normalizeTracking(anchor.trackingNumber);
+  return anchorTracking.length < MIN_TRACKING_LENGTH || anchorTracking === trackingNumber;
+}
+
 function trustedAnchorForTracking(anchor: TrackingBridgeMerchantAnchor, trackingNumber: string): boolean {
+  if (!trackedAnchorCompatible(anchor, trackingNumber)) return false;
   if (anchor.confidence >= MIN_ANCHOR_CONFIDENCE) return true;
   return (
     anchor.confidence >= MIN_EXACT_TRACKING_ANCHOR_CONFIDENCE &&
