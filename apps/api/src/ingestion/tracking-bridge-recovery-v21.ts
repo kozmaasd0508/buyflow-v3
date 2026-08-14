@@ -117,6 +117,7 @@ function toMerchantAnchor(source: SourceRow, purchaseId: string): TrackingBridge
     userId: source.user_id,
     eventType,
     carrier: stringOrNull(result.carrier),
+    trackingNumber: stringOrNull(result.tracking_number),
     confidence,
     receivedAt: source.received_at,
   };
@@ -294,9 +295,6 @@ export async function drainTrackingBridgeRecoveryV21(
       }
 
       try {
-        // Re-read this purchase/carrier immediately before the write. This closes the
-        // batch race where two different tracking clusters can both be scored against
-        // the same stale shipment snapshot during one recovery pass.
         const { data: liveShipmentData, error: liveShipmentError } = await db
           .from('shipments')
           .select('tracking_number')
