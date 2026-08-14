@@ -10,6 +10,7 @@ import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
 import { drainPendingAuditBackfillV1 } from './ingestion/pending-audit-backfill-v1.js';
+import { drainReviewResolverV3 } from './ingestion/review-resolver-v3.js';
 import { drainTrackingBridgeRecoveryV21 } from './ingestion/tracking-bridge-recovery-v21.js';
 import { drainUnlinkedRecoveryV2 } from './ingestion/unlinked-recovery-v2.js';
 import { registerWebPreview } from './web-preview.js';
@@ -188,6 +189,25 @@ async function runRecovery() {
     }
   } catch (error) {
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Pending audit backfill V1 failed');
+  }
+
+  try {
+    const result = await drainReviewResolverV3(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.created > 0 || result.healed > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        candidates: result.candidates,
+        created: result.created,
+        healed: result.healed,
+        resolvedSources: result.resolvedSources,
+        stayedReview: result.stayedReview,
+        failed: result.failed,
+        aiCalls: result.aiCalls,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Review Resolver V3 recovery completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Review Resolver V3 recovery scan failed');
   }
 
   try {
