@@ -55,6 +55,7 @@ export interface TrackingBridgeCandidate {
 }
 
 const MAX_BRIDGE_HOURS = 36;
+const MAX_EXACT_TRACKING_BRIDGE_HOURS = 7 * 24;
 const MIN_TRACKING_LENGTH = 10;
 const MIN_EVIDENCE_CONFIDENCE = 0.85;
 const MIN_ANCHOR_CONFIDENCE = 0.8;
@@ -154,9 +155,26 @@ function hourDistance(later: string, earlier: string): number | null {
   return (left - right) / 3_600_000;
 }
 
-function followsWithinBridgeWindow(later: string, earlier: string): boolean {
+function followsWithinBridgeWindow(later: string, earlier: string, maxHours = MAX_BRIDGE_HOURS): boolean {
   const lag = hourDistance(later, earlier);
-  return lag !== null && lag >= 0 && lag <= MAX_BRIDGE_HOURS;
+  return lag !== null && lag >= 0 && lag <= maxHours;
+}
+
+function exactAnchorTracking(anchor: TrackingBridgeMerchantAnchor, trackingNumber: string): boolean {
+  const anchorTracking = normalizeTracking(anchor.trackingNumber);
+  return anchorTracking.length >= MIN_TRACKING_LENGTH && anchorTracking === trackingNumber;
+}
+
+function followsWithinAnchorWindow(
+  later: string,
+  anchor: TrackingBridgeMerchantAnchor,
+  trackingNumber: string,
+): boolean {
+  return followsWithinBridgeWindow(
+    later,
+    anchor.receivedAt,
+    exactAnchorTracking(anchor, trackingNumber) ? MAX_EXACT_TRACKING_BRIDGE_HOURS : MAX_BRIDGE_HOURS,
+  );
 }
 
 function clusterKey(row: TrackingBridgeEvidence): string | null {
@@ -188,11 +206,7 @@ function trackedAnchorCompatible(anchor: TrackingBridgeMerchantAnchor, trackingN
 function trustedAnchorForTracking(anchor: TrackingBridgeMerchantAnchor, trackingNumber: string): boolean {
   if (!trackedAnchorCompatible(anchor, trackingNumber)) return false;
   if (anchor.confidence >= MIN_ANCHOR_CONFIDENCE) return true;
-  return (
-    anchor.confidence >= MIN_EXACT_TRACKING_ANCHOR_CONFIDENCE &&
-    normalizeTracking(anchor.trackingNumber).length >= MIN_TRACKING_LENGTH &&
-    normalizeTracking(anchor.trackingNumber) === trackingNumber
-  );
+  return anchor.confidence >= MIN_EXACT_TRACKING_ANCHOR_CONFIDENCE && exactAnchorTracking(anchor, trackingNumber);
 }
 
 export function resolveTrackingBridgeCandidates(
@@ -269,12 +283,12 @@ export function resolveTrackingBridgeCandidates(
 
       const shipmentAnchors = purchaseAnchors.filter((anchor) =>
         anchor.eventType === 'shipment' &&
-        carrierShipmentRows.some((row) => followsWithinBridgeWindow(row.receivedAt, anchor.receivedAt)),
+        carrierShipmentRows.some((row) => followsWithinAnchorWindow(row.receivedAt, anchor, trackingNumber)),
       );
       if (shipmentAnchors.length === 0) continue;
 
       const shipmentProofRows = carrierShipmentRows.filter((row) =>
-        shipmentAnchors.some((anchor) => followsWithinBridgeWindow(row.receivedAt, anchor.receivedAt)),
+        shipmentAnchors.some((anchor) => followsWithinAnchorWindow(row.receivedAt, anchor, trackingNumber)),
       );
       if (shipmentProofRows.length === 0) continue;
 
@@ -288,7 +302,7 @@ export function resolveTrackingBridgeCandidates(
         (anchor) => normalizeCarrierSlug(anchor.carrier) === carrierSlug,
       );
       const exactMerchantTrackingMatch = shipmentAnchors.some(
-        (anchor) => normalizeTracking(anchor.trackingNumber) === trackingNumber,
+        (anchor) => exactAnchorTracking(anchor, trackingNumber),
       );
 
       if (!expectedCarrierMatch && !explicitShipmentCarrierMatch) continue;
@@ -300,6 +314,9 @@ export function resolveTrackingBridgeCandidates(
       if (expectedCarrierMatch) purchaseReasons.push('purchase_expected_carrier_matches');
       if (explicitShipmentCarrierMatch) purchaseReasons.push('merchant_shipment_names_same_carrier');
       if (exactMerchantTrackingMatch) purchaseReasons.push('merchant_shipment_exact_tracking_match');
+      if (exactMerchantTrackingMatch && shipmentProofRows.some((row) => !followsWithinBridgeWindow(row.receivedAt, shipmentAnchors[0]!.receivedAt))) {
+        purchaseReasons.push('exact_tracking_extended_bridge_window');
+      }
       if (deliveryAnchors.length > 0) purchaseReasons.push('merchant_delivery_corroborates_bridge');
       if (consignorMatch) purchaseReasons.push('carrier_consignor_matches_purchase_merchant');
       candidatePurchases.push({
