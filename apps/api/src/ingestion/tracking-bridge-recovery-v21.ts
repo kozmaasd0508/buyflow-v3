@@ -16,6 +16,7 @@ interface SourceRow {
   id: string;
   user_id: string;
   from_address: string | null;
+  subject: string | null;
   received_at: string;
   validation_status: string | null;
   validated_result: Record<string, unknown> | null;
@@ -25,6 +26,8 @@ interface PurchaseRow {
   id: string;
   user_id: string;
   expected_carrier: string | null;
+  merchant_name: string | null;
+  merchant_legal_name: string | null;
 }
 
 interface ShipmentRow {
@@ -68,6 +71,16 @@ function numericOrNull(value: unknown): number | null {
   return null;
 }
 
+function normalizeTracking(value: string | null | undefined): string {
+  return (value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function carrierConsignor(subject: string | null, carrier: string | null): string | null {
+  if (!subject || !carrier?.toLowerCase().includes('dpd')) return null;
+  const match = subject.match(/^\s*Értesítés\s+[A-Za-z0-9-]+\s+(.+?)\s+küldemény\s+(?:feladásáról|mai kézbesítéséről)/iu);
+  return match?.[1]?.trim() || null;
+}
+
 function toBridgeEvidence(source: SourceRow): TrackingBridgeEvidence | null {
   const result = source.validated_result;
   if (!result || !isTrustedAutomaticEvidence(source.validation_status, result)) return null;
@@ -75,13 +88,15 @@ function toBridgeEvidence(source: SourceRow): TrackingBridgeEvidence | null {
   if (eventType !== 'shipment' && eventType !== 'delivery') return null;
   const confidence = numericOrNull(result.confidence);
   if (confidence === null) return null;
+  const carrier = stringOrNull(result.carrier);
 
   return {
     sourceEmailId: source.id,
     userId: source.user_id,
     eventType,
     trackingNumber: stringOrNull(result.tracking_number),
-    carrier: stringOrNull(result.carrier),
+    carrier,
+    consignor: carrierConsignor(source.subject, carrier),
     confidence,
     receivedAt: source.received_at,
   };
@@ -161,12 +176,12 @@ export async function drainTrackingBridgeRecoveryV21(
   const db = getSupabaseAdmin() as any;
   const { data: sourceData, error: sourceError } = await db
     .from('source_emails')
-    .select('id,user_id,from_address,received_at,validation_status,validated_result')
+    .select('id,user_id,from_address,subject,received_at,validation_status,validated_result')
     .eq('processing_status', 'unlinked')
     .not('validated_result', 'is', null)
     .order('received_at', { ascending: true })
     .limit(Math.min(Math.max(limit, 1), 500));
-  if (sourceError) throw new Error(`Tracking bridge V2.2 source read failed: ${sourceError.message}`);
+  if (sourceError) throw new Error(`Tracking bridge V2.3 source read failed: ${sourceError.message}`);
 
   const sourceRows = (sourceData ?? []) as SourceRow[];
   const evidence = sourceRows
@@ -190,9 +205,9 @@ export async function drainTrackingBridgeRecoveryV21(
 
     const { data: purchaseData, error: purchaseError } = await db
       .from('purchases')
-      .select('id,user_id,expected_carrier')
+      .select('id,user_id,expected_carrier,merchant_name,merchant_legal_name')
       .eq('user_id', userId);
-    if (purchaseError) throw new Error(`Tracking bridge V2.2 purchase read failed: ${purchaseError.message}`);
+    if (purchaseError) throw new Error(`Tracking bridge V2.3 purchase read failed: ${purchaseError.message}`);
     const purchaseRows = (purchaseData ?? []) as PurchaseRow[];
     if (purchaseRows.length === 0) continue;
 
@@ -200,6 +215,8 @@ export async function drainTrackingBridgeRecoveryV21(
       purchaseId: row.id,
       userId: row.user_id,
       expectedCarrier: row.expected_carrier,
+      merchantName: row.merchant_name,
+      merchantLegalName: row.merchant_legal_name,
     }));
     const purchaseIds = purchaseRows.map((row) => row.id);
 
@@ -207,7 +224,7 @@ export async function drainTrackingBridgeRecoveryV21(
       .from('shipments')
       .select('purchase_id,user_id,carrier_slug,tracking_number')
       .eq('user_id', userId);
-    if (shipmentError) throw new Error(`Tracking bridge V2.2 shipment read failed: ${shipmentError.message}`);
+    if (shipmentError) throw new Error(`Tracking bridge V2.3 shipment read failed: ${shipmentError.message}`);
     const shipments: TrackingBridgeExistingShipment[] = ((shipmentData ?? []) as ShipmentRow[]).map((row) => ({
       purchaseId: row.purchase_id,
       userId: row.user_id,
@@ -219,7 +236,7 @@ export async function drainTrackingBridgeRecoveryV21(
       .from('purchase_sources')
       .select('purchase_id,source_email_id')
       .in('purchase_id', purchaseIds);
-    if (linkError) throw new Error(`Tracking bridge V2.2 source-link read failed: ${linkError.message}`);
+    if (linkError) throw new Error(`Tracking bridge V2.3 source-link read failed: ${linkError.message}`);
     const links = (linkData ?? []) as PurchaseSourceRow[];
     const sourceIds = [...new Set(links.map((row) => row.source_email_id))];
 
@@ -227,9 +244,9 @@ export async function drainTrackingBridgeRecoveryV21(
     if (sourceIds.length > 0) {
       const { data: anchorSourceData, error: anchorSourceError } = await db
         .from('source_emails')
-        .select('id,user_id,from_address,received_at,validation_status,validated_result')
+        .select('id,user_id,from_address,subject,received_at,validation_status,validated_result')
         .in('id', sourceIds);
-      if (anchorSourceError) throw new Error(`Tracking bridge V2.2 anchor read failed: ${anchorSourceError.message}`);
+      if (anchorSourceError) throw new Error(`Tracking bridge V2.3 anchor read failed: ${anchorSourceError.message}`);
       const anchorSources = (anchorSourceData ?? []) as SourceRow[];
       const sourceById = new Map(anchorSources.map((row) => [row.id, row]));
       for (const link of links) {
@@ -251,7 +268,7 @@ export async function drainTrackingBridgeRecoveryV21(
             .from('source_emails')
             .update({ processing_status: 'review' })
             .in('id', candidate.sourceEmailIds);
-          if (error) throw new Error(`Tracking bridge V2.2 review update failed: ${error.message}`);
+          if (error) throw new Error(`Tracking bridge V2.3 review update failed: ${error.message}`);
         }
         continue;
       }
@@ -277,6 +294,31 @@ export async function drainTrackingBridgeRecoveryV21(
       }
 
       try {
+        // Re-read this purchase/carrier immediately before the write. This closes the
+        // batch race where two different tracking clusters can both be scored against
+        // the same stale shipment snapshot during one recovery pass.
+        const { data: liveShipmentData, error: liveShipmentError } = await db
+          .from('shipments')
+          .select('tracking_number')
+          .eq('user_id', userId)
+          .eq('purchase_id', candidate.purchaseId)
+          .eq('carrier_slug', candidate.carrierSlug)
+          .not('tracking_number', 'is', null);
+        if (liveShipmentError) throw new Error(`Tracking bridge V2.3 live conflict read failed: ${liveShipmentError.message}`);
+        const liveConflict = (liveShipmentData ?? []).some((row: { tracking_number: string | null }) => {
+          const current = normalizeTracking(row.tracking_number);
+          return Boolean(current && current !== normalizeTracking(candidate.trackingNumber));
+        });
+        if (liveConflict) {
+          result.reviewClusters += 1;
+          const { error: reviewError } = await db
+            .from('source_emails')
+            .update({ processing_status: 'review' })
+            .in('id', candidate.sourceEmailIds);
+          if (reviewError) throw new Error(`Tracking bridge V2.3 conflict review update failed: ${reviewError.message}`);
+          continue;
+        }
+
         const deliveredRows = clusterEvidence.filter((row) => row.eventType === 'delivery');
         const shippedAt = earliest(proofShipmentEvidence);
         const carrierDeliveredAt = earliest(deliveredRows);
@@ -308,13 +350,13 @@ export async function drainTrackingBridgeRecoveryV21(
             confidence: row.confidence,
           })),
         });
-        if (upsertError) throw new Error(`Tracking bridge V2.2 shipment upsert failed: ${upsertError.message}`);
+        if (upsertError) throw new Error(`Tracking bridge V2.3 shipment upsert failed: ${upsertError.message}`);
 
         const { error: statusError } = await db
           .from('source_emails')
           .update({ processing_status: 'processed' })
           .in('id', candidate.sourceEmailIds);
-        if (statusError) throw new Error(`Tracking bridge V2.2 source status failed: ${statusError.message}`);
+        if (statusError) throw new Error(`Tracking bridge V2.3 source status failed: ${statusError.message}`);
 
         result.linkedClusters += 1;
         result.linkedSources += clusterEvidence.length;
