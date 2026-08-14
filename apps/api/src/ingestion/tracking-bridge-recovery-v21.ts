@@ -9,6 +9,9 @@ import {
 } from '../resolution/tracking-bridge-resolution.js';
 import { isCarrierSenderDomain } from '../validation/email-extraction-validator.js';
 
+const MAX_BRIDGE_MS = 36 * 60 * 60 * 1000;
+const MIN_ANCHOR_CONFIDENCE = 0.8;
+
 interface SourceRow {
   id: string;
   user_id: string;
@@ -121,6 +124,34 @@ function earliest(rows: TrackingBridgeEvidence[]): string | null {
 
 function latest(rows: TrackingBridgeEvidence[]): string | null {
   return [...rows].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]?.receivedAt ?? null;
+}
+
+function corroboratedMerchantDeliveryAt(
+  anchors: TrackingBridgeMerchantAnchor[],
+  purchaseId: string,
+  after: string,
+): string | null {
+  const afterMs = Date.parse(after);
+  if (!Number.isFinite(afterMs)) return null;
+  return anchors
+    .filter((anchor) => {
+      if (
+        anchor.purchaseId !== purchaseId ||
+        anchor.eventType !== 'delivery' ||
+        anchor.confidence < MIN_ANCHOR_CONFIDENCE
+      ) return false;
+      const anchorMs = Date.parse(anchor.receivedAt);
+      return Number.isFinite(anchorMs) && anchorMs >= afterMs && anchorMs - afterMs <= MAX_BRIDGE_MS;
+    })
+    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]?.receivedAt ?? null;
+}
+
+function laterTimestamp(a: string, b: string | null): string {
+  if (!b) return a;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (!Number.isFinite(aMs) || !Number.isFinite(bMs)) return a;
+  return bMs > aMs ? b : a;
 }
 
 export async function drainTrackingBridgeRecoveryV21(
@@ -245,10 +276,16 @@ export async function drainTrackingBridgeRecoveryV21(
       try {
         const deliveredRows = clusterEvidence.filter((row) => row.eventType === 'delivery');
         const shippedAt = earliest(clusterEvidence);
-        const deliveredAt = earliest(deliveredRows);
-        const lastEventAt = latest(clusterEvidence);
+        const carrierDeliveredAt = earliest(deliveredRows);
+        const carrierLastEventAt = latest(clusterEvidence);
         const primary = clusterEvidence[0];
-        if (!primary || !shippedAt || !lastEventAt) throw new Error('tracking bridge timestamps are incomplete');
+        if (!primary || !shippedAt || !carrierLastEventAt) throw new Error('tracking bridge timestamps are incomplete');
+
+        const merchantDeliveredAt = candidate.reasons.includes('merchant_delivery_corroborates_bridge')
+          ? corroboratedMerchantDeliveryAt(anchors, candidate.purchaseId, shippedAt)
+          : null;
+        const deliveredAt = carrierDeliveredAt ?? merchantDeliveredAt;
+        const lastEventAt = laterTimestamp(carrierLastEventAt, deliveredAt);
 
         const { error: upsertError } = await db.rpc('controlled_upsert_shipment_with_sources', {
           p_user_id: userId,
