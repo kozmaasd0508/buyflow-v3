@@ -99,7 +99,7 @@ function toEvidence(source: SourceRow): InvoiceAnchorEvidence | null {
   };
 }
 
-function dedupeKey(planKey: string, emailConnectionId: string): string {
+export function invoiceAnchorRecoveryDedupeKey(planKey: string, emailConnectionId: string): string {
   return createHash('sha256')
     .update(`invoice-anchor-v1|${emailConnectionId}|${planKey}`)
     .digest('hex');
@@ -177,7 +177,7 @@ export async function drainInvoiceAnchorRecoveryV1(
       if (mode === 'observe') continue;
 
       for (const plan of plans) {
-        const automaticDedupeKey = dedupeKey(plan.key, plan.emailConnectionId);
+        const automaticDedupeKey = invoiceAnchorRecoveryDedupeKey(plan.key, plan.emailConnectionId);
         const { data: existingJob, error: existingJobError } = await db
           .from('email_scan_jobs')
           .select('id,status')

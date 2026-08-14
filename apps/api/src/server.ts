@@ -9,6 +9,7 @@ import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.j
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
+import { drainHistoricalPurchaseReconstructionV1 } from './ingestion/historical-purchase-reconstruction-v1.js';
 import { drainInvoiceAnchorRecoveryV1 } from './ingestion/invoice-anchor-recovery-v1.js';
 import { drainPendingAuditBackfillV1 } from './ingestion/pending-audit-backfill-v1.js';
 import { drainReviewResolverV3 } from './ingestion/review-resolver-v3.js';
@@ -226,6 +227,24 @@ async function runRecovery() {
     }
   } catch (error) {
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Review Resolver V3 recovery scan failed');
+  }
+
+  try {
+    const result = await drainHistoricalPurchaseReconstructionV1(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.created > 0 || result.candidates > 0 || result.failed > 0) {
+      app.log.info({
+        scannedJobs: result.scannedJobs,
+        candidates: result.candidates,
+        created: result.created,
+        resolvedSources: result.resolvedSources,
+        carrierProofSources: result.carrierProofSources,
+        failed: result.failed,
+        aiCalls: result.aiCalls,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Historical Purchase Reconstruction V1 completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Historical Purchase Reconstruction V1 failed');
   }
 
   try {
