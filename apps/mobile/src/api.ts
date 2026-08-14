@@ -46,6 +46,20 @@ export interface ProductSummary {
   updatedAt: string;
 }
 
+export interface ProductUpdate {
+  name?: string;
+  brand?: string | null;
+  model?: string | null;
+  variant?: string | null;
+  sku?: string | null;
+  gtin?: string | null;
+  category?: string | null;
+  quantity?: number | null;
+  unitPrice?: number | null;
+  totalPrice?: number | null;
+  currency?: string | null;
+}
+
 export interface PurchaseSummary {
   id: string;
   merchantName: string | null;
@@ -81,12 +95,21 @@ export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount' | 
   documents: DocumentSummary[];
 }
 
-async function apiRequest<T>(path: string, accessToken: string): Promise<T> {
+async function apiRequest<T>(
+  path: string,
+  accessToken: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${accessToken}`);
+  headers.set('Accept', 'application/json');
+  if (init.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const response = await fetch(`${mobileConfig.apiBaseUrl}${path}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
+    ...init,
+    headers,
   });
 
   if (response.status === 401) {
@@ -114,4 +137,28 @@ export async function loadPurchase(
     accessToken,
   );
   return data.purchase;
+}
+
+export async function hideProduct(accessToken: string, productId: string): Promise<void> {
+  await apiRequest<{ ok: boolean }>(
+    `/api/products/${encodeURIComponent(productId)}/hide`,
+    accessToken,
+    { method: 'POST' },
+  );
+}
+
+export async function updateProduct(
+  accessToken: string,
+  productId: string,
+  changes: ProductUpdate,
+): Promise<ProductSummary> {
+  const data = await apiRequest<{ ok: boolean; product: ProductSummary }>(
+    `/api/products/${encodeURIComponent(productId)}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(changes),
+    },
+  );
+  return data.product;
 }
