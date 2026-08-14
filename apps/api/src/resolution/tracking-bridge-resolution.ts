@@ -78,6 +78,22 @@ function normalizeParty(value: string | null | undefined): string {
     .trim();
 }
 
+export function normalizeCarrierBridgeEventType(
+  subject: string | null | undefined,
+  eventType: TrackingBridgeEventType,
+): TrackingBridgeEventType {
+  if (eventType !== 'delivery') return eventType;
+  const text = normalizeParty(subject);
+  const explicitDelivered =
+    text.includes('kezbesitve') ||
+    text.includes('sikeres kezbesit') ||
+    text.includes('kezbesites megtortent') ||
+    text.includes('sikeresen atadva') ||
+    text.includes('delivered') ||
+    text.includes('delivery complete');
+  return explicitDelivered ? 'delivery' : 'shipment';
+}
+
 function corePartyTokens(value: string): string[] {
   const tokens = value.split(' ').filter(Boolean);
   while (tokens.length > 1 && LEGAL_SUFFIXES.has(tokens[tokens.length - 1]!)) tokens.pop();
