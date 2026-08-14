@@ -66,6 +66,7 @@ test('applies manual edits after AI values and keeps the latest edit', () => {
     }),
   ]);
 
+  assert.ok(visible);
   assert.equal(visible.name, 'Kézzel javított név');
   assert.equal(visible.brand, null);
   assert.equal(visible.unit_price, 1350);
@@ -83,6 +84,7 @@ test('ignores malformed and unsupported change fields', () => {
     }),
   ]);
 
+  assert.ok(visible);
   assert.equal(visible.purchase_id, purchaseId);
   assert.equal(visible.quantity, 1);
   assert.equal('hidden' in visible, false);
