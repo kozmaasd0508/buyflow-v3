@@ -192,7 +192,7 @@ export function resolveExistingPurchase(
     order.length > 0 &&
     order.length < 6 &&
     best.reasons.some((reason) => ['merchant_domain_match', 'merchant_name_match', 'amount_currency_match'].includes(reason));
-  const ambiguous = best.score - runnerUpScore < 30;
+  const ambiguous = runnerUpScore > 0 && best.score >= 80 && best.score - runnerUpScore < 30;
 
   if (evidence.confidence < 0.8) {
     return {
@@ -218,7 +218,7 @@ export function resolveExistingPurchase(
     };
   }
 
-  if (best.score >= 80 || ambiguous) {
+  if (best.score >= 80) {
     return {
       sourceEmailId: evidence.sourceEmailId,
       userId: evidence.userId,
