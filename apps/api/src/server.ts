@@ -8,6 +8,7 @@ import { registerProductActionRoutes } from './api/product-action-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
+import { drainCorroboratedDocumentRecoveryV1 } from './ingestion/corroborated-document-recovery-v1.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
 import { drainHistoricalPurchaseReconstructionV1 } from './ingestion/historical-purchase-reconstruction-v1.js';
 import { drainInvoiceAnchorRecoveryV1 } from './ingestion/invoice-anchor-recovery-v1.js';
@@ -280,6 +281,23 @@ async function runRecovery() {
     }
   } catch (error) {
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Tracking bridge resolver V2.1 recovery scan failed');
+  }
+
+  try {
+    const result = await drainCorroboratedDocumentRecoveryV1(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.candidates > 0 || result.materialized > 0 || result.failed > 0) {
+      app.log.info({
+        scannedInvoiceLinks: result.scannedInvoiceLinks,
+        purchases: result.purchases,
+        candidates: result.candidates,
+        materialized: result.materialized,
+        failed: result.failed,
+        aiCalls: result.aiCalls,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Corroborated Document Recovery V1 completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Corroborated Document Recovery V1 failed');
   }
 }
 
