@@ -7,6 +7,7 @@ import {
   type ExistingShipmentIdentity,
   type LinkedThreadIdentity,
 } from '../resolution/existing-purchase-resolution.js';
+import { shouldIgnoreUnlinkedSource } from '../resolution/unlinked-source-policy.js';
 import { isTrustedAutomaticEvidence } from '../pipeline/automatic-write-gate.js';
 
 const LINKABLE_EVENT_TYPES = new Set<ExistingPurchaseResolutionEventType>([
@@ -62,6 +63,7 @@ export interface UnlinkedRecoveryResult {
   scanned: number;
   linked: number;
   healed: number;
+  ignored: number;
   review: number;
   unmatched: number;
   failed: number;
@@ -125,13 +127,36 @@ function paymentPayload(result: Record<string, unknown>) {
   };
 }
 
+async function ignoreSourceIfSafe(
+  source: UnlinkedSourceRow,
+  alreadyLinked: boolean,
+  mode: 'observe' | 'write',
+  db: any,
+): Promise<boolean> {
+  if (!shouldIgnoreUnlinkedSource({
+    validationStatus: source.validation_status,
+    validatedResult: source.validated_result,
+    alreadyLinked,
+  })) return false;
+
+  if (mode === 'write') {
+    const { error } = await db
+      .from('source_emails')
+      .update({ processing_status: 'ignored' })
+      .eq('id', source.id)
+      .eq('processing_status', 'unlinked');
+    if (error) throw new Error(`Unlinked V2 noise cleanup failed: ${error.message}`);
+  }
+  return true;
+}
+
 async function recoverUser(
   userId: string,
   sources: UnlinkedSourceRow[],
   mode: 'observe' | 'write',
 ): Promise<Omit<UnlinkedRecoveryResult, 'scanned' | 'failed'>> {
   const db = getSupabaseAdmin() as any;
-  const result = { linked: 0, healed: 0, review: 0, unmatched: 0 };
+  const result = { linked: 0, healed: 0, ignored: 0, review: 0, unmatched: 0 };
 
   const { data: purchaseData, error: purchaseError } = await db
     .from('purchases')
@@ -141,7 +166,10 @@ async function recoverUser(
 
   const purchaseRows = (purchaseData ?? []) as PurchaseRow[];
   if (purchaseRows.length === 0) {
-    result.unmatched += sources.length;
+    for (const source of sources) {
+      if (await ignoreSourceIfSafe(source, false, mode, db)) result.ignored += 1;
+      else result.unmatched += 1;
+    }
     return result;
   }
 
@@ -216,6 +244,11 @@ async function recoverUser(
       if (mode === 'write') {
         await db.from('source_emails').update({ processing_status: 'review' }).eq('id', source.id);
       }
+      continue;
+    }
+
+    if (await ignoreSourceIfSafe(source, false, mode, db)) {
+      result.ignored += 1;
       continue;
     }
 
@@ -302,6 +335,7 @@ export async function drainUnlinkedRecoveryV2(
     scanned: rows.length,
     linked: 0,
     healed: 0,
+    ignored: 0,
     review: 0,
     unmatched: 0,
     failed: 0,
@@ -319,6 +353,7 @@ export async function drainUnlinkedRecoveryV2(
       const userResult = await recoverUser(userId, sources, mode);
       result.linked += userResult.linked;
       result.healed += userResult.healed;
+      result.ignored += userResult.ignored;
       result.review += userResult.review;
       result.unmatched += userResult.unmatched;
     } catch {
