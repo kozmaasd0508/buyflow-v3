@@ -9,6 +9,7 @@ import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.j
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
+import { drainUnlinkedRecoveryV2 } from './ingestion/unlinked-recovery-v2.js';
 import { registerWebPreview } from './web-preview.js';
 import {
   drainWebhookInbox,
@@ -160,6 +161,23 @@ async function runRecovery() {
   } catch (error) {
     webhookStats.emailScanRecoveryFailed += 1;
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Email scan recovery scan failed');
+  }
+
+  try {
+    const result = await drainUnlinkedRecoveryV2(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.linked > 0 || result.healed > 0 || result.review > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        linked: result.linked,
+        healed: result.healed,
+        review: result.review,
+        unmatched: result.unmatched,
+        failed: result.failed,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Unlinked resolver V2 recovery completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Unlinked resolver V2 recovery scan failed');
   }
 }
 
