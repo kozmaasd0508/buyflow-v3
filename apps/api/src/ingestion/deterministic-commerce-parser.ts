@@ -7,10 +7,12 @@ import {
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAboutYouCommerceEmail } from './aboutyou-commerce-adapter.js';
+import { parseGenericOrderConfirmationEmail } from './generic-order-confirmation-adapter.js';
 import { parseMerchantPreAdviceEmail } from './pre-advice-commerce-adapter.js';
 import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
 
 const PARSER_VERSION = 'deterministic-commerce-v2';
+const AI_OFF_FALLBACK_PARSER_VERSION = 'deterministic-ai-off-fallback-v1';
 
 interface CarrierRule {
   name: string;
@@ -67,6 +69,20 @@ export interface DeterministicEmailPreprocessResult {
   matched: boolean;
   sourceEmailId?: string;
   parserVersion?: string;
+}
+
+export function canReplaceAiOffFallbackWithDeterministic(input: {
+  validatedResult: unknown;
+  validationStatus: unknown;
+  processingStatus: unknown;
+}): boolean {
+  if (!input.validatedResult || typeof input.validatedResult !== 'object') return false;
+  const parserVersion = (input.validatedResult as Record<string, unknown>).parser_version;
+  return (
+    parserVersion === AI_OFF_FALLBACK_PARSER_VERSION &&
+    input.validationStatus === 'review' &&
+    input.processingStatus === 'review'
+  );
 }
 
 function normalizeDomain(domain: string): string {
@@ -387,7 +403,8 @@ export function parseDeterministicCommerceEmail(input: {
     ?? parseGyerekjatekboltEmail(input)
     ?? parseDorkoEmail(input)
     ?? parseAboutYouCommerceEmail(input)
-    ?? parseZalandoCommerceEmail(input);
+    ?? parseZalandoCommerceEmail(input)
+    ?? parseGenericOrderConfirmationEmail(input);
 }
 
 export async function preprocessDeterministicNylasMessage(input: {
@@ -441,13 +458,16 @@ export async function preprocessDeterministicNylasMessage(input: {
     parser_reasons: parsed.reasons,
   };
   const validatedResult = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
+  validatedResult.extraction_source = 'deterministic';
+  validatedResult.parser_version = parsed.parserVersion;
+  validatedResult.parser_reasons = parsed.reasons;
   if (parsed.shipmentPhase) {
     validatedResult.shipment_phase = parsed.shipmentPhase;
   }
 
   const { data: existing, error: existingError } = await db
     .from('source_emails')
-    .select('id,validated_result')
+    .select('id,validated_result,validation_status,processing_status')
     .eq('email_connection_id', connection.id)
     .eq('provider_message_id', input.messageId)
     .maybeSingle();
@@ -455,7 +475,15 @@ export async function preprocessDeterministicNylasMessage(input: {
     throw new Error(`Failed to check deterministic source dedupe: ${existingError.message}`);
   }
 
-  if (existing?.validated_result) {
+  const replaceFallback = existing
+    ? canReplaceAiOffFallbackWithDeterministic({
+        validatedResult: existing.validated_result,
+        validationStatus: existing.validation_status,
+        processingStatus: existing.processing_status,
+      })
+    : false;
+
+  if (existing?.validated_result && !replaceFallback) {
     return {
       matched: true,
       sourceEmailId: existing.id as string,
