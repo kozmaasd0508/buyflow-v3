@@ -1,6 +1,6 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 
-const PARSER_VERSION = 'allegro-order-v1';
+const PARSER_VERSION = 'allegro-order-v1.1';
 const ALLEGRO_SENDER_DOMAINS = new Set(['allegro.com', 'allegro.hu', 'allegro.pl', 'allegro.cz', 'allegro.sk']);
 
 export interface AllegroOrderParseResult {
@@ -37,32 +37,51 @@ function currency(token: string): string | null {
   return null;
 }
 
+function cleanSeller(value: string | undefined): string | null {
+  if (!value) return null;
+  const cleaned = value.replace(/\s*\[URL:\s*https?:\/\/[^\]]+\]\s*$/i, '').trim();
+  return cleaned || null;
+}
+
+function productFromMatch(match: RegExpMatchArray, fallbackCurrency: string): ProductExtraction | null {
+  const name = match[1]?.trim();
+  const productUrl = match[2]?.trim();
+  const sku = match[3]?.trim() ?? null;
+  const amount = money(match[4] ?? '');
+  const itemCurrency = currency(match[5] ?? '') ?? fallbackCurrency;
+  if (!name || !productUrl || amount === null) return null;
+  return {
+    name,
+    brand: null,
+    model: null,
+    variant: null,
+    sku,
+    gtin: null,
+    category: null,
+    quantity: 1,
+    unit_price: amount,
+    total_price: amount,
+    currency: itemCurrency,
+    product_url: productUrl,
+    image_url: null,
+    confidence: 0.98,
+  };
+}
+
 function extractProducts(body: string, fallbackCurrency: string): ProductExtraction[] {
   const products: ProductExtraction[] = [];
-  const pattern = /\[([^\]\n]{3,240})\]\((https?:\/\/[^)\n]*\/ajanlat\/[^)\n]+)\)\s*\n(?:\[\((\d{6,20})\)\]\([^)\n]+\)\s*\n)?\s*([0-9][0-9 .,'’]*)\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)/gi;
-  for (const match of body.matchAll(pattern)) {
-    const name = match[1]?.trim();
-    const productUrl = match[2]?.trim();
-    const sku = match[3]?.trim() ?? null;
-    const amount = money(match[4] ?? '');
-    const itemCurrency = currency(match[5] ?? '') ?? fallbackCurrency;
-    if (!name || !productUrl || amount === null) continue;
-    products.push({
-      name,
-      brand: null,
-      model: null,
-      variant: null,
-      sku,
-      gtin: null,
-      category: null,
-      quantity: 1,
-      unit_price: amount,
-      total_price: amount,
-      currency: itemCurrency,
-      product_url: productUrl,
-      image_url: null,
-      confidence: 0.98,
-    });
+  const patterns = [
+    /\[([^\]\n]{3,240})\]\((https?:\/\/[^)\n]*\/ajanlat\/[^)\n]+)\)\s*\n(?:\[\((\d{6,20})\)\]\([^)\n]+\)\s*\n)?\s*([0-9][0-9 .,'’]*)\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)/gi,
+    /(?:^|\n)\s*([^\n]{3,240}?)\s+\[URL:\s*(https?:\/\/[^\]\n]*\/ajanlat\/[^\]\n]+)\]\s*\n(?:\s*\(?([0-9]{6,20})\)?\s+\[URL:\s*https?:\/\/[^\]\n]+\]\s*\n)?\s*([0-9][0-9 .,'’]*)\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of body.matchAll(pattern)) {
+      const product = productFromMatch(match, fallbackCurrency);
+      if (!product) continue;
+      if (products.some((existing) => existing.product_url === product.product_url)) continue;
+      products.push(product);
+    }
   }
   return products.slice(0, 50);
 }
@@ -86,9 +105,9 @@ export function parseAllegroOrderEmail(input: {
   const orderMatch = normalizedBody.match(/\bmegrendeles\s+szama\s*\n+\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i);
   if (!orderMatch?.[1]) return null;
 
-  const sellerMatch = body.match(/(?:^|\n)\s*t(?:ő|o)le\s*:\s*([^\n]{2,120})/i)
+  const sellerMatch = body.match(/(?:^|\n)\s*t(?:ő|o)le\s*:\s*([^\n]{2,240})/i)
     ?? body.match(/megv(?:á|a)s(?:á|a)roltad\s+\d+\s+term(?:é|e)ket\s+([^\n]{2,120}?)\s+elad(?:ó|o)t(?:ó|o)l/i);
-  const merchant = sellerMatch?.[1]?.trim() ?? null;
+  const merchant = cleanSeller(sellerMatch?.[1]);
   if (!merchant || /^allegro$/i.test(merchant)) return null;
 
   const totalMatch = body.match(/(?:^|\n)\s*(?:ÖSSZESEN|OSSZESEN)\s*\n+\s*([0-9][0-9 .,'’]*)\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)/i);
