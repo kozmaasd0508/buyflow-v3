@@ -9,6 +9,7 @@ import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.j
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
+import { drainTrackingBridgeRecoveryV21 } from './ingestion/tracking-bridge-recovery-v21.js';
 import { drainUnlinkedRecoveryV2 } from './ingestion/unlinked-recovery-v2.js';
 import { registerWebPreview } from './web-preview.js';
 import {
@@ -178,6 +179,24 @@ async function runRecovery() {
     }
   } catch (error) {
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Unlinked resolver V2 recovery scan failed');
+  }
+
+  try {
+    const result = await drainTrackingBridgeRecoveryV21(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.linkedClusters > 0 || result.reviewClusters > 0 || result.failedClusters > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        clusters: result.clusters,
+        linkedClusters: result.linkedClusters,
+        linkedSources: result.linkedSources,
+        reviewClusters: result.reviewClusters,
+        unmatchedClusters: result.unmatchedClusters,
+        failedClusters: result.failedClusters,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Tracking bridge resolver V2.1 recovery completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Tracking bridge resolver V2.1 recovery scan failed');
   }
 }
 
