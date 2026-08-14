@@ -4,6 +4,7 @@ import { registerAppApiRoutes } from './api/app-routes.js';
 import { registerEmailAuditRoutes } from './api/email-audit-routes.js';
 import { registerEmailConnectionRoutes } from './api/email-connection-routes.js';
 import { registerEmailScanReviewRoutes } from './api/email-scan-review-routes.js';
+import { registerProductActionRoutes } from './api/product-action-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
@@ -37,7 +38,7 @@ await app.register(cors, {
     }
     callback(null, false);
   },
-  methods: ['GET', 'POST', 'HEAD', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PATCH', 'HEAD', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type', 'Accept'],
   credentials: false,
   maxAge: 86_400,
@@ -81,6 +82,7 @@ app.addContentTypeParser(
 );
 
 await registerAppApiRoutes(app);
+await registerProductActionRoutes(app);
 await registerEmailConnectionRoutes(app);
 await registerEmailScanReviewRoutes(app);
 await registerEmailAuditRoutes(app);
