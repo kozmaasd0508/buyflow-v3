@@ -40,6 +40,19 @@ test('parses explicit Alza delay', () => {
   assert.equal(result.extraction.order_number, '602385238');
 });
 
+test('parses Alza processing message as lifecycle instead of a new order', () => {
+  const result = parseAlzaLifecycleEmail({
+    senderDomains: ['alza.hu'],
+    subject: 'Már dolgozunk rajta. / 602385238 sz. megr.',
+    bodyText: 'Információ a megrendelésről\nMegrendelés 602385238\n602385238 sz. megrendelésed feldolgozását megkezdtük.',
+  });
+
+  assert.ok(result);
+  assert.equal(result.lifecycleEvent, 'order_processing');
+  assert.equal(result.extraction.event_type, 'order_updated');
+  assert.equal(result.extraction.order_number, '602385238');
+});
+
 test('does not classify a normal Alza order confirmation', () => {
   const result = parseAlzaLifecycleEmail({
     senderDomains: ['alza.hu'],
