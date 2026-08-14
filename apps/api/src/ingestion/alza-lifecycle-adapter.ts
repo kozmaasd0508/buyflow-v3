@@ -3,7 +3,7 @@ import { isMerchantSender, merchantDisplayName } from '../email/sender-role.js';
 
 const PARSER_VERSION = 'deterministic-lifecycle-v1';
 
-type AlzaLifecycleEvent = 'payment_failed' | 'cancelled' | 'delayed';
+type AlzaLifecycleEvent = 'payment_failed' | 'cancelled' | 'delayed' | 'order_processing';
 
 export interface AlzaLifecycleParseResult {
   extraction: EmailExtraction;
@@ -115,6 +115,20 @@ export function parseAlzaLifecycleEmail(input: {
       lifecycleEvent: 'delayed',
       parserVersion: PARSER_VERSION,
       reasons: ['known_alza_sender', 'explicit_order_delay', 'explicit_order_number'],
+    };
+  }
+
+  const processing = (
+    /\bmar dolgozunk rajta\b/i.test(subject) &&
+    /\bmegrendelesed feldolgozasat megkezdtuk\b/i.test(body)
+  ) || /\bmegrendeles(?:ed)? feldolgozasat megkezdtuk\b/i.test(context);
+
+  if (processing) {
+    return {
+      extraction: extraction({ orderNumber }),
+      lifecycleEvent: 'order_processing',
+      parserVersion: PARSER_VERSION,
+      reasons: ['known_alza_sender', 'explicit_order_processing', 'explicit_order_number'],
     };
   }
 

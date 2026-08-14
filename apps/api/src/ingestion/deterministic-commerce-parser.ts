@@ -7,6 +7,8 @@ import {
 } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAboutYouCommerceEmail } from './aboutyou-commerce-adapter.js';
+import { parseAllegroOrderEmail } from './allegro-order-adapter.js';
+import { parseAlzaCommerceEmail } from './alza-commerce-adapter.js';
 import { parseGenericOrderConfirmationEmail } from './generic-order-confirmation-adapter.js';
 import { parseMerchantPreAdviceEmail } from './pre-advice-commerce-adapter.js';
 import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
@@ -399,9 +401,11 @@ export function parseDeterministicCommerceEmail(input: {
 }): DeterministicCommerceParseResult | null {
   return parseKnownCarrierEmail(input)
     ?? parseMerchantPreAdviceEmail(input)
+    ?? parseAlzaCommerceEmail(input)
     ?? parseGymBeamEmail(input)
     ?? parseGyerekjatekboltEmail(input)
     ?? parseDorkoEmail(input)
+    ?? parseAllegroOrderEmail(input)
     ?? parseAboutYouCommerceEmail(input)
     ?? parseZalandoCommerceEmail(input)
     ?? parseGenericOrderConfirmationEmail(input);
