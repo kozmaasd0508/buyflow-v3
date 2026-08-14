@@ -106,6 +106,7 @@ function dedupeKey(planKey: string, emailConnectionId: string): string {
 }
 
 export async function drainInvoiceAnchorRecoveryV1(
+  mode: 'observe' | 'write',
   limit = 200,
 ): Promise<InvoiceAnchorRecoveryV1Result> {
   const db = getSupabaseAdmin() as any;
@@ -172,6 +173,8 @@ export async function drainInvoiceAnchorRecoveryV1(
       const plans = resolveInvoiceAnchorRecoveryPlans(evidence, purchases)
         .filter((plan) => invoiceRows.some((row) => row.id === plan.anchorSourceEmailId));
       result.plans += plans.length;
+
+      if (mode === 'observe') continue;
 
       for (const plan of plans) {
         const automaticDedupeKey = dedupeKey(plan.key, plan.emailConnectionId);
