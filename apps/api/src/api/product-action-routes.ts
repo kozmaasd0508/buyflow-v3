@@ -267,7 +267,8 @@ export async function registerProductActionRoutes(app: FastifyInstance) {
 
         const overrides = await loadUserProductOverrideRuns(db, user.id, [product.purchase_id]);
         const visible = applyUserProductOverrides([product], overrides);
-        if (visible.length === 0) {
+        const visibleProduct = visible[0];
+        if (!visibleProduct) {
           return reply.code(409).send({ error: 'product_hidden' });
         }
 
@@ -284,7 +285,7 @@ export async function registerProductActionRoutes(app: FastifyInstance) {
 
         return {
           ok: true,
-          product: publicProduct({ ...visible[0], ...changes }),
+          product: publicProduct({ ...visibleProduct, ...changes }),
         };
       } catch (error) {
         request.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Failed to save user product edit override');
