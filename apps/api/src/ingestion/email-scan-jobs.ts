@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import {
   processNylasMessage,
+  type AutomaticPipelineResult,
   type AutomationMode,
 } from '../pipeline/automatic-email-pipeline.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from './automatic-targeted-recovery.js';
@@ -71,6 +72,18 @@ function emptyScanResult(): InitialEmailScanResult {
     purchaseWrites: 0,
     shipmentWrites: 0,
     documentWrites: 0,
+  };
+}
+
+function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
+  return {
+    ok: true,
+    status: 'review',
+    ...(sourceEmailId ? { sourceEmailId } : {}),
+    purchaseWrites: 0,
+    shipmentWrites: 0,
+    documentWrites: 0,
+    aiCalls: 0,
   };
 }
 
@@ -297,19 +310,21 @@ export async function processEmailScanJob(
           commerceMatched = commercePreprocess.matched;
         }
 
-        if (!lifecyclePreprocess.matched && !commerceMatched) {
-          await guardNylasMessageWhenAiDisabled({
+        const aiOffGuard = !lifecyclePreprocess.matched && !commerceMatched
+          ? await guardNylasMessageWhenAiDisabled({
             grantId: emailConnection.provider_account_id,
             messageId: email.providerMessageId,
             sourceQuery: `scan:${scanJob.kind}`,
-          });
-        }
+          })
+          : null;
 
-        const pipeline = await processNylasMessage({
-          grantId: emailConnection.provider_account_id,
-          messageId: email.providerMessageId,
-          mode: effectiveMode,
-        });
+        const pipeline = aiOffGuard?.guarded
+          ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
+          : await processNylasMessage({
+            grantId: emailConnection.provider_account_id,
+            messageId: email.providerMessageId,
+            mode: effectiveMode,
+          });
 
         if (
           scanJob.kind === 'initial' &&
