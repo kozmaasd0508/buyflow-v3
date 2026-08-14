@@ -1,12 +1,39 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 
-const PARSER_VERSION = 'generic-order-confirmation-v1';
+const PARSER_VERSION = 'generic-order-confirmation-v1.1';
 
 const SHARED_PLATFORM_SENDER_DOMAINS = [
   'shopifyemail.com',
   'my.store-emails.com',
   'squarespace.info',
+] as const;
+
+const PUBLIC_MAILBOX_SENDER_DOMAINS = [
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'yahoo.co.uk',
+  'yahoo.de',
+  'yahoo.fr',
+  'ymail.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'proton.me',
+  'protonmail.com',
+  'gmx.com',
+  'gmx.net',
+  'mail.com',
+  'aol.com',
+  'freemail.hu',
+  'citromail.hu',
+  'indamail.hu',
+  'vipmail.hu',
 ] as const;
 
 const COMMON_SECOND_LEVEL_SUFFIXES = new Set([
@@ -45,6 +72,10 @@ function domainMatches(domain: string, expected: string): boolean {
 
 export function isSharedPlatformSenderDomain(domain: string): boolean {
   return SHARED_PLATFORM_SENDER_DOMAINS.some((shared) => domainMatches(domain, shared));
+}
+
+export function isPublicMailboxSenderDomain(domain: string): boolean {
+  return PUBLIC_MAILBOX_SENDER_DOMAINS.some((provider) => domainMatches(domain, provider));
 }
 
 function merchantFromDomain(domain: string): string {
@@ -262,7 +293,8 @@ export function parseGenericOrderConfirmationEmail(input: {
   if (
     domains.length === 0 ||
     domains.some(isCarrierSenderDomain) ||
-    domains.some(isSharedPlatformSenderDomain)
+    domains.some(isSharedPlatformSenderDomain) ||
+    domains.some(isPublicMailboxSenderDomain)
   ) {
     return null;
   }
