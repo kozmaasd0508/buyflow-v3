@@ -41,12 +41,30 @@ export interface CorroboratedDocumentCandidate {
   confidence: number;
 }
 
+const LIFECYCLE_RELATIONS = new Set(['order_created', 'order_updated', 'shipment', 'delivery']);
+
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 }
 
 function normalizeDocumentNumber(value: string | null | undefined): string {
   return (value ?? '').trim().toUpperCase();
+}
+
+function hasIndependentLifecycleSupport(
+  purchaseId: string,
+  invoiceSourceId: string,
+  links: CorroboratedDocumentLink[],
+  sourceById: Map<string, CorroboratedDocumentSource>,
+): boolean {
+  return links.some((link) => {
+    if (link.purchaseId !== purchaseId || link.sourceEmailId === invoiceSourceId) return false;
+    if (!link.relationType || !LIFECYCLE_RELATIONS.has(link.relationType)) return false;
+    if ((link.confidence ?? 0) < 0.70) return false;
+    const source = sourceById.get(link.sourceEmailId);
+    if (!source || (source.validationStatus !== 'validated' && source.validationStatus !== 'guardrailed')) return false;
+    return source.eventType === link.relationType;
+  });
 }
 
 export function resolveCorroboratedDocumentCandidates(
@@ -60,6 +78,7 @@ export function resolveCorroboratedDocumentCandidates(
   const candidates: CorroboratedDocumentCandidate[] = [];
 
   for (const link of links) {
+    if (link.relationType !== 'invoice_or_receipt' && link.relationType !== 'document') continue;
     const source = sourceById.get(link.sourceEmailId);
     const purchase = purchaseById.get(link.purchaseId);
     if (!source || !purchase) continue;
@@ -68,13 +87,13 @@ export function resolveCorroboratedDocumentCandidates(
     if (source.eventType !== 'invoice_or_receipt') continue;
     if (source.confidence < 0.65 || source.confidence >= 0.85) continue;
     if ((link.confidence ?? 0) < 0.65) continue;
-    if (link.relationType !== 'invoice_or_receipt' && link.relationType !== 'document') continue;
     if (!source.providerMessageId?.trim()) continue;
     if (!source.invoiceNumber?.trim()) continue;
 
     const sourceOrder = normalizeIdentifier(source.orderNumber);
     const purchaseOrder = normalizeIdentifier(purchase.orderNumber);
     if (sourceOrder.length < 6 || sourceOrder !== purchaseOrder) continue;
+    if (!hasIndependentLifecycleSupport(purchase.purchaseId, source.sourceEmailId, links, sourceById)) continue;
 
     const invoiceNumber = source.invoiceNumber.trim();
     const duplicate = documents.some((document) =>
