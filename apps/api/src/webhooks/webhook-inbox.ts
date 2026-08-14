@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
+import { guardNylasMessageWhenAiDisabled } from '../ingestion/deterministic-ai-off-fallback.js';
 import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
 import { preprocessDeterministicLifecycleNylasMessage } from '../ingestion/deterministic-lifecycle-parser.js';
 import { reconcileDeterministicLifecycleStatesForGrant } from '../ingestion/deterministic-lifecycle-state.js';
@@ -32,6 +33,18 @@ export interface WebhookInboxProcessResult {
 
 function safeErrorCode(error: unknown): string {
   return error instanceof Error && error.name ? error.name.slice(0, 80) : 'UnknownError';
+}
+
+function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
+  return {
+    ok: true,
+    status: 'review',
+    ...(sourceEmailId ? { sourceEmailId } : {}),
+    purchaseWrites: 0,
+    shipmentWrites: 0,
+    documentWrites: 0,
+    aiCalls: 0,
+  };
 }
 
 export async function enqueueNylasMessageEvent(input: {
@@ -157,18 +170,30 @@ export async function processWebhookInboxEvent(
       messageId: event.provider_message_id,
     });
 
+    let commerceMatched = false;
     if (!lifecyclePreprocess.matched) {
-      await preprocessDeterministicNylasMessage({
+      const commercePreprocess = await preprocessDeterministicNylasMessage({
         grantId: event.grant_id,
         messageId: event.provider_message_id,
       });
+      commerceMatched = commercePreprocess.matched;
     }
 
-    const pipeline = await processNylasMessage({
-      grantId: event.grant_id,
-      messageId: event.provider_message_id,
-      mode,
-    });
+    const aiOffGuard = !lifecyclePreprocess.matched && !commerceMatched
+      ? await guardNylasMessageWhenAiDisabled({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+        sourceQuery: 'webhook:message.created',
+      })
+      : null;
+
+    const pipeline = aiOffGuard?.guarded
+      ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
+      : await processNylasMessage({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+        mode,
+      });
 
     await reconcileDeterministicLifecycleStatesForGrant(event.grant_id);
 

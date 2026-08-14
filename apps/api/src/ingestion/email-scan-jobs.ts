@@ -1,10 +1,15 @@
+import { env } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import {
   processNylasMessage,
+  type AutomaticPipelineResult,
   type AutomationMode,
 } from '../pipeline/automatic-email-pipeline.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from './automatic-targeted-recovery.js';
+import { guardNylasMessageWhenAiDisabled } from './deterministic-ai-off-fallback.js';
+import { preprocessDeterministicNylasMessage } from './deterministic-commerce-parser.js';
+import { preprocessDeterministicLifecycleNylasMessage } from './deterministic-lifecycle-parser.js';
 import { processEmailForAuditBenchmark } from './email-audit-benchmark.js';
 
 interface EmailScanJobRow {
@@ -55,6 +60,33 @@ function validAuditWindow(value: number): value is 7 | 30 | 90 {
   return value === 7 || value === 30 || value === 90;
 }
 
+function emptyScanResult(): InitialEmailScanResult {
+  return {
+    checked: 0,
+    pages: 0,
+    ignored: 0,
+    unlinked: 0,
+    review: 0,
+    processed: 0,
+    aiCalls: 0,
+    purchaseWrites: 0,
+    shipmentWrites: 0,
+    documentWrites: 0,
+  };
+}
+
+function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
+  return {
+    ok: true,
+    status: 'review',
+    ...(sourceEmailId ? { sourceEmailId } : {}),
+    purchaseWrites: 0,
+    shipmentWrites: 0,
+    documentWrites: 0,
+    aiCalls: 0,
+  };
+}
+
 export async function enqueueInitialEmailScan(input: {
   userId: string;
   emailConnectionId: string;
@@ -81,6 +113,10 @@ export async function enqueueFullAuditEmailScan(input: {
   emailConnectionId: string;
   windowDays?: 7 | 30 | 90;
 }): Promise<string> {
+  if (!env.BUYFLOW_AI_ENABLED) {
+    throw new Error('AI audit is disabled while BuyFlow runs in deterministic-only mode');
+  }
+
   const db = getSupabaseAdmin() as any;
   const windowDays = input.windowDays ?? 30;
   if (!validAuditWindow(windowDays)) {
@@ -166,6 +202,21 @@ export async function processEmailScanJob(
     }
 
     const scanJob = job as EmailScanJobRow;
+
+    if (scanJob.kind === 'audit' && !env.BUYFLOW_AI_ENABLED) {
+      const result = emptyScanResult();
+      const { error: finishDisabledError } = await db.rpc('finish_email_scan_job', {
+        p_id: jobId,
+        p_success: true,
+        p_error_code: null,
+        p_result: { ...result, disabledReason: 'ai_disabled' },
+      });
+      if (finishDisabledError) {
+        throw new Error(`Disabled AI audit completion failed: ${finishDisabledError.message}`);
+      }
+      return { claimed: true, result };
+    }
+
     const { data: connection, error: connectionError } = await db
       .from('email_connections')
       .select('id,user_id,provider,provider_account_id,status')
@@ -216,18 +267,7 @@ export async function processEmailScanJob(
     const effectiveMode: AutomationMode = scanJob.kind === 'audit' ? 'observe' : mode;
     let cursor: string | undefined;
     let pages = 0;
-    const result: InitialEmailScanResult = {
-      checked: 0,
-      pages: 0,
-      ignored: 0,
-      unlinked: 0,
-      review: 0,
-      processed: 0,
-      aiCalls: 0,
-      purchaseWrites: 0,
-      shipmentWrites: 0,
-      documentWrites: 0,
-    };
+    const result = emptyScanResult();
 
     do {
       const page = await provider.searchMessages({
@@ -256,11 +296,35 @@ export async function processEmailScanJob(
           continue;
         }
 
-        const pipeline = await processNylasMessage({
+        const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
           grantId: emailConnection.provider_account_id,
           messageId: email.providerMessageId,
-          mode: effectiveMode,
         });
+
+        let commerceMatched = false;
+        if (!lifecyclePreprocess.matched) {
+          const commercePreprocess = await preprocessDeterministicNylasMessage({
+            grantId: emailConnection.provider_account_id,
+            messageId: email.providerMessageId,
+          });
+          commerceMatched = commercePreprocess.matched;
+        }
+
+        const aiOffGuard = !lifecyclePreprocess.matched && !commerceMatched
+          ? await guardNylasMessageWhenAiDisabled({
+            grantId: emailConnection.provider_account_id,
+            messageId: email.providerMessageId,
+            sourceQuery: `scan:${scanJob.kind}`,
+          })
+          : null;
+
+        const pipeline = aiOffGuard?.guarded
+          ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
+          : await processNylasMessage({
+            grantId: emailConnection.provider_account_id,
+            messageId: email.providerMessageId,
+            mode: effectiveMode,
+          });
 
         if (
           scanJob.kind === 'initial' &&
