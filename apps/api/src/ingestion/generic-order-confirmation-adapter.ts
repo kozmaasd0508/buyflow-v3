@@ -24,7 +24,7 @@ function normalizeDomain(value: string): string {
 function merchantFromDomain(domain: string): string {
   const normalized = normalizeDomain(domain);
   const labels = normalized.split('.');
-  const root = labels.length >= 2 ? labels[labels.length - 2] : normalized;
+  const root = (labels.length >= 2 ? labels[labels.length - 2] : normalized) ?? normalized;
   return root
     .split(/[-_]+/)
     .filter(Boolean)
@@ -42,8 +42,8 @@ const CONFIRMATION_PATTERNS = [
   /\bkoszonjuk (?:a |az )?(?:rendelesed|megrendelesed|rendeleset|megrendeleset)\b/i,
   /\brendeles visszaigazolas\b/i,
   /\bmegrendeles visszaigazolas\b/i,
-  /\bbestellbestaetigung\b/i,
-  /\bvielen dank fuer (?:ihre|deine) bestellung\b/i,
+  /\bbestellbest(?:a|ae)tigung\b/i,
+  /\bvielen dank f(?:u|ue)r (?:ihre|deine) bestellung\b/i,
   /\bwir haben (?:ihre|deine) bestellung erhalten\b/i,
   /\bconfirmation de commande\b/i,
   /\bmerci pour votre commande\b/i,
@@ -57,7 +57,7 @@ const SUBJECT_PATTERNS = [
   /\border #?[a-z0-9][a-z0-9._/-]{2,31} (?:confirmed|received)\b/i,
   /\brendeles(?:i)? visszaigazolas\b/i,
   /\bmegrendeles(?:i)? visszaigazolas\b/i,
-  /\bbestellbestaetigung\b/i,
+  /\bbestellbest(?:a|ae)tigung\b/i,
   /\bconfirmation de commande\b/i,
   /\bconfirmacion de pedido\b/i,
 ];
