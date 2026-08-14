@@ -46,7 +46,6 @@ test('validated invoice plus same-order merchant shipment schedules a 90-day anc
       validationStatus: 'validated',
       eventType: 'shipment',
       invoiceNumber: null,
-      trackingNumber: undefined as never,
       confidence: 0.86,
       receivedAt: '2026-07-15T06:55:18.000Z',
     }),
