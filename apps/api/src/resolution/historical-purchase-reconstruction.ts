@@ -100,6 +100,10 @@ function isTrusted(row: HistoricalReconstructionEvidence): boolean {
   return Boolean(row.validationStatus && TRUSTED_VALIDATION.has(row.validationStatus));
 }
 
+function isUnresolved(row: HistoricalReconstructionEvidence): boolean {
+  return row.processingStatus === 'review' || row.processingStatus === 'unlinked';
+}
+
 export function historicalReconstructionGroupKey(
   row: Pick<HistoricalReconstructionEvidence, 'userId' | 'senderDomain' | 'orderNumber' | 'isCarrierSender'>,
 ): string | null {
@@ -163,8 +167,6 @@ export function resolveHistoricalPurchaseReconstructions(
       continue;
     }
 
-    // If any order-created evidence exists, the normal Review Resolver owns the case.
-    // Historical reconstruction is only for genuinely missing order-confirmation anchors.
     if (merchantRows.some((row) => row.eventType === 'order_created')) continue;
 
     const invoices = merchantRows.filter((row) =>
@@ -192,6 +194,7 @@ export function resolveHistoricalPurchaseReconstructions(
       const matchingCarrierRows = evidenceRows.filter((row) =>
         row.userId === candidateShipment.userId &&
         row.isCarrierSender &&
+        isUnresolved(row) &&
         isTrusted(row) &&
         (row.eventType === 'shipment' || row.eventType === 'delivery') &&
         row.confidence >= MIN_CARRIER_CONFIDENCE &&
@@ -244,7 +247,7 @@ export function resolveHistoricalPurchaseReconstructions(
       'ninety_day_exact_order_search_completed_without_purchase',
       'validated_invoice_matches_merchant_order_identity',
       'merchant_shipment_has_long_tracking_identity',
-      'carrier_sender_confirms_exact_tracking_identity',
+      'unresolved_carrier_sender_confirms_exact_tracking_identity',
       'additional_merchant_lifecycle_event_corroborates_chain',
       'no_order_created_source_exists',
     ];

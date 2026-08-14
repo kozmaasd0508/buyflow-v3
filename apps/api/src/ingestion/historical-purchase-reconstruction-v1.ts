@@ -318,6 +318,17 @@ export async function drainHistoricalPurchaseReconstructionV1(
           }
         }
 
+        if (candidate.carrierProofSourceEmailIds.length > 0) {
+          const { error: carrierStatusError } = await db
+            .from('source_emails')
+            .update({ processing_status: 'unlinked', processed_at: null })
+            .in('id', candidate.carrierProofSourceEmailIds)
+            .in('processing_status', ['review', 'unlinked']);
+          if (carrierStatusError) {
+            throw new Error(`Historical Reconstruction V1 carrier proof requeue failed: ${carrierStatusError.message}`);
+          }
+        }
+
         result.created += 1;
         result.resolvedSources += sourceIds.length;
         result.carrierProofSources += candidate.carrierProofSourceEmailIds.length;
