@@ -1,0 +1,45 @@
+.bottom-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.nav-item[data-route="flow"] {
+  display: none !important;
+}
+
+.deterministic-mode-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 14px;
+  padding: 13px 14px;
+  border: 1px solid rgba(85, 215, 165, 0.18);
+  border-radius: 15px;
+  background: rgba(34, 121, 91, 0.12);
+  color: #d8f7ea;
+}
+
+.deterministic-mode-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #55d7a5;
+  box-shadow: 0 0 0 5px rgba(85, 215, 165, 0.08);
+}
+
+.deterministic-mode-note strong,
+.deterministic-mode-note span {
+  display: block;
+}
+
+.deterministic-mode-note strong {
+  font-size: 11px;
+}
+
+.deterministic-mode-note div > span {
+  margin-top: 4px;
+  color: #a9cdbf;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
