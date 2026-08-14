@@ -14,6 +14,10 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
+.buyflow-product-card.is-busy {
+  opacity: 0.72;
+}
+
 .buyflow-product-media {
   width: 68px;
   height: 68px;
@@ -113,6 +117,118 @@
   text-decoration: underline;
 }
 
+.buyflow-product-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.buyflow-product-action,
+.buyflow-product-edit-cancel,
+.buyflow-product-edit-save {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid rgba(142, 218, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(101, 183, 255, 0.08);
+  color: #dff6ff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.buyflow-product-action.danger {
+  border-color: rgba(255, 129, 159, 0.16);
+  background: rgba(255, 84, 126, 0.07);
+  color: #ffb5c7;
+}
+
+.buyflow-product-action:disabled,
+.buyflow-product-edit-cancel:disabled,
+.buyflow-product-edit-save:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.buyflow-product-edit-form {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(4, 9, 21, 0.5);
+}
+
+.buyflow-product-edit-form[hidden] {
+  display: none;
+}
+
+.buyflow-product-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.buyflow-product-edit-field {
+  display: grid;
+  gap: 5px;
+}
+
+.buyflow-product-edit-field span {
+  color: rgba(225, 236, 249, 0.62);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.buyflow-product-edit-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  outline: none;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #f7fbff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.buyflow-product-edit-field input:focus {
+  border-color: rgba(105, 218, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(91, 205, 255, 0.08);
+}
+
+.buyflow-product-edit-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.buyflow-product-edit-save {
+  background: rgba(91, 205, 255, 0.16);
+  border-color: rgba(91, 205, 255, 0.28);
+  color: #e7faff;
+}
+
+.buyflow-product-message {
+  min-height: 0;
+  margin: 0;
+  color: rgba(199, 235, 255, 0.72);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.buyflow-product-message:empty {
+  display: none;
+}
+
+.buyflow-product-message.is-error {
+  color: #ffb5c7;
+}
+
 @media (max-width: 420px) {
   .buyflow-product-card {
     grid-template-columns: 56px minmax(0, 1fr);
@@ -122,5 +238,9 @@
     width: 56px;
     height: 56px;
     border-radius: 14px;
+  }
+
+  .buyflow-product-edit-grid {
+    grid-template-columns: 1fr;
   }
 }
