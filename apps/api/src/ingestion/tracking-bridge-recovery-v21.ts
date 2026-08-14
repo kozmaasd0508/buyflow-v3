@@ -166,7 +166,7 @@ export async function drainTrackingBridgeRecoveryV21(
     .not('validated_result', 'is', null)
     .order('received_at', { ascending: true })
     .limit(Math.min(Math.max(limit, 1), 500));
-  if (sourceError) throw new Error(`Tracking bridge V2.1 source read failed: ${sourceError.message}`);
+  if (sourceError) throw new Error(`Tracking bridge V2.2 source read failed: ${sourceError.message}`);
 
   const sourceRows = (sourceData ?? []) as SourceRow[];
   const evidence = sourceRows
@@ -192,7 +192,7 @@ export async function drainTrackingBridgeRecoveryV21(
       .from('purchases')
       .select('id,user_id,expected_carrier')
       .eq('user_id', userId);
-    if (purchaseError) throw new Error(`Tracking bridge V2.1 purchase read failed: ${purchaseError.message}`);
+    if (purchaseError) throw new Error(`Tracking bridge V2.2 purchase read failed: ${purchaseError.message}`);
     const purchaseRows = (purchaseData ?? []) as PurchaseRow[];
     if (purchaseRows.length === 0) continue;
 
@@ -207,7 +207,7 @@ export async function drainTrackingBridgeRecoveryV21(
       .from('shipments')
       .select('purchase_id,user_id,carrier_slug,tracking_number')
       .eq('user_id', userId);
-    if (shipmentError) throw new Error(`Tracking bridge V2.1 shipment read failed: ${shipmentError.message}`);
+    if (shipmentError) throw new Error(`Tracking bridge V2.2 shipment read failed: ${shipmentError.message}`);
     const shipments: TrackingBridgeExistingShipment[] = ((shipmentData ?? []) as ShipmentRow[]).map((row) => ({
       purchaseId: row.purchase_id,
       userId: row.user_id,
@@ -219,7 +219,7 @@ export async function drainTrackingBridgeRecoveryV21(
       .from('purchase_sources')
       .select('purchase_id,source_email_id')
       .in('purchase_id', purchaseIds);
-    if (linkError) throw new Error(`Tracking bridge V2.1 source-link read failed: ${linkError.message}`);
+    if (linkError) throw new Error(`Tracking bridge V2.2 source-link read failed: ${linkError.message}`);
     const links = (linkData ?? []) as PurchaseSourceRow[];
     const sourceIds = [...new Set(links.map((row) => row.source_email_id))];
 
@@ -229,7 +229,7 @@ export async function drainTrackingBridgeRecoveryV21(
         .from('source_emails')
         .select('id,user_id,from_address,received_at,validation_status,validated_result')
         .in('id', sourceIds);
-      if (anchorSourceError) throw new Error(`Tracking bridge V2.1 anchor read failed: ${anchorSourceError.message}`);
+      if (anchorSourceError) throw new Error(`Tracking bridge V2.2 anchor read failed: ${anchorSourceError.message}`);
       const anchorSources = (anchorSourceData ?? []) as SourceRow[];
       const sourceById = new Map(anchorSources.map((row) => [row.id, row]));
       for (const link of links) {
@@ -251,7 +251,7 @@ export async function drainTrackingBridgeRecoveryV21(
             .from('source_emails')
             .update({ processing_status: 'review' })
             .in('id', candidate.sourceEmailIds);
-          if (error) throw new Error(`Tracking bridge V2.1 review update failed: ${error.message}`);
+          if (error) throw new Error(`Tracking bridge V2.2 review update failed: ${error.message}`);
         }
         continue;
       }
@@ -262,7 +262,10 @@ export async function drainTrackingBridgeRecoveryV21(
       }
 
       const clusterEvidence = userEvidence.filter((row) => candidate.sourceEmailIds.includes(row.sourceEmailId));
-      if (clusterEvidence.length === 0) {
+      const proofShipmentEvidence = clusterEvidence.filter(
+        (row) => candidate.shipmentProofSourceEmailIds.includes(row.sourceEmailId),
+      );
+      if (clusterEvidence.length === 0 || proofShipmentEvidence.length === 0) {
         result.failedClusters += 1;
         continue;
       }
@@ -275,10 +278,11 @@ export async function drainTrackingBridgeRecoveryV21(
 
       try {
         const deliveredRows = clusterEvidence.filter((row) => row.eventType === 'delivery');
-        const shippedAt = earliest(clusterEvidence);
+        const shippedAt = earliest(proofShipmentEvidence);
         const carrierDeliveredAt = earliest(deliveredRows);
         const carrierLastEventAt = latest(clusterEvidence);
-        const primary = clusterEvidence[0];
+        const primary = [...proofShipmentEvidence]
+          .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0];
         if (!primary || !shippedAt || !carrierLastEventAt) throw new Error('tracking bridge timestamps are incomplete');
 
         const merchantDeliveredAt = candidate.reasons.includes('merchant_delivery_corroborates_bridge')
@@ -304,13 +308,13 @@ export async function drainTrackingBridgeRecoveryV21(
             confidence: row.confidence,
           })),
         });
-        if (upsertError) throw new Error(`Tracking bridge V2.1 shipment upsert failed: ${upsertError.message}`);
+        if (upsertError) throw new Error(`Tracking bridge V2.2 shipment upsert failed: ${upsertError.message}`);
 
         const { error: statusError } = await db
           .from('source_emails')
           .update({ processing_status: 'processed' })
           .in('id', candidate.sourceEmailIds);
-        if (statusError) throw new Error(`Tracking bridge V2.1 source status failed: ${statusError.message}`);
+        if (statusError) throw new Error(`Tracking bridge V2.2 source status failed: ${statusError.message}`);
 
         result.linkedClusters += 1;
         result.linkedSources += clusterEvidence.length;

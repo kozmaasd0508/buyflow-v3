@@ -63,6 +63,7 @@ test('explicit merchant carrier plus close shipment anchor safely bridges FNP-st
   assert.equal(candidate.decision, 'linkable');
   assert.equal(candidate.purchaseId, 'purchase-1');
   assert.equal(candidate.trackingNumber, '650925031807000013605231');
+  assert.deepEqual(candidate.shipmentProofSourceEmailIds, ['carrier-1']);
   assert.ok(candidate.reasons.includes('merchant_shipment_names_same_carrier'));
 });
 
@@ -93,6 +94,71 @@ test('expected carrier plus merchant delivery corroboration bridges GLS-style ch
   assert.equal(candidate.decision, 'linkable');
   assert.equal(candidate.purchaseId, 'purchase-1');
   assert.ok(candidate.reasons.includes('merchant_delivery_corroborates_bridge'));
+});
+
+test('later carrier shipment proves a cluster even when carrier pre-advice arrived before merchant shipment', () => {
+  const [candidate] = resolveTrackingBridgeCandidates(
+    [purchase({ expectedCarrier: 'DPD' })],
+    [],
+    [anchor({
+      sourceEmailId: 'sinsay-shipped',
+      carrier: 'DPD Futárszolgálat',
+      confidence: 0.82,
+      receivedAt: '2026-08-04T13:56:39.000Z',
+    })],
+    [
+      evidence({
+        sourceEmailId: 'dpd-preadvice',
+        trackingNumber: '16380143879559',
+        carrier: 'DPD',
+        confidence: 0.90,
+        receivedAt: '2026-08-03T18:08:05.000Z',
+      }),
+      evidence({
+        sourceEmailId: 'dpd-shipped',
+        trackingNumber: '16380143879559',
+        carrier: 'DPD',
+        confidence: 0.93,
+        receivedAt: '2026-08-05T16:05:32.000Z',
+      }),
+      evidence({
+        sourceEmailId: 'dpd-delivered',
+        eventType: 'delivery',
+        trackingNumber: '16380143879559',
+        carrier: 'DPD',
+        confidence: 0.97,
+        receivedAt: '2026-08-06T07:04:14.000Z',
+      }),
+    ],
+  );
+
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'linkable');
+  assert.equal(candidate.purchaseId, 'purchase-1');
+  assert.ok(candidate.sourceEmailIds.includes('dpd-preadvice'));
+  assert.deepEqual(candidate.shipmentProofSourceEmailIds, ['dpd-shipped']);
+  assert.ok(candidate.reasons.includes('trusted_merchant_shipment_precedes_cluster_carrier_event'));
+});
+
+test('early pre-advice alone cannot prove a tracking bridge', () => {
+  const [candidate] = resolveTrackingBridgeCandidates(
+    [purchase({ expectedCarrier: 'DPD' })],
+    [],
+    [anchor({
+      carrier: 'DPD',
+      confidence: 0.82,
+      receivedAt: '2026-08-04T13:56:39.000Z',
+    })],
+    [evidence({
+      trackingNumber: '16380143879559',
+      carrier: 'DPD',
+      confidence: 0.93,
+      receivedAt: '2026-08-03T18:08:05.000Z',
+    })],
+  );
+
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'unmatched');
 });
 
 test('short carrier reference numbers are not treated as tracking identities', () => {
