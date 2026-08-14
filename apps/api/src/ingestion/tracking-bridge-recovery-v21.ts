@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { isTrustedAutomaticEvidence } from '../pipeline/automatic-write-gate.js';
 import {
+  normalizeCarrierBridgeEventType,
   resolveTrackingBridgeCandidates,
   type TrackingBridgeEvidence,
   type TrackingBridgeExistingShipment,
@@ -84,11 +85,15 @@ function carrierConsignor(subject: string | null, carrier: string | null): strin
 function toBridgeEvidence(source: SourceRow): TrackingBridgeEvidence | null {
   const result = source.validated_result;
   if (!result || !isTrustedAutomaticEvidence(source.validation_status, result)) return null;
-  const eventType = result.event_type;
-  if (eventType !== 'shipment' && eventType !== 'delivery') return null;
+  const extractedEventType = result.event_type;
+  if (extractedEventType !== 'shipment' && extractedEventType !== 'delivery') return null;
   const confidence = numericOrNull(result.confidence);
   if (confidence === null) return null;
   const carrier = stringOrNull(result.carrier);
+  const domain = senderDomain(source.from_address);
+  const eventType = isCarrierSenderDomain(domain)
+    ? normalizeCarrierBridgeEventType(source.subject, extractedEventType)
+    : extractedEventType;
 
   return {
     sourceEmailId: source.id,
