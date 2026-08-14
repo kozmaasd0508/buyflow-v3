@@ -109,7 +109,7 @@ test('reconstructs GymBeam 3010228912 only after negative 90-day anchor search p
 
 test('reconstructs GymBeam 3010206178 with invoice shipment delivery and exact carrier tracking', () => {
   const rows: HistoricalReconstructionEvidence[] = [
-    evidence({ orderNumber: '3010206178', invoiceNumber: '4008874475', confidence: 0.78 }),
+    evidence({ orderNumber: '3010206178', confidence: 0.78 }),
     evidence({
       sourceEmailId: 'merchant-shipment-2',
       orderNumber: '3010206178',
