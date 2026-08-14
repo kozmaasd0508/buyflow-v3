@@ -6,6 +6,8 @@ export interface TrackingBridgePurchase {
   purchaseId: string;
   userId: string;
   expectedCarrier: string | null;
+  merchantName: string | null;
+  merchantLegalName: string | null;
 }
 
 export interface TrackingBridgeExistingShipment {
@@ -31,6 +33,7 @@ export interface TrackingBridgeEvidence {
   eventType: TrackingBridgeEventType;
   trackingNumber: string | null;
   carrier: string | null;
+  consignor: string | null;
   confidence: number;
   receivedAt: string;
 }
@@ -57,6 +60,23 @@ const MIN_ANCHOR_CONFIDENCE = 0.8;
 
 function normalizeTracking(value: string | null | undefined): string {
   return (value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function normalizeParty(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function partyLooksSame(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = normalizeParty(a);
+  const right = normalizeParty(b);
+  if (!left || !right) return false;
+  return left === right || (left.length >= 5 && right.length >= 5 && (left.includes(right) || right.includes(left)));
 }
 
 function instant(value: string): number | null {
@@ -142,6 +162,7 @@ export function resolveTrackingBridgeCandidates(
       continue;
     }
 
+    const clusterConsignors = [...new Set(sorted.map((row) => row.consignor).filter((value): value is string => Boolean(value)))];
     const carrierShipmentRows = sorted.filter((row) => row.eventType === 'shipment');
     const candidatePurchases: Array<{
       purchaseId: string;
@@ -153,6 +174,14 @@ export function resolveTrackingBridgeCandidates(
       if (purchase.userId !== first.userId) continue;
       if (hasConflictingExistingTracking(purchase, carrierSlug, trackingNumber, shipments)) continue;
 
+      let consignorMatch = false;
+      if (clusterConsignors.length > 0) {
+        consignorMatch = clusterConsignors.some((consignor) =>
+          partyLooksSame(consignor, purchase.merchantLegalName) || partyLooksSame(consignor, purchase.merchantName),
+        );
+        if (!consignorMatch) continue;
+      }
+
       const purchaseAnchors = anchors.filter(
         (anchor) =>
           anchor.userId === first.userId &&
@@ -160,10 +189,6 @@ export function resolveTrackingBridgeCandidates(
           anchor.confidence >= MIN_ANCHOR_CONFIDENCE,
       );
 
-      // V2.2 evaluates the whole tracking cluster, not only its first event.
-      // A carrier may send pre-advice before the merchant's final "shipped" email.
-      // The cluster becomes linkable only when a later carrier shipment event with
-      // the exact same tracking identity follows a trusted merchant shipment anchor.
       const shipmentAnchors = purchaseAnchors.filter((anchor) =>
         anchor.eventType === 'shipment' &&
         carrierShipmentRows.some((row) => followsWithinBridgeWindow(row.receivedAt, anchor.receivedAt)),
@@ -187,10 +212,6 @@ export function resolveTrackingBridgeCandidates(
 
       if (!expectedCarrierMatch && !explicitShipmentCarrierMatch) continue;
 
-      // There are two safe bridge shapes:
-      // 1) the merchant's own shipment email explicitly names the same carrier; or
-      // 2) the purchase expected that carrier and merchant lifecycle evidence brackets
-      //    the carrier observation (shipment before, delivery after).
       const strongBridge = explicitShipmentCarrierMatch || (expectedCarrierMatch && deliveryAnchors.length > 0);
       if (!strongBridge) continue;
 
@@ -198,6 +219,7 @@ export function resolveTrackingBridgeCandidates(
       if (expectedCarrierMatch) purchaseReasons.push('purchase_expected_carrier_matches');
       if (explicitShipmentCarrierMatch) purchaseReasons.push('merchant_shipment_names_same_carrier');
       if (deliveryAnchors.length > 0) purchaseReasons.push('merchant_delivery_corroborates_bridge');
+      if (consignorMatch) purchaseReasons.push('carrier_consignor_matches_purchase_merchant');
       candidatePurchases.push({
         purchaseId: purchase.purchaseId,
         reasons: purchaseReasons,
