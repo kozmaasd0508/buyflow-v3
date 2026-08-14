@@ -9,6 +9,7 @@ import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.j
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
+import { drainInvoiceAnchorRecoveryV1 } from './ingestion/invoice-anchor-recovery-v1.js';
 import { drainPendingAuditBackfillV1 } from './ingestion/pending-audit-backfill-v1.js';
 import { drainReviewResolverV3 } from './ingestion/review-resolver-v3.js';
 import { drainTrackingBridgeRecoveryV21 } from './ingestion/tracking-bridge-recovery-v21.js';
@@ -151,6 +152,23 @@ async function runRecovery() {
   } catch (error) {
     webhookStats.recoveryFailed += 1;
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Webhook inbox recovery scan failed');
+  }
+
+  try {
+    const result = await drainInvoiceAnchorRecoveryV1(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.scheduled > 0 || result.deduped > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        plans: result.plans,
+        scheduled: result.scheduled,
+        deduped: result.deduped,
+        failed: result.failed,
+        aiCalls: result.aiCalls,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Invoice Anchor Recovery V1 completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Invoice Anchor Recovery V1 failed');
   }
 
   try {
