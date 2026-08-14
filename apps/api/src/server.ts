@@ -9,6 +9,7 @@ import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.j
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
+import { drainPendingAuditBackfillV1 } from './ingestion/pending-audit-backfill-v1.js';
 import { drainTrackingBridgeRecoveryV21 } from './ingestion/tracking-bridge-recovery-v21.js';
 import { drainUnlinkedRecoveryV2 } from './ingestion/unlinked-recovery-v2.js';
 import { registerWebPreview } from './web-preview.js';
@@ -162,6 +163,31 @@ async function runRecovery() {
   } catch (error) {
     webhookStats.emailScanRecoveryFailed += 1;
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Email scan recovery scan failed');
+  }
+
+  try {
+    const result = await drainPendingAuditBackfillV1(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.scanned > 0 || result.healed > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        materialized: result.materialized,
+        ignored: result.ignored,
+        review: result.review,
+        routed: result.routed,
+        processed: result.processed,
+        unlinked: result.unlinked,
+        healed: result.healed,
+        invalid: result.invalid,
+        failed: result.failed,
+        aiCalls: result.aiCalls,
+        purchaseWrites: result.purchaseWrites,
+        shipmentWrites: result.shipmentWrites,
+        documentWrites: result.documentWrites,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Pending audit backfill V1 completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Pending audit backfill V1 failed');
   }
 
   try {
