@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  isPublicMailboxSenderDomain,
   isSharedPlatformSenderDomain,
   parseGenericOrderConfirmationEmail,
 } from './generic-order-confirmation-adapter.js';
@@ -113,4 +114,28 @@ test('holds Squarespace default shared sender for review until merchant identity
     ].join('\n'),
   });
   assert.equal(parsed, null);
+});
+
+test('holds rich Gmail order-looking messages instead of inventing Gmail as the merchant', () => {
+  assert.equal(isPublicMailboxSenderDomain('gmail.com'), true);
+  const parsed = parseGenericOrderConfirmationEmail({
+    senderDomains: ['gmail.com'],
+    subject: 'Rendelés visszaigazolás - rendelés száma BF-TEST-003',
+    bodyText: [
+      'Köszönjük a rendelésed!',
+      'Rendelésszám: BF-TEST-003',
+      'Rendelés részletei',
+      'Teszt termék | Mennyiség 1 | 26 390 Ft',
+      'Végösszeg: 26 390 Ft',
+      'Fizetési mód: bankkártya',
+      'Szállítási mód: futár',
+    ].join('\n'),
+  });
+  assert.equal(parsed, null);
+});
+
+test('treats common Hungarian public mailbox providers as non-merchant sender identity', () => {
+  for (const domain of ['freemail.hu', 'citromail.hu', 'indamail.hu']) {
+    assert.equal(isPublicMailboxSenderDomain(domain), true);
+  }
 });
