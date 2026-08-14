@@ -35,6 +35,18 @@ function safeErrorCode(error: unknown): string {
   return error instanceof Error && error.name ? error.name.slice(0, 80) : 'UnknownError';
 }
 
+function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
+  return {
+    ok: true,
+    status: 'review',
+    ...(sourceEmailId ? { sourceEmailId } : {}),
+    purchaseWrites: 0,
+    shipmentWrites: 0,
+    documentWrites: 0,
+    aiCalls: 0,
+  };
+}
+
 export async function enqueueNylasMessageEvent(input: {
   grantId: string;
   messageId: string;
@@ -167,19 +179,21 @@ export async function processWebhookInboxEvent(
       commerceMatched = commercePreprocess.matched;
     }
 
-    if (!lifecyclePreprocess.matched && !commerceMatched) {
-      await guardNylasMessageWhenAiDisabled({
+    const aiOffGuard = !lifecyclePreprocess.matched && !commerceMatched
+      ? await guardNylasMessageWhenAiDisabled({
         grantId: event.grant_id,
         messageId: event.provider_message_id,
         sourceQuery: 'webhook:message.created',
-      });
-    }
+      })
+      : null;
 
-    const pipeline = await processNylasMessage({
-      grantId: event.grant_id,
-      messageId: event.provider_message_id,
-      mode,
-    });
+    const pipeline = aiOffGuard?.guarded
+      ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
+      : await processNylasMessage({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+        mode,
+      });
 
     await reconcileDeterministicLifecycleStatesForGrant(event.grant_id);
 
