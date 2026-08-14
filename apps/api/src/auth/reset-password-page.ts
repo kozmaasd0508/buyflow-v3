@@ -8,6 +8,7 @@ export function passwordResetPageHtml(): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
   <title>BuyFlow – Új jelszó</title>
   <style>
     :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#111827; background:#f3f5f9; }
@@ -23,6 +24,7 @@ export function passwordResetPageHtml(): string {
     label { display:grid; gap:7px; color:#374151; font-size:13px; font-weight:700; }
     input { min-height:50px; width:100%; border:1px solid #dbe0ea; border-radius:14px; padding:0 14px; font:inherit; }
     input:focus { outline:3px solid rgba(79,70,229,.18); border-color:#818cf8; }
+    .password-hint { margin:-5px 0 0; color:#6b7280; font-size:12px; line-height:1.45; }
     button { min-height:52px; border:0; border-radius:14px; cursor:pointer; background:linear-gradient(135deg,#111827,#4338ca); color:#fff; font:inherit; font-weight:800; box-shadow:0 14px 28px rgba(67,56,202,.18); }
     button:disabled { opacity:.58; cursor:default; }
     .status { display:none; margin-top:16px; padding:12px 14px; border-radius:14px; font-size:13px; line-height:1.45; }
@@ -41,21 +43,22 @@ export function passwordResetPageHtml(): string {
       </div>
     </div>
 
-    <p id="intro">Adj meg egy új jelszót a BuyFlow-fiókodhoz.</p>
+    <p id="intro">Adj meg egy új, erős jelszót a BuyFlow-fiókodhoz.</p>
 
     <form id="reset-form" class="hidden">
       <label>
         <span>Új jelszó</span>
-        <input id="password" type="password" autocomplete="new-password" minlength="8" required />
+        <input id="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="password-hint" required />
       </label>
+      <p id="password-hint" class="password-hint">Legalább 12 karakter, kis- és nagybetű, szám és speciális karakter.</p>
       <label>
         <span>Új jelszó még egyszer</span>
-        <input id="password-confirm" type="password" autocomplete="new-password" minlength="8" required />
+        <input id="password-confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
       </label>
       <button id="submit-button" type="submit">Jelszó mentése</button>
     </form>
 
-    <div id="status" class="status"></div>
+    <div id="status" class="status" aria-live="polite"></div>
   </main>
 
   <script>
@@ -70,9 +73,25 @@ export function passwordResetPageHtml(): string {
     const accessToken = hash.get('access_token');
     const recoveryType = hash.get('type');
 
+    // The recovery JWT is sensitive. Keep it only in memory after the page has loaded,
+    // and remove it from the visible URL immediately rather than waiting for success.
+    if (location.hash) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+
     function showStatus(message, kind) {
       status.textContent = message;
       status.className = 'status ' + kind;
+    }
+
+    function passwordPolicyError(password) {
+      if (password.length < 12) return 'Az új jelszó legyen legalább 12 karakter hosszú.';
+      if (password.length > 128) return 'Az új jelszó legfeljebb 128 karakter lehet.';
+      if (!/[a-z]/.test(password)) return 'Az új jelszó tartalmazzon legalább egy kisbetűt.';
+      if (!/[A-Z]/.test(password)) return 'Az új jelszó tartalmazzon legalább egy nagybetűt.';
+      if (!/[0-9]/.test(password)) return 'Az új jelszó tartalmazzon legalább egy számot.';
+      if (!/[^A-Za-z0-9]/.test(password)) return 'Az új jelszó tartalmazzon legalább egy speciális karaktert.';
+      return null;
     }
 
     if (!accessToken || recoveryType !== 'recovery') {
@@ -88,9 +107,10 @@ export function passwordResetPageHtml(): string {
 
       const password = document.getElementById('password').value;
       const confirmation = document.getElementById('password-confirm').value;
+      const policyError = passwordPolicyError(password);
 
-      if (password.length < 8) {
-        showStatus('Az új jelszó legyen legalább 8 karakter hosszú.', 'error');
+      if (policyError) {
+        showStatus(policyError, 'error');
         return;
       }
       if (password !== confirmation) {
@@ -113,14 +133,25 @@ export function passwordResetPageHtml(): string {
         });
 
         if (!response.ok) {
-          showStatus('A link lejárt vagy nem érvényes. Kérj új jelszó-visszaállító emailt.', 'error');
+          let errorCode = '';
+          try {
+            const errorBody = await response.json();
+            errorCode = typeof errorBody?.code === 'string' ? errorBody.code : '';
+          } catch {
+            errorCode = '';
+          }
+
+          if (errorCode === 'weak_password') {
+            showStatus('A Supabase biztonsági ellenőrzése ezt a jelszót túl gyengének vagy ismertnek találta. Válassz másik, egyedi jelszót.', 'error');
+          } else {
+            showStatus('A link lejárt vagy nem érvényes. Kérj új jelszó-visszaállító emailt.', 'error');
+          }
           return;
         }
 
         form.classList.add('hidden');
         intro.textContent = 'Kész.';
         showStatus('Az új jelszavad elmentve. Most visszaléphetsz a BuyFlow alkalmazásba és bejelentkezhetsz vele.', 'ok');
-        history.replaceState(null, '', location.pathname);
       } catch {
         showStatus('Nem sikerült kapcsolódni a szerverhez. Próbáld újra.', 'error');
       } finally {
