@@ -35,15 +35,29 @@ test('rejects multiple create candidates', () => {
         candidate(),
         candidate({ key: 'user-1::shop.example.com::order-2', orderNumber: 'ORDER-2' }),
       ]),
-    /exactly one create candidate/,
+    /exactly one corroborated candidate/,
   );
 });
 
 test('rejects a direct candidate for the first controlled write', () => {
   assert.throws(
     () => selectControlledPurchaseCandidate([candidate({ decision: 'create_direct' })]),
-    /must be corroborated/,
+    /exactly one corroborated candidate/,
   );
+});
+
+test('ignores direct candidates when exactly one corroborated candidate exists', () => {
+  const corroborated = candidate();
+  const selected = selectControlledPurchaseCandidate([
+    candidate({
+      key: 'user-1::shop.example.com::direct-order',
+      orderNumber: 'DIRECT-ORDER',
+      decision: 'create_direct',
+    }),
+    corroborated,
+  ]);
+
+  assert.equal(selected, corroborated);
 });
 
 test('rejects insufficient corroboration', () => {
