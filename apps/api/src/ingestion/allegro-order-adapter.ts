@@ -166,8 +166,9 @@ function extractShipping(body: string): { method: string | null; amount: number 
       : /\bPACKETA\b/i.test(normalized) ? 'Packeta'
         : null;
 
-  const shippingMatch = normalized.match(/\bFutar\b([\s\S]{0,260}?)([0-9][0-9 .,'’]{0,20})\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)\b/i);
-  const shippingAmount = shippingMatch?.[2] ? money(shippingMatch[2]) : null;
+  const shippingSection = normalized.match(/\bFutar\b[\s\S]{0,260}/i)?.[0] ?? '';
+  const shippingPriceMatch = shippingSection.match(/(?:^|\s)([0-9]{1,3}(?:[ .][0-9]{3})*(?:,[0-9]{2})?|[0-9]+(?:[.,][0-9]{2})?)\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)\b/i);
+  const shippingAmount = shippingPriceMatch?.[1] ? money(shippingPriceMatch[1]) : null;
   const cod = /\bFutar\s+utanvet\b/i.test(normalized);
   const method = carrier ? `Futár${cod ? ' utánvét' : ''}, ${carrier}` : (cod ? 'Futár utánvét' : null);
   return { method, amount: shippingAmount, carrier };
