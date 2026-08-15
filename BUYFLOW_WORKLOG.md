@@ -2,6 +2,19 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Scitec / BioTechUSA / Foxpost deterministic completion
+
+- PR #65 / main `053d4e1190b6bc8fd35f1c00932508c7b473dc8c`: generic order parser v1.2 now accepts safe Hungarian `Rendelés: #...` identities and the real `Köszönjük megrendelésedet` confirmation form; stale #58 closed as superseded.
+- Live Scitec `1783-975-87-395`: 1 checked / 1 processed / 1 Purchase write / 0 review / 0 unlinked / AI 0; total 16,780 HUF, confidence 0.95.
+- PR #66 / main `3d73da6a1e42410955d28bca1e54024538c0b092`: narrow verified-brand COD carrier fallback for explicit `scitec.hu` + BioTechUSA Kft. + Foxpost identity. Requires >=2 carrier sources, exact COD+currency, <=7 days, confidence >=0.95 and one Purchase candidate; generic carrier-only guessing remains blocked.
+- Live tracking `CLFOX178401889449819` linked to exactly one Scitec Purchase/Shipment and advanced to `ready_for_pickup`; no delivered state.
+- PR #67 / main runtime `ce759ed001c6f52dcb84cf2b56f431d3da2972ab`: Foxpost parser v1.1 accepts the trusted generic `Csomagod azonosítószáma: CLFOX...` label used by the warehouse-arrival email; strict Foxpost sender, parcel-sender and lifecycle gates remain.
+- PR #65, #66, #67 PR CI and main CI passed; #67 main CI was #405.
+- Final live tracking rerun: 3 checked / 3 processed / 0 review / 0 unlinked / AI 0. All three Foxpost stages are linked to the same Purchase.
+- Final Shipment status `ready_for_pickup`; `shipped_at=2026-07-14 17:33:28+00` from first explicit physical warehouse arrival; `last_event_at=2026-07-15 09:55:07+00`; delivered_at null.
+- Historical AI run count remains 98. Live unresolved counts after completion: review 28, unlinked 13.
+- Literal exact Render `/health` commit-SHA verification remains unavailable in the current tool environment; functional live worker behavior proves the new logic is active but exact SHA smoke is still a separate check.
+
 ## 2026-08-15 — Gate.shop / Foxpost ready-for-pickup completion
 
 - PR #62 merged to main as `0505fe96c872f7d6bd20c775838305035ba08b45`.
@@ -36,8 +49,14 @@
 - Allegro merchant mail uses exact purchase-history UUID + carrier tracking; DPD relay messages never invent order IDs.
 - `delivery today` remains out_for_delivery; only explicit successful completion becomes delivered.
 - HappyBox24 Purchase UUID `3fe09c80-8d79-11f1-b193-cf13a29b46f5` now has exactly one DPD shipment, tracking `13169408547018`, with five lifecycle sources processed/linked.
-- PR #55 / main `1f8c19d4dcf1ca80f09cc10a99946d4a836fd8ea`: added `allegro-sales-document-v1` so invoice/document identity wins over incidental delivered wording.
-- Verified PDF invoice `I/00005/08/26`, internal seller order `46181083`, total 5,675 HUF, shipping 1,990 HUF, products 1,830 + 1,855 HUF; exactly one document linked.
+- PR #55 / main `1f8c19d4dcf1ca80f09cc10a99946d4a836fd8ea`: added `allegro-sales-document-v1` so document identity wins over incidental “package arrived” wording.
+- Verified seller invoice:
+  - invoice `I/00005/08/26`
+  - seller internal order `46181083`
+  - total 5,675 HUF
+  - shipping 1,990 HUF
+  - product prices 1,830 + 1,855 HUF
+  - exactly 1 invoice document linked to HappyBox24 Purchase.
 - AI 0; CI/main CI/exact Render smoke passed.
 
 ## 2026-08-15 — Promotional / repurchase hard-negative
