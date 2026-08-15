@@ -1,4 +1,4 @@
-import { isCarrierSenderDomain } from '../validation/email-extraction-validator.js';
+import { isCarrierSenderDomain, isPublicMailboxSenderDomain } from '../email/sender-role.js';
 
 export type ResolutionEventType =
   | 'order_created'
@@ -91,6 +91,7 @@ export function resolvePurchaseCandidates(
     const senderDomain = normalizeDomain(sorted[0]?.senderDomain ?? '');
     const orderNumber = sorted[0]?.orderNumber?.trim() ?? '';
     const carrierSender = isCarrierSenderDomain(senderDomain);
+    const publicMailboxSender = isPublicMailboxSenderDomain(senderDomain);
     const orderCreated = sorted.filter(
       (row) => row.eventType === 'order_created' && !carrierSender,
     );
@@ -110,6 +111,9 @@ export function resolvePurchaseCandidates(
     if (carrierSender) {
       decision = 'lifecycle_only';
       reasons.push('carrier_domain_never_creates_purchase');
+    } else if (publicMailboxSender) {
+      decision = 'review';
+      reasons.push('public_mailbox_requires_verified_merchant_identity');
     } else if (!strongestOrder) {
       decision = 'lifecycle_only';
       reasons.push('no_order_created_evidence');
