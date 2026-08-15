@@ -33,6 +33,25 @@ interface EmailConnection {
 
 type ScanWindowDays = 7 | 30 | 90;
 
+interface ApiErrorPayload {
+  error?: string;
+  stage?: string;
+}
+
+class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly stage: string | null;
+
+  constructor(status: number, payload: ApiErrorPayload | null) {
+    super(`API_${status}`);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.code = payload?.error ?? null;
+    this.stage = payload?.stage ?? null;
+  }
+}
+
 let oauthResult = new URLSearchParams(window.location.search).get('gmail');
 let autoOpenedOauthResult = false;
 let runningScan: { connectionId: string; windowDays: ScanWindowDays } | null = null;
@@ -82,16 +101,26 @@ function scanClass(status: string | null | undefined): string {
   return 'neutral';
 }
 
-async function accessToken(): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error('SESSION_REQUIRED');
-  return token;
+async function accessToken(forceRefresh = false): Promise<string> {
+  if (forceRefresh) {
+    const { data, error } = await supabase.auth.refreshSession();
+    const token = data.session?.access_token;
+    if (error || !token) throw new Error('SESSION_REQUIRED');
+    return token;
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  const session = data.session;
+  if (error || !session?.access_token) throw new Error('SESSION_REQUIRED');
+
+  const expiresAt = session.expires_at ?? 0;
+  const expiresSoon = expiresAt > 0 && expiresAt <= Math.floor(Date.now() / 1000) + 60;
+  if (expiresSoon) return accessToken(true);
+  return session.access_token;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await accessToken();
-  const response = await fetch(`${mobileConfig.apiBaseUrl}${path}`, {
+async function fetchWithToken(path: string, init: RequestInit, token: string): Promise<Response> {
+  return await fetch(`${mobileConfig.apiBaseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -100,8 +129,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...(init.headers ?? {}),
     },
   });
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let token = await accessToken();
+  let response = await fetchWithToken(path, init, token);
+
+  if (response.status === 401) {
+    token = await accessToken(true);
+    response = await fetchWithToken(path, init, token);
+  }
+
   if (response.status === 401) throw new Error('SESSION_REQUIRED');
-  if (!response.ok) throw new Error(`API_${response.status}`);
+  if (!response.ok) {
+    let payload: ApiErrorPayload | null = null;
+    try {
+      payload = await response.json() as ApiErrorPayload;
+    } catch {
+      payload = null;
+    }
+    throw new ApiRequestError(response.status, payload);
+  }
   return await response.json() as T;
 }
 
@@ -232,18 +280,56 @@ function disconnectedHtml(): string {
   `;
 }
 
+function oauthErrorDetail(error: unknown): { title: string; detail: string } {
+  if (error instanceof Error && error.message === 'SESSION_REQUIRED') {
+    return {
+      title: 'A BuyFlow bejelentkezésedet frissíteni kell.',
+      detail: 'Jelentkezz ki, majd vissza, és utána próbáld újra a Gmail hozzáadását.',
+    };
+  }
+
+  if (error instanceof ApiRequestError) {
+    const stageLabels: Record<string, string> = {
+      ensure_user: 'felhasználói kapcsolat',
+      application_id: 'Nylas alkalmazáskapcsolat',
+      oauth_state: 'biztonsági OAuth állapot',
+      authorize_url: 'Google átirányítás előkészítése',
+    };
+    const stage = error.stage ? (stageLabels[error.stage] ?? error.stage) : null;
+    const detail = stage
+      ? `Szerverhiba: ${error.status}. Hibapont: ${stage}.`
+      : `Szerverhiba: ${error.status}${error.code ? ` · ${error.code}` : ''}.`;
+    return {
+      title: 'A Gmail csatlakozás indítása nem sikerült.',
+      detail,
+    };
+  }
+
+  return {
+    title: 'A Gmail csatlakozás indítása nem sikerült.',
+    detail: 'Hálózati vagy böngészőkapcsolati hiba történt. Frissítsd az oldalt, majd próbáld újra.',
+  };
+}
+
 async function beginOauth(button: HTMLButtonElement) {
   button.disabled = true;
   const original = button.textContent ?? 'Gmail csatlakoztatása';
   button.textContent = 'Google megnyitása…';
+  document.querySelector('[data-gmail-oauth-error]')?.remove();
   try {
     const authorizeUrl = await startGmailConnection();
     window.location.assign(authorizeUrl);
-  } catch {
+  } catch (error) {
     button.disabled = false;
     button.textContent = original;
     const body = document.querySelector<HTMLElement>('#gmail-settings-body');
-    if (body) body.insertAdjacentHTML('afterbegin', '<div class="gmail-settings-notice error"><strong>Most nem sikerült elindítani a csatlakozást.</strong><span>Próbáld újra később.</span></div>');
+    const message = oauthErrorDetail(error);
+    if (body) {
+      body.insertAdjacentHTML(
+        'afterbegin',
+        `<div class="gmail-settings-notice error" data-gmail-oauth-error><strong>${escapeHtml(message.title)}</strong><span>${escapeHtml(message.detail)}</span></div>`,
+      );
+    }
   }
 }
 
