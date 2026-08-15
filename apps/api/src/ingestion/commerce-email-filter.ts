@@ -39,6 +39,45 @@ const COMMERCE_KEYWORDS = [
   'elofizetes',
 ];
 
+const TRANSACTIONAL_ANCHOR_PATTERNS = [
+  /\b(?:order\s*(?:number|no\.?|id)|rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito)|bestellnummer)\s*[:#-]?\s*#?[a-z0-9][a-z0-9._/-]{3,39}\b/i,
+  /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|azonosito)|csomag(?:szam|azonosito))\s*[:#-]?\s*[a-z0-9][a-z0-9-]{7,31}\b/i,
+  /\b(?:invoice(?:\s*(?:number|no\.?|id))?|szamla(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*[a-z0-9][a-z0-9._/-]{3,39}\b/i,
+  /\b(?:thank(?:s| you)? for your order|order confirmation|your order (?:is )?confirmed|we (?:have )?received your order|we've received your order)\b/i,
+  /\b(?:rendeles visszaigazolas|megrendeles visszaigazolas|koszonjuk (?:a |az )?(?:rendelesed|megrendelesed|rendeleset|megrendeleset)|rendeles(?:ed|e)? (?:sikeresen )?(?:rogzitettuk|beerk(?:ezett|ezett)|megerositve|visszaigazolva))\b/i,
+];
+
+const REPURCHASE_MARKETING_PATTERNS = [
+  /\blegutobbi vasarlasod\b/i,
+  /\bpont egy honapja vasaroltal\b/i,
+  /\bkorabbi vasarlasod\b/i,
+  /\ba kosarad tartalma ez volt\b/i,
+  /\bujra kosarba\b/i,
+  /\breload_order_link\b/i,
+  /\bvasarolj ujra\b/i,
+  /\bbuy again\b/i,
+  /\breorder now\b/i,
+];
+
+const PROMOTIONAL_CAMPAIGN_PATTERNS = [
+  /\buj kollekcio\b/i,
+  /\bshop the drop\b/i,
+  /\bshop now\b/i,
+  /\bexkluziv ajanlat/i,
+  /\bexclusive offer/i,
+  /\bajandek kupon/i,
+  /\bkuponkod/i,
+  /\bkuponnal kedveskedunk/i,
+  /\bnyeremeny/i,
+  /\bjatek(?:unk|ban|kal)?\b/i,
+  /\bakcio(?:s|k)?\b/i,
+  /\bkedvezmeny(?:ek|ekkel|es)?\b/i,
+  /\blimited time\b/i,
+  /\bnew collection\b/i,
+  /\bfedezd fel\b/i,
+  /\bvarunk(?: az| a)?\b/i,
+];
+
 function senderDomains(email: NormalizedEmail): string[] {
   return email.from
     .map((address) => address.email.trim().toLowerCase())
@@ -52,6 +91,18 @@ function normalizeText(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\u00a0/g, ' ')
     .toLowerCase();
+}
+
+function plainishEmailText(email: NormalizedEmail): string {
+  const body = (email.bodyHtml ?? '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&');
+  return normalizeText(`${email.subject ?? ''}\n${email.snippet ?? ''}\n${body}`)
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function isExpressOneDomain(domain: string): boolean {
@@ -85,6 +136,28 @@ export function isExpressOneOutboundPickupNoise(email: NormalizedEmail): boolean
   return hasWebcasPickupUrl || hasOperationalPickupEvidence;
 }
 
+/**
+ * Marketing messages can mention old purchases, carts, product prices or even a
+ * future "package" and therefore look commerce-like. Exclude them only when we
+ * have strong promotional/repurchase evidence and no transactional identity or
+ * explicit order-confirmation anchor. Gmail Promotions is intentionally NOT a
+ * gate because real receipts may be miscategorized by Gmail.
+ */
+export function isPromotionalCommerceNoise(email: NormalizedEmail): boolean {
+  const text = plainishEmailText(email);
+  if (!text) return false;
+  if (TRANSACTIONAL_ANCHOR_PATTERNS.some((pattern) => pattern.test(text))) return false;
+
+  if (REPURCHASE_MARKETING_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
+  const campaignSignals = PROMOTIONAL_CAMPAIGN_PATTERNS
+    .filter((pattern) => pattern.test(text))
+    .length;
+  return campaignSignals >= 2;
+}
+
 function searchableText(email: NormalizedEmail): string {
   const attachmentNames = email.attachments.map((attachment) => attachment.filename).join(' ');
   return `${email.subject ?? ''} ${email.snippet ?? ''} ${attachmentNames}`.toLowerCase();
@@ -95,6 +168,14 @@ export function filterCommerceEmail(email: NormalizedEmail): CommerceEmailFilter
     return {
       relevant: false,
       reasons: ['excluded_expressone_outbound_pickup_service'],
+      commerceMarkupTypes: [],
+    };
+  }
+
+  if (isPromotionalCommerceNoise(email)) {
+    return {
+      relevant: false,
+      reasons: ['excluded_promotional_or_repurchase_marketing'],
       commerceMarkupTypes: [],
     };
   }
