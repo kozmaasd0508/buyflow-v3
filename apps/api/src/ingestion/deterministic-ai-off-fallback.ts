@@ -5,7 +5,6 @@ import { htmlToCompactText } from '../ai/openai-email-extractor.js';
 import { filterCommerceEmail } from './commerce-email-filter.js';
 
 const FALLBACK_VERSION = 'deterministic-ai-off-fallback-v1';
-const ALLEGRO_ORDER_UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
 
 export interface DeterministicAiOffFallbackResult {
   guarded: boolean;
@@ -44,43 +43,6 @@ function safeFallbackResult(filterReasons: string[]) {
     parser_version: FALLBACK_VERSION,
     parser_reasons: filterReasons,
   };
-}
-
-function hasToken(text: string, pattern: RegExp): boolean {
-  pattern.lastIndex = 0;
-  return pattern.test(text);
-}
-
-function allegroDiagnostics(input: {
-  from: Array<{ email: string }>;
-  bodyHtml?: string | null;
-  snippet?: string | null;
-}): string[] {
-  const allegro = input.from.some(({ email }) => /@(?:[a-z0-9-]+\.)*allegro\.(?:com|hu|pl|cz|sk)$/i.test(email.trim()));
-  if (!allegro) return [];
-
-  const html = input.bodyHtml ?? '';
-  const compact80 = html
-    ? htmlToCompactText(html, 80_000)
-    : (input.snippet ?? '').trim().slice(0, 80_000);
-  const compact500 = html
-    ? htmlToCompactText(html, 500_000)
-    : compact80;
-
-  const signals = (prefix: string, text: string): string[] => [
-    `${prefix}_chars:${text.length}`,
-    `${prefix}_uuid:${hasToken(text, ALLEGRO_ORDER_UUID) ? '1' : '0'}`,
-    `${prefix}_purchased:${/meg(?:v|w)[áa]s[áa]roltad/i.test(text) ? '1' : '0'}`,
-    `${prefix}_total:${/\b(?:ÖSSZESEN|OSSZESEN)\b/i.test(text) ? '1' : '0'}`,
-    `${prefix}_payment:${/fizet[eé]si\s+m[oó]d/i.test(text) ? '1' : '0'}`,
-    `${prefix}_offer_url:${/\/ajanlat\//i.test(text) ? '1' : '0'}`,
-  ];
-
-  return [
-    `allegro_diag_html_chars:${html.length}`,
-    ...signals('allegro_diag_80k', compact80),
-    ...signals('allegro_diag_500k', compact500),
-  ];
 }
 
 export async function guardNylasMessageWhenAiDisabled(input: {
@@ -136,11 +98,6 @@ export async function guardNylasMessageWhenAiDisabled(input: {
   const result = safeFallbackResult([
     ...filter.reasons,
     bodyText ? 'deterministic_parser_no_match' : 'deterministic_parser_no_match_no_body',
-    ...allegroDiagnostics({
-      from: email.from,
-      bodyHtml: email.bodyHtml,
-      snippet: email.snippet,
-    }),
   ]);
   const now = new Date().toISOString();
 
