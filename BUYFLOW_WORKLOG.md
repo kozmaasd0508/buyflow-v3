@@ -2,6 +2,19 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Gate.shop / Foxpost ready-for-pickup completion
+
+- PR #62 merged to main as `0505fe96c872f7d6bd20c775838305035ba08b45`.
+- Main CI run #395 passed.
+- `ready_for_pickup` now survives the carrier parcel-sender bridge and is supported by controlled shipment creation.
+- State precedence is monotonic: delivered > ready_for_pickup > in_transit; weaker later evidence cannot downgrade pickup-ready.
+- Controlled shipment SECURITY DEFINER path/execute rights were hardened in the deployed migration.
+- Live targeted recovery for `Z3493891717`: 2 checked, 2 processed, 0 review, 0 unlinked, AI 0.
+- Gate.shop order `20336215` now has Purchase `current_state=ready_for_pickup` and one Foxpost shipment with tracking `CLFOX178524111362058`, status `ready_for_pickup`.
+- Historical AI run count stayed 98; latest AI run remains 2026-08-14 21:43:08.694227+00.
+- Literal exact Render `/health` commit-SHA verification could not be fetched from the current tool environment; behavioral live verification passed, exact SHA smoke remains to be checked separately.
+- Live unresolved counts after rerun: review 29, unlinked 14; one older 2026-07-15 Foxpost source remains unlinked and is separate from Gate.shop.
+
 ## 2026-08-15 — Ars Una / GLS deterministic carrier bridge
 
 - PR #56 / main commit: `35dd96f1678c4bba74ecc973288cfb0f1df1dc43`.
