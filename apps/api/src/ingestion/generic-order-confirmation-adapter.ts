@@ -173,9 +173,12 @@ const SHIPPING_LABELS = [
 
 function extractOrderNumber(text: string): string | null {
   for (const pattern of ORDER_PATTERNS) {
-    const match = text.match(pattern);
-    const candidate = match?.[1]?.trim().replace(/[.,;:)]+$/, '');
-    if (candidate && /\d/.test(candidate)) return candidate;
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const matcher = new RegExp(pattern.source, flags);
+    for (const match of text.matchAll(matcher)) {
+      const candidate = match[1]?.trim().replace(/[.,;:)]+$/, '');
+      if (candidate && /\d/.test(candidate)) return candidate;
+    }
   }
   return null;
 }

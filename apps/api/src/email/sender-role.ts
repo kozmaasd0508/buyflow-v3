@@ -1,16 +1,13 @@
-const CARRIER_DOMAIN_TOKENS = [
-  'expressone',
-  'gls',
-  'dpd',
-  'foxpost',
-  'packeta',
-  'dhl',
-  'ups',
+const CARRIER_SENDER_DEFINITIONS = [
+  { name: 'Express One', trustedDomains: ['expressone.hu'] },
+  { name: 'GLS', trustedDomains: ['gls-hungary.com', 'gls-group.com', 'gls.hu'] },
+  { name: 'DPD', trustedDomains: ['dpd.com', 'dpd.hu'] },
+  { name: 'Foxpost', trustedDomains: ['foxpost.hu'] },
+  { name: 'Packeta', trustedDomains: ['packeta.hu', 'packeta.com'] },
+  { name: 'DHL', trustedDomains: ['dhl.com', 'dhl.hu'] },
+  { name: 'UPS', trustedDomains: ['ups.com'] },
+  { name: 'MPL', trustedDomains: ['posta.hu'] },
 ] as const;
-
-const EXACT_CARRIER_DOMAINS = new Set([
-  'posta.hu',
-]);
 
 const PUBLIC_MAILBOX_DOMAINS = new Set([
   'gmail.com',
@@ -91,13 +88,23 @@ export function normalizeSenderDomain(domain: string): string {
   return domain.trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
 }
 
-export function isCarrierSenderDomain(domain: string): boolean {
+function matchesTrustedDomain(domain: string, trustedDomain: string): boolean {
   const normalized = normalizeSenderDomain(domain);
-  if (EXACT_CARRIER_DOMAINS.has(normalized)) return true;
-  return CARRIER_DOMAIN_TOKENS.some((token) => {
-    const pattern = new RegExp(`(^|[.-])${token}([.-]|$)`, 'i');
-    return pattern.test(normalized);
-  });
+  const trusted = normalizeSenderDomain(trustedDomain);
+  return normalized === trusted || normalized.endsWith(`.${trusted}`);
+}
+
+export function carrierNameForSenderDomain(domain: string): string | null {
+  for (const definition of CARRIER_SENDER_DEFINITIONS) {
+    if (definition.trustedDomains.some((trusted) => matchesTrustedDomain(domain, trusted))) {
+      return definition.name;
+    }
+  }
+  return null;
+}
+
+export function isCarrierSenderDomain(domain: string): boolean {
+  return carrierNameForSenderDomain(domain) !== null;
 }
 
 export function isPublicMailboxSenderDomain(domain: string): boolean {
