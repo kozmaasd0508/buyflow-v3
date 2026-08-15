@@ -4,8 +4,8 @@
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Current main:** includes runtime PR #91  
-**Last reconciled runtime code commit:** `f7d25a3384e864a45d5c9f10bff833b31304151a`  
+**Current main:** `09dc10193b2be8404dcdac2306caf4a28bd4b564`  
+**Last reconciled runtime code commit:** `09dc10193b2be8404dcdac2306caf4a28bd4b564`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -27,7 +27,7 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 - Email: Nylas webhook + durable full-inbox/targeted scans.
 - Recognition: deterministic-first; ambiguity => REVIEW.
 - AI intentionally disabled. Historical `ai_processing_runs` remains **98**; latest AI run `2026-08-14 21:43:08.694227+00`.
-- Release flow: branch -> PR -> PR CI -> merge -> main CI -> exact Render smoke -> live DB verification.
+- Release flow: branch -> PR -> PR CI -> merge -> main CI -> exact Render smoke -> live verification.
 
 ## NON-NEGOTIABLE SAFETY
 
@@ -41,19 +41,84 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 8. Documents must preserve provenance. PDF-derived evidence uses `email_attachment`, not `email_body`.
 9. Private purchase documents stay in private storage; do not expose a public bucket URL.
 10. Supabase DDL via migrations; guarded historical DML only with verified evidence.
+11. Carrier identity must come from trusted carrier domain suffixes or stricter adapter identity, never brand tokens embedded in unrelated domains.
 
-## MULTI-GMAIL / BLIND TEST
+## NEW: ISOLATED DEMO MAILBOX BENCHMARK — PR #93
 
-Multi-Gmail + per-account 7/30/90 deterministic full scans are live. Second Gmail 30-day blind scan checked 149 messages with zero false automatic Purchases. Real misses are converted into reusable deterministic rules, not order-specific hard-codes.
+The user requested a brand-new demo account/mailbox with many order lifecycles to see what the recognition logic can handle. A fake Gmail/Nylas grant was deliberately **not** created. Instead, BuyFlow now has an isolated synthetic demo-mailbox benchmark that drives the same deterministic core without touching production purchases or real Gmail data.
+
+Runtime commit: `09dc10193b2be8404dcdac2306caf4a28bd4b564`.
+- PR #93 final CI #468 passed: **369/369 API tests**, API build, mobile typecheck and mobile web build green.
+- Main CI #469 passed.
+- Exact Render smoke #363 passed for the exact runtime commit.
+
+Benchmark pipeline:
+`lifecycle parser -> commerce parser -> validator -> Purchase resolver -> Shipment resolver -> lifecycle state safety`
+
+Fixture set:
+- **31 synthetic emails total**
+- **20 must-positive real-commerce events**
+- **8 hard-negative/noise messages**
+- **3 probes**
+- multilingual generic orders: HU / EN / DE / FR / ES
+- COD
+- GymBeam -> Express One full delivery lifecycle
+- Gyerekjatekbolt failed payment -> cancellation
+- AlzaBox internal lifecycle without tracking
+- Szidibox public-mailbox packing + MPL shipped/out_for_delivery/ready_for_pickup
+- shared-platform/public-mailbox/lookalike carrier/newsletter/OTP/subscription/survey/password-reset negatives
+- probes for McDonald’s short POS id, generic DPD delivery-today and weak order-looking mail.
+
+### First blind benchmark run
+
+The first run intentionally failed and found two real defects:
+1. Spanish order confirmation false negative: `pedido` in subject/context produced an early non-numeric regex candidate, preventing the parser from reaching the later explicit `Numero de pedido: ES-50005` body field.
+2. Carrier identity security weakness: loose carrier brand-token matching allowed `gls-security.example` to enter deterministic carrier parsing.
+
+No production data was changed by the benchmark failure.
+
+### Fixes from the benchmark
+
+Spanish order extraction now iterates later matches inside the same pattern until it finds a valid order identity containing a digit. Dedicated regression confirms a subject like `Confirmacion de pedido` no longer blocks a later labelled body order id.
+
+Carrier sender identity was hardened from brand-name tokens to trusted domain suffixes. Current general trusted families include:
+- Express One: `expressone.hu`
+- GLS: `gls-hungary.com`, `gls-group.com`, `gls.hu`
+- DPD: `dpd.com`, `dpd.hu`
+- Foxpost: `foxpost.hu`
+- Packeta: `packeta.hu`, `packeta.com`
+- DHL: `dhl.com`, `dhl.hu`
+- UPS: `ups.com`
+- MPL: `posta.hu`
+
+Legitimate subdomains remain supported, while lookalikes such as `gls-security.example`, `notify.dhl.com.attacker.example` and `email.gls-hungary.com.attacker.example` are rejected.
+
+### Final benchmark result
+
+- must-positive recognition: **20 / 20**
+- hard-negative parser false positives: **0 / 8**
+- directly creatable Purchase candidates in the generic resolution layer: **8**
+- GymBeam / Express One: merchant anchor + two carrier events -> **linkable delivered Shipment**, `express-one`
+- Gyerekjatekbolt: final state **cancelled**, payment status **failed**
+- packing/pre-advice safety: older/weak packing evidence **does not downgrade physical shipment state**
+- MPL pickup remains `ready_for_pickup`, not delivered
+- Alza generic resolver remains `lifecycle_only`, which is expected; its strict specialized 90-day historical recovery lane handles real Purchase reconstruction
+- Szidibox public Gmail evidence stays REVIEW in the generic Purchase resolver, which is expected; verified public-mailbox handling is specialized
+- McDonald’s 4-digit POS probe stays unrecognized/held, intentionally safe
+- weak order-looking email without confirmation evidence stays unrecognized/held
+- generic DPD “delivery today / kézbesítés alatt” probe is recognized conservatively as a shipment with tracking, but the generic carrier parser still does **not** emit a dedicated `out_for_delivery` shipment phase. This is the clearest next benchmark-derived semantics gap.
+
+The benchmark is now a permanent regression test, so these 31 scenarios run with the normal API suite on future changes.
+
+## MULTI-GMAIL / REAL BLIND TEST
+
+Multi-Gmail + per-account 7/30/90 deterministic full scans are live. The second real Gmail 30-day blind scan checked 149 messages with zero false automatic Purchases. Real misses are converted into reusable deterministic rules, not order-specific hard-codes.
+
+For the strongest end-to-end validation on a truly brand-new Gmail, Google OAuth still requires the user to authorize that Gmail once in BuyFlow. After that, a real 30/90-day blind scan can be compared against the synthetic benchmark.
 
 ## PDF INVOICE ATTACHMENT INGESTION — PR #88
 
 User-provided Activepieces source showed a useful pattern: fetch attachment bytes, extract PDF text, then process structured evidence. BuyFlow implements its own deterministic version around Nylas + Supabase.
-
-Runtime base: `7c7732dc0d7e611ae534f5134744b066395fc247`.
-- PR #88 CI #453 passed.
-- Main CI #454 passed.
-- Exact Render smoke #348 passed.
 
 Pipeline:
 `Nylas message -> attachment metadata -> Nylas attachment bytes -> private Supabase Storage -> unpdf text layer -> pdf-invoice-v1 -> exact Purchase resolver -> controlled document RPC`
@@ -77,52 +142,28 @@ Rules:
 Source `1d246ae8-8daf-4b49-9e73-7672d14864fe`, attachment `S26_044783.pdf`:
 - 443,979 bytes downloaded from Nylas.
 - Parser `pdf-invoice-v1` extracted invoice `S26_044783` and order reference `JB12247833`.
-- Jatekbolt PDF identity requires `MODELL & HOBBY Kft.` + `jatekbolt.hu`, then normalizes `JB12247833` -> Purchase `12247833`.
-- source `processed`, validated, `extraction_source=pdf_attachment`, confidence 0.995.
-- exactly one invoice document exists:
-  - Purchase `dfbe41c3-89f0-4f10-8dc8-e34923fba130`
-  - document `52f22f74-460b-4cbe-a975-caedb25b6463`
-  - invoice `S26_044783`
-  - source_type `email_attachment`
-  - filename `S26_044783.pdf`
-  - private storage path + SHA-256 recorded.
+- exactly one invoice document linked to Purchase `12247833`.
 - Existing Purchase remains 48,245 HUF, `delivered`; invoice total 48,248 HUF does not overwrite Purchase total.
 - no duplicate.
 
 Other PDFs lacking explicit invoice/order identity remain attachment REVIEW with `invoice_identity_not_found`.
 
-## PR #89 — ATTACHMENT TABLE LEAST PRIVILEGE
+## PRIVATE PDF OPENING — PR #91
 
-Migration-only main `188340e1121fdaab6c64335f9214fa5b7d10fa1c`.
-- `service_role` on `email_attachments` reduced to SELECT/INSERT/UPDATE/DELETE only.
-- no anon/authenticated/public table grant.
-- PR CI #455 + main CI #456 passed.
+Runtime base `f7d25a3384e864a45d5c9f10bff833b31304151a`.
+- authenticated `GET /api/purchases/:id` proves Purchase ownership first.
+- private stored email-attachment PDFs receive a **60-second** signed Supabase URL.
+- storage bucket/path are never returned publicly.
+- Purchase detail response uses `Cache-Control: no-store`.
+- existing mobile/web `Megnyitás` link opens the temporary PDF URL.
+- bucket stays private.
 
-## NEW: PRIVATE PDF OPENING — PR #91
-
-Runtime `f7d25a3384e864a45d5c9f10bff833b31304151a`.
-- PR CI #459 passed.
-- Main CI #460 passed.
-- Exact Render smoke #354 passed for the exact runtime commit.
-
-Behavior:
-- authenticated `GET /api/purchases/:id` first proves Purchase ownership.
-- document storage bucket/path are selected only internally for the already-owned Purchase.
-- only `source_type=email_attachment` + `application/pdf` + valid private bucket/path get a signed URL.
-- signed URL TTL is **60 seconds**.
-- storage bucket/path are stripped from the public DTO; the client receives only temporary `externalUrl`.
-- Purchase detail response has `Cache-Control: no-store`.
-- signed URL generation failure is fail-safe: document metadata stays visible but no open link is emitted.
-- existing mobile/web document UI already renders `externalUrl` as **Megnyitás**, so no new UI architecture was required.
-- reopening Purchase detail generates a fresh signed URL.
-- bucket remains private.
-
-Expected live Jatekbolt UX:
+Expected Jatekbolt UX:
 `Vásárlások -> JatekBolt.hu #12247833 -> Irattár / Dokumentumok -> Számla S26_044783 -> Megnyitás`.
 
 ## COMPLETED REAL-WORLD RECOVERY CASES
 
-- Jatekbolt `12247833`: 48,245 HUF, Klarna, delivered DPD tracking `16380124260518`; strict `jatekbolt-order-received-v1`; invoice PDF now ingested and privately openable.
+- Jatekbolt `12247833`: 48,245 HUF, Klarna, delivered DPD tracking `16380124260518`; invoice PDF ingested and privately openable.
 - Alza `602385238`: strict internal AlzaBox historical recovery, 3,350 HUF, `ready_for_pickup`, exactly 1 Purchase, 0 Shipments, no invented dates/tracking.
 - All In Packaging `148810` + GLS: 90-day proof historical reconstruction, 16,670 HUF COD, one safe Shipment; second no-COD tracking remains unlinked.
 - Gyerekjatekbolt `535574`: payment failed + cancelled.
@@ -133,14 +174,14 @@ Four McDonald's payment summaries remain REVIEW because reusable four-digit loca
 
 ## CURRENT LIVE BACKLOG
 
-Verified after first PDF attachment recovery:
+Last verified source-email backlog before this benchmark-only runtime hardening:
 - REVIEW: **34**
 - unlinked: **10**
 - unresolved source emails: **44**
 - historical AI runs: **98**
 - latest AI run: `2026-08-14 21:43:08.694227+00`.
 
-`email_attachments` has its own REVIEW state and is not included in the above source-email backlog count.
+PR #93 changes parser safety/recall and benchmark coverage; it did not itself run a production inbox scan or mutate Purchase/Shipment/Document rows.
 
 ## FRONTEND / DOCUMENT STATE
 
@@ -155,12 +196,12 @@ Remaining UI backlog: top-level lifecycle labels/counters, Warranty, Return/refu
 ## NEXT ACTION
 
 If the user gives no different direction:
-1. User/live browser verification of `JatekBolt.hu #12247833 -> S26_044783 -> Megnyitás`.
-2. Continue remaining 34 REVIEW + 10 unlinked physical-commerce clusters, starting with DPD tracking `16380124260338` and merchant evidence.
-3. Extend deterministic PDF parsers only where real review attachments provide safe identity patterns; never infer from filename/timing alone.
-4. Keep scanned PDFs REVIEW until a separately designed OCR lane exists.
-5. Keep McDonald's/POS in REVIEW until a local/POS identity model exists.
-6. Add verified public-mailbox merchant identity before auto-creating Purchases from legitimate Gmail-sender merchants.
+1. Fix the benchmark-derived generic DPD `out_for_delivery` shipment-phase gap without ever promoting “delivery today” to delivered.
+2. Optionally connect a truly fresh Gmail via the normal BuyFlow OAuth UI and run a real 30/90-day blind test; OAuth authorization requires the user once.
+3. Continue remaining 34 REVIEW + 10 unlinked physical-commerce clusters, including DPD tracking `16380124260338` and merchant evidence.
+4. Extend deterministic PDF parsers only where real review attachments provide safe identity patterns; never infer from filename/timing alone.
+5. Keep scanned PDFs REVIEW until a separately designed OCR lane exists.
+6. Keep McDonald's/POS in REVIEW until a local/POS identity model exists.
 
 ## TEST QUALITY TARGET
 
