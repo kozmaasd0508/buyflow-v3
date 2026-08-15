@@ -259,6 +259,8 @@ function bindBodyActions() {
       const connectionId = button.dataset.scanConnection;
       const windowDays = Number(button.dataset.scanWindow) as ScanWindowDays;
       if (!connectionId || ![7, 30, 90].includes(windowDays)) return;
+      button.disabled = true;
+      button.textContent = 'Indítás…';
       void runFullScan(connectionId, windowDays);
     });
   });
@@ -274,15 +276,15 @@ function schedulePoll() {
 
 async function runFullScan(connectionId: string, windowDays: ScanWindowDays) {
   runningScan = { connectionId, windowDays };
-  await renderSettingsBody();
   try {
     await startScan(connectionId, windowDays);
-    schedulePoll();
+    await renderSettingsBody();
+    if (runningScan) schedulePoll();
   } catch {
     runningScan = null;
+    await renderSettingsBody();
     const body = document.querySelector<HTMLElement>('#gmail-settings-body');
     if (body) body.insertAdjacentHTML('afterbegin', `<div class="gmail-settings-notice error"><strong>A ${windowDays} napos ellenőrzés nem indult el.</strong><span>Próbáld újra később.</span></div>`);
-    await renderSettingsBody();
   }
 }
 
