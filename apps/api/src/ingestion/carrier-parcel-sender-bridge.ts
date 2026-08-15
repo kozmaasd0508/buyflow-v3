@@ -151,7 +151,7 @@ function shipmentStatusForCarrierGroup(group: CarrierBridgeEvidence[]): BridgeSh
 
 function earliestPhysicalCarrierSource(group: CarrierBridgeEvidence[]): CarrierBridgeEvidence | null {
   const physical = group
-    .filter((row) => row.shipmentPhase !== 'shipment_created')
+    .filter((row) => row.eventType === 'delivery' || Boolean(row.shipmentPhase && row.shipmentPhase !== 'shipment_created'))
     .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
   return physical[0] ?? null;
 }
@@ -186,7 +186,7 @@ export function resolveCarrierParcelSenderBridges(
   const groups = new Map<string, CarrierBridgeEvidence[]>();
   for (const row of evidenceRows) {
     const tracking = normalizeTracking(row.trackingNumber);
-    if (!tracking || !isCarrierSenderDomain(normalizeDomain(row.senderDomain)) || !row.parcelSender) continue;
+    if (!tracking || !isCarrierSenderDomain(normalizeDomain(row.senderDomain))) continue;
     const slug = normalizeCarrierSlug(row.carrier);
     if (!slug) continue;
     const key = `${row.userId}::${slug}::${tracking}`;
@@ -410,7 +410,7 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
     if (!primarySource) continue;
     const carrierRows = sources.filter((row) => isCarrierSenderDomain(normalizeDomain(row.senderDomain)) && normalizeTracking(row.trackingNumber) === decision.trackingNumber);
     if (carrierRows.length === 0) continue;
-    const physicalCarrierRows = carrierRows.filter((row) => row.shipmentPhase !== 'shipment_created');
+    const physicalCarrierRows = carrierRows.filter((row) => row.eventType === 'delivery' || Boolean(row.shipmentPhase && row.shipmentPhase !== 'shipment_created'));
     if (!merchantAnchor && physicalCarrierRows.length === 0) continue;
     const firstCarrierAt = [...carrierRows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]!.receivedAt;
     const firstPhysicalCarrierAt = physicalCarrierRows.length > 0
