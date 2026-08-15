@@ -2,6 +2,20 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Express One outbound pickup noise cleanup
+
+- PR #47 / main commit: `2bac53d5550236023824b08cbefc9fd8a708652c`.
+- Root cause: Express One WEBCAS courier-pickup bookings use purchase-like wording (`megrendelés`), causing old review/unlinked rows to look like consumer purchases or shipments.
+- Added a narrow exclusion requiring Express One sender plus strong outbound `árufelvétel` / `request_curier` evidence.
+- Regression tests verify that real incoming Express One parcel/delivery mail is not excluded.
+- Removed temporary Allegro fallback diagnostics from PR #44.
+- PR CI, main CI and exact Render smoke passed.
+- Live cleanup: 43 unresolved Express One pickup-service rows -> 0; 5 false `order_created` + 38 false `shipment`; 0 Purchase links before cleanup.
+- Old wrong machine result is retained inside the cleanup JSON for audit; source emails were not deleted.
+- Five different Express One rows remain for separate analysis (two payment receipts and three parcel lifecycle messages).
+- AI counter stayed at 98; no new AI call.
+- Live overall backlog after cleanup: 38 review, 29 unlinked.
+
 ## 2026-08-15 — Persistent handoff system
 
 - Added root `AGENTS.md` with mandatory startup/shutdown instructions for future AI sessions.
@@ -25,7 +39,7 @@
 - Added safe temporary diagnostics only for unmatched Allegro email fallback.
 - Diagnostics record lengths and boolean signal presence, never email body content.
 - Main CI and exact Render smoke passed.
-- Follow-up: remove/retire temporary diagnostics once no longer needed.
+- Follow-up completed in PR #47: temporary diagnostics removed after real HappyBox24 deterministic recognition stabilized.
 
 ## 2026-08-15 — PR #43 long deterministic email support
 
@@ -40,9 +54,10 @@
 - Merge commit: `1895ce54f9def646719339d97bac88685677f326`.
 - Activated existing product detail/edit/remove and targeted recovery modules.
 - Added purchase detail current-state/next-action panel.
-- Added Gmail settings sheet and integrated connected Gmail audit controls.
+- Added Gmail settings sheet.
 - Browser preview verified live after exact Render smoke.
-- Remaining frontend gaps: Warranty, Return/Refund, Felfedezés, Flow.
+- Later AI-off UI removed active AI audit/Flow surfaces while deterministic recognition is developed.
+- Remaining frontend gaps: Warranty, Return/Refund and Felfedezés; Flow stays hidden while AI is off.
 - Browser-first rule reaffirmed: no APK after small changes.
 
 ## 2026-08-14 — Auth reset hardening
