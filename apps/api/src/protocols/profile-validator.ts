@@ -17,8 +17,12 @@ function collectRules(profile: ProtocolProfile): ProtocolPatternRule[] {
 }
 
 function identifierPatterns(profile: ProtocolProfile): Array<[string, string]> {
-  return Object.entries(profile.identifier_patterns)
-    .flatMap(([kind, patterns]) => patterns.map((pattern) => [kind, pattern] as [string, string]));
+  return [
+    ...profile.identifier_patterns.order_id.map((pattern: string) => ['order_id', pattern] as [string, string]),
+    ...profile.identifier_patterns.tracking_id.map((pattern: string) => ['tracking_id', pattern] as [string, string]),
+    ...profile.identifier_patterns.invoice_id.map((pattern: string) => ['invoice_id', pattern] as [string, string]),
+    ...profile.identifier_patterns.payment_reference.map((pattern: string) => ['payment_reference', pattern] as [string, string]),
+  ];
 }
 
 export function validateProtocolProfile(profile: ProtocolProfile): string[] {
