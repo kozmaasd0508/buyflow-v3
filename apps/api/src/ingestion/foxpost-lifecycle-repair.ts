@@ -41,7 +41,7 @@ function foxpostTracking(text: string): string | null {
 
 function parcelSender(text: string): string | null {
   const normalized = normalizeText(text);
-  const match = normalized.match(/\bertesitunk,?\s+hogy\s+(.{2,120}?)\s+altal\s+feladott\s+csomagod\b/i)
+  const match = normalized.match(/\bertesitunk,?\s+hogy\s+(.{2,120}?)\s+altal\s+feladott\s+csomagod(?:hoz)?\b/i)
     ?? normalized.match(/\bcsomagod,?\s+amelyet\s+(.{2,120}?)\s+adott\s+fel\s+szamodra\b/i);
   return match?.[1]?.trim() ?? null;
 }
