@@ -161,6 +161,31 @@ test('strong merchant order can be eligible and keep purchased products', () => 
   assert.equal(result.validation_status, 'validated');
 });
 
+test('compact Ft currency evidence keeps HUF order total', () => {
+  const result = validateEmailExtraction({
+    extraction: {
+      ...base,
+      event_type: 'order_created',
+      merchant: 'HappyBox24',
+      order_number: '3fe09c80-8d79-11f1-b193-cf13a29b46f5',
+      total: 5675,
+      currency: 'HUF',
+      payment_status: 'cash_on_delivery',
+      payment_method: 'utánvét',
+      confidence: 0.995,
+    },
+    senderDomains: ['allegro.com'],
+    subject: 'Megvásároltad: teszt termék HappyBox24 eladótól.',
+    bodyText: 'ÖSSZESEN 5 675,00Ft Fizetési mód utánvét',
+  });
+
+  assert.equal(result.total, 5675);
+  assert.equal(result.currency, 'HUF');
+  assert.equal(result.validation_status, 'validated');
+  assert.equal(result.eligible_for_purchase_creation, true);
+  assert.ok(!result.blocked_fields.includes('total'));
+});
+
 test('amount without currency is blocked', () => {
   const result = validateEmailExtraction({
     extraction: {
