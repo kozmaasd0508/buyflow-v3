@@ -11,6 +11,7 @@ import { parseAllegroOrderEmail } from './allegro-order-adapter.js';
 import { parseAlzaCommerceEmail } from './alza-commerce-adapter.js';
 import { preprocessExpressOneTerminalReceiptNylasMessage } from './expressone-terminal-receipt-adapter.js';
 import { parseGenericOrderConfirmationEmail } from './generic-order-confirmation-adapter.js';
+import { preprocessGlsCarrierNylasMessage } from './gls-carrier-bridge-adapter.js';
 import { parseMerchantPreAdviceEmail } from './pre-advice-commerce-adapter.js';
 import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
 
@@ -427,6 +428,19 @@ export async function preprocessDeterministicNylasMessage(input: {
       matched: true,
       ...(receipt.sourceEmailId ? { sourceEmailId: receipt.sourceEmailId } : {}),
       parserVersion: 'expressone-terminal-receipt-v1',
+    };
+  }
+
+  const gls = await preprocessGlsCarrierNylasMessage({
+    grantId: input.grantId,
+    messageId: input.messageId,
+    sourceQuery: 'deterministic:gls-lifecycle',
+  });
+  if (gls.matched) {
+    return {
+      matched: true,
+      ...(gls.sourceEmailId ? { sourceEmailId: gls.sourceEmailId } : {}),
+      parserVersion: gls.parserVersion ?? 'gls-lifecycle-v1',
     };
   }
 
