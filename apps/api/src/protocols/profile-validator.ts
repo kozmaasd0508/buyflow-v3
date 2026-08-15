@@ -16,6 +16,11 @@ function collectRules(profile: ProtocolProfile): ProtocolPatternRule[] {
   return [...eventRules, ...(profile.negative_patterns ?? [])];
 }
 
+function identifierPatterns(profile: ProtocolProfile): Array<[string, string]> {
+  return Object.entries(profile.identifier_patterns)
+    .flatMap(([kind, patterns]) => patterns.map((pattern) => [kind, pattern] as [string, string]));
+}
+
 export function validateProtocolProfile(profile: ProtocolProfile): string[] {
   const errors: string[] = [];
 
@@ -45,6 +50,7 @@ export function validateProtocolProfile(profile: ProtocolProfile): string[] {
     if (rule.flags && !ALLOWED_REGEX_FLAGS.test(rule.flags)) {
       errors.push(`invalid_regex_flags:${rule.id}`);
     }
+    if (rule.source_ids.length === 0) errors.push(`source_reference_required:${rule.id}`);
     for (const sourceId of rule.source_ids) {
       if (!sourceIds.has(sourceId)) errors.push(`unknown_source_id:${rule.id}:${sourceId}`);
     }
@@ -52,6 +58,16 @@ export function validateProtocolProfile(profile: ProtocolProfile): string[] {
       new RegExp(rule.pattern, rule.flags ?? 'i');
     } catch {
       errors.push(`invalid_regex:${rule.id}`);
+    }
+  }
+
+  for (const [kind, pattern] of identifierPatterns(profile)) {
+    if (!pattern) errors.push(`empty_identifier_pattern:${kind}`);
+    if (pattern.length > MAX_PATTERN_LENGTH) errors.push(`identifier_pattern_too_long:${kind}`);
+    try {
+      new RegExp(pattern, 'i');
+    } catch {
+      errors.push(`invalid_identifier_regex:${kind}`);
     }
   }
 
