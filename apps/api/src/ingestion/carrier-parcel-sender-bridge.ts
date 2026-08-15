@@ -6,6 +6,8 @@ const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const LOOKBACK_DAYS = 45;
 const TRUSTED_VALIDATION = new Set(['validated', 'guardrailed']);
 
+type BridgeShipmentStatus = 'in_transit' | 'ready_for_pickup';
+
 export interface CarrierBridgePurchase {
   purchaseId: string;
   userId: string;
@@ -24,12 +26,14 @@ export interface CarrierBridgeEvidence {
   trackingNumber: string | null;
   carrier: string | null;
   parcelSender: string | null;
+  shipmentPhase: string | null;
   confidence: number;
 }
 
 export interface CarrierBridgeDecision {
   trackingNumber: string;
   carrierSlug: string;
+  shipmentStatus: BridgeShipmentStatus;
   purchaseId: string | null;
   decision: 'linkable' | 'review' | 'unmatched';
   sourceEmailIds: string[];
@@ -88,6 +92,12 @@ function withinWindow(a: string, b: string): boolean {
   return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= WINDOW_MS;
 }
 
+function shipmentStatusForCarrierGroup(group: CarrierBridgeEvidence[]): BridgeShipmentStatus {
+  return group.some((row) => row.shipmentPhase === 'ready_for_pickup')
+    ? 'ready_for_pickup'
+    : 'in_transit';
+}
+
 export function resolveCarrierParcelSenderBridges(
   purchases: CarrierBridgePurchase[],
   evidenceRows: CarrierBridgeEvidence[],
@@ -128,6 +138,7 @@ export function resolveCarrierParcelSenderBridges(
     const first = group[0]!;
     const trackingNumber = normalizeTracking(first.trackingNumber);
     const carrierSlug = normalizeCarrierSlug(first.carrier)!;
+    const shipmentStatus = shipmentStatusForCarrierGroup(group);
     const candidateAnchors = merchantAnchors.filter(({ row, purchase }) => {
       if (row.userId !== first.userId) return false;
       if (!group.some((carrierRow) => withinWindow(carrierRow.receivedAt, row.receivedAt))) return false;
@@ -145,17 +156,24 @@ export function resolveCarrierParcelSenderBridges(
       decisions.push({
         trackingNumber,
         carrierSlug,
+        shipmentStatus,
         purchaseId: purchaseIds[0]!,
         decision: 'linkable',
         sourceEmailIds: [...new Set([anchor.row.sourceEmailId, ...group.map((row) => row.sourceEmailId)])],
         merchantAnchorSourceId: anchor.row.sourceEmailId,
         confidence: Math.min(confidence, anchor.row.confidence),
-        reasons: ['carrier_parcel_sender_matches_merchant', 'merchant_order_shipment_anchor', 'carrier_and_merchant_events_within_7_days', 'single_purchase_candidate'],
+        reasons: [
+          'carrier_parcel_sender_matches_merchant',
+          'merchant_order_shipment_anchor',
+          'carrier_and_merchant_events_within_7_days',
+          'single_purchase_candidate',
+          ...(shipmentStatus === 'ready_for_pickup' ? ['explicit_ready_for_pickup_evidence'] : []),
+        ],
       });
     } else if (purchaseIds.length > 1) {
-      decisions.push({ trackingNumber, carrierSlug, purchaseId: null, decision: 'review', sourceEmailIds: group.map((row) => row.sourceEmailId), merchantAnchorSourceId: null, confidence, reasons: ['multiple_purchase_candidates'] });
+      decisions.push({ trackingNumber, carrierSlug, shipmentStatus, purchaseId: null, decision: 'review', sourceEmailIds: group.map((row) => row.sourceEmailId), merchantAnchorSourceId: null, confidence, reasons: ['multiple_purchase_candidates'] });
     } else {
-      decisions.push({ trackingNumber, carrierSlug, purchaseId: null, decision: 'unmatched', sourceEmailIds: group.map((row) => row.sourceEmailId), merchantAnchorSourceId: null, confidence, reasons: ['no_matching_merchant_shipment_anchor'] });
+      decisions.push({ trackingNumber, carrierSlug, shipmentStatus, purchaseId: null, decision: 'unmatched', sourceEmailIds: group.map((row) => row.sourceEmailId), merchantAnchorSourceId: null, confidence, reasons: ['no_matching_merchant_shipment_anchor'] });
     }
   }
 
@@ -208,7 +226,7 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
     if (!TRUSTED_VALIDATION.has(validation) || confidence === null || confidence < 0.7 || (eventType !== 'shipment' && eventType !== 'delivery')) continue;
     evidenceRows.push({
       sourceEmailId: String(source.id), userId: String(source.user_id), senderDomain: fromDomain(source.from_address ?? null), receivedAt: String(source.received_at),
-      eventType, orderNumber: stringOrNull(result.order_number), trackingNumber: stringOrNull(result.tracking_number), carrier: stringOrNull(result.carrier), parcelSender: stringOrNull(result.parcel_sender), confidence,
+      eventType, orderNumber: stringOrNull(result.order_number), trackingNumber: stringOrNull(result.tracking_number), carrier: stringOrNull(result.carrier), parcelSender: stringOrNull(result.parcel_sender), shipmentPhase: stringOrNull(result.shipment_phase), confidence,
     });
   }
 
@@ -240,7 +258,7 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
       p_carrier: canonicalCarrier(decision.carrierSlug),
       p_carrier_slug: decision.carrierSlug,
       p_tracking_number: decision.trackingNumber,
-      p_status: 'in_transit',
+      p_status: decision.shipmentStatus,
       p_shipped_at: merchantAnchor.receivedAt || firstCarrierAt,
       p_delivered_at: null,
       p_last_event_at: lastEventAt,
