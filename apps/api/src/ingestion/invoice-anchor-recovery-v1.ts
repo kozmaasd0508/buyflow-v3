@@ -6,6 +6,7 @@ import {
   type InvoiceAnchorEventType,
   type InvoiceAnchorExistingPurchase,
 } from '../resolution/invoice-anchor-recovery.js';
+import { drainInvoiceAttachmentRecoveryV1 } from './invoice-attachment-recovery-v1.js';
 
 const LOOKBACK_DAYS = 90;
 const EVENT_TYPES = new Set<InvoiceAnchorEventType>([
@@ -109,6 +110,8 @@ export async function drainInvoiceAnchorRecoveryV1(
   mode: 'observe' | 'write',
   limit = 200,
 ): Promise<InvoiceAnchorRecoveryV1Result> {
+  await drainInvoiceAttachmentRecoveryV1(mode, Math.min(limit, 40));
+
   const db = getSupabaseAdmin() as any;
   const result: InvoiceAnchorRecoveryV1Result = {
     scanned: 0,
