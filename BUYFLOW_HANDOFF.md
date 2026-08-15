@@ -1,10 +1,10 @@
 # BuyFlow V3 — persistent handoff
 
-> Current-state snapshot for a new AI/chat. Read `AGENTS.md` first, then this file, then the newest entries in `BUYFLOW_WORKLOG.md`.
+> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file. Also read `BUYFLOW_WORKLOG_LATEST.md` for the newest detailed recovery notes before the older `BUYFLOW_WORKLOG.md` history.
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Last reconciled runtime code commit:** `e320ac5593f95f6535c97b865f569c9d7bbde181`  
+**Last reconciled runtime code commit:** `8b4461ce836c1e1e9e1f0c0813779fdcda3acbbe`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -25,8 +25,8 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 - Database/auth: Supabase production `acjenqkrvnkdvvgordry`, eu-west-1.
 - Email ingestion: Nylas webhook + durable full-inbox/targeted scan jobs.
 - Recognition: deterministic-first; uncertain evidence => REVIEW.
-- AI infrastructure exists but **AI is intentionally disabled**. Historical `ai_processing_runs` remains **98**; latest AI run `2026-08-14 21:43:08.694227+00`.
-- Production flow: branch -> PR -> CI -> merge -> main CI -> exact Render smoke.
+- AI is intentionally disabled. Historical `ai_processing_runs` remains **98**; latest AI run `2026-08-14 21:43:08.694227+00`.
+- Production flow: branch -> PR -> PR CI -> merge -> main CI -> exact Render smoke -> live DB verification.
 
 ## NON-NEGOTIABLE SAFETY
 
@@ -37,157 +37,147 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 5. Gmail categories are advisory only; never a gate.
 6. Shared/public mailbox domains cannot alone establish merchant identity.
 7. Carrier/payment evidence may update only an existing uniquely corroborated Purchase or pass an explicitly hardened historical lane.
-8. `shipment_created` / packing / pre-advice may anchor a carrier relationship but **must not define physical `shipped_at`**.
+8. `shipment_created` / packing / pre-advice may anchor a relationship but must not define physical `shipped_at`.
 9. Browser-first UI; APK only on explicit request.
-10. Supabase DDL via migrations; guarded DML is allowed for verified historical repair.
+10. Historical reconstruction must never invent order date, tracking, carrier or document identity that the evidence does not contain.
+11. Supabase DDL via migrations; guarded DML is allowed for verified historical repair.
 
 ## MULTI-GMAIL / BLIND TEST
 
-Multi-Gmail + per-account 7/30/90 deterministic full scans are live. Relevant PRs: #69–#76.
+Multi-Gmail + per-account 7/30/90 deterministic full scans are live. The second Gmail 30-day blind scan checked 149 messages with zero false automatic Purchases. Real misses are being converted into reusable deterministic rules rather than one-off hard-codes.
 
-Second Gmail 30-day blind scan:
-- pages 3
-- checked 149
-- ignored 130
-- REVIEW 14
-- unlinked 5
-- Purchase writes 0
-- Shipment writes 0
-- Document writes 0
+## COMPLETED: JATEKBOLT ORDER `12247833`
+
+Live Purchase:
+- id `dfbe41c3-89f0-4f10-8dc8-e34923fba130`
+- merchant JatekBolt.hu / `jatekbolt.hu`
+- order `12247833`
+- exactly 1 Purchase and 1 delivered DPD Shipment
+- DPD tracking `16380124260518`
+- final state `delivered`
+- ordered_at `2026-08-02 16:49:02+00`
+- shipped_at `2026-08-04 08:36:08+00`
+- delivered_at `2026-08-05 05:54:33+00`.
+
+### PR #84 — strict Jatekbolt order-received parser
+
+Runtime `c00cd8fff02f844ad9938d99df123ed732930148`.
+
+Parser `jatekbolt-order-received-v1`:
+- exact `jatekbolt.hu`,
+- subject/body order ID must agree,
+- explicitly recognizes that the email is only receipt of the customer's purchase offer and **not yet merchant acceptance**,
+- requires the structured order details section,
+- requires arithmetic reconciliation `subtotal + shipping - discount = total`,
+- extracts subtotal **52,775 HUF**, DPD **750 HUF**, discount **5,280 HUF**, total **48,245 HUF**, Klarna, DPD, Model & Hobby Kft., confidence 0.995,
+- dispatch messages are not reclassified as new order-received events,
+- lookalike domain, mismatched order IDs and inconsistent money are rejected.
+
+PR #84 CI passed after a test-only accent-normalization fix; main CI #441 and exact Render smoke #335 passed.
+
+Live targeted rerun `12247833`:
+- 2 checked / 2 processed / 0 REVIEW / 0 unlinked / 0 new writes / AI 0.
+- Same existing Purchase was financially enriched to 48,245 HUF, Klarna pending, DPD, without changing delivered lifecycle state.
+
+### Jatekbolt invoice intentionally not auto-linked yet
+
+Invoice email source remains REVIEW. Its PDF `S26_044783.pdf` was inspected:
+- invoice `S26_044783`
+- order reference `JB12247833`
+- MODELL & HOBBY Kft.
+- total **48,248 HUF**
+- DPD 750 HUF
+- discount differs by 3 HUF from the order summary due invoice-level rounding.
+
+Current Nylas runtime exposes attachment metadata but does not ingest PDF bytes/content into the deterministic pipeline. Do **not** link this document from filename/timing alone. Future work: safe attachment/PDF ingestion with document identity extraction.
+
+## COMPLETED: ALZA INTERNAL ALZABOX ORDER `602385238`
+
+Initial blind-test state: no Purchase existed. Three trusted Alza sources were unlinked:
+1. processing `2026-06-24 15:46:47+00`
+2. delayed `2026-06-25 09:27:20+00`
+3. AlzaBox ready-for-pickup `2026-06-26 10:10:28+00`.
+
+There is **no carrier tracking** because this is internal AlzaBox fulfillment.
+
+The processing email contains:
+- exact order/reference `602385238`
+- explicit statement that no contract exists yet and a later email will confirm contract formation
+- two agreeing totals: **3,350 HUF**
+- invoice identity `AHUW261747843`
+- AlzaBox fulfillment
+- card at pickup or online
+- legal entity Alza.hu Kft.
+
+A completed exact 90-day search proved:
+- checked 4
+- purchaseWrites 0
 - AI 0
+- no hidden order-created Purchase.
 
-Safety result: zero false automatic Purchases. Real misses are being converted into reusable deterministic rules rather than one-off hard-codes.
+### PR #85 — Alza Internal Fulfillment Recovery V1
 
-## COMPLETED: ALL IN PACKAGING / GLS
+Runtime `699e2fba7566b7430e4c2bc5e3a5d54dab7e4ac6`.
 
-PR #78 runtime `ebe06d3ee8c6c203bc363ed58eb992670758f667` extended the existing strict historical reconstruction lane.
+- Adds strict `alza-order-processing-v2` while keeping event `order_updated`, lifecycle `order_processing`; it is **not** promoted to normal order confirmation.
+- Preserves the older lightweight Alza processing fallback for less detailed messages.
+- Specialized recovery requires:
+  - trusted rich V2 processing anchor,
+  - separate trusted `delayed` evidence,
+  - separate trusted `alza-commerce-v1` `ready_for_pickup` evidence,
+  - same user + same email connection + exact order,
+  - <=14-day chain,
+  - completed exact 90-day proof with `checked>=1` and `purchaseWrites=0`,
+  - no trusted `order_created`,
+  - no existing exact Purchase.
+- Future matching cases automatically schedule a deduped 90-day proof first.
+- No Shipment may be invented when AlzaBox has no tracking.
+- `AHUW...` invoice identity remains evidence only; no document is invented from the processing email.
+- PR CI #444 passed with 353/353 API tests; main CI #445 and exact Render smoke #339 passed.
 
-Live order `148810`:
-- exactly 1 Purchase, All In Packaging / `allinpackaging.com`
-- 16,670 HUF, COD, GLS
-- exactly 1 Shipment, tracking `3219379224`, `in_transit`
-- no invented ordered_at
-- separate no-COD GLS tracking `3219379250` remains unlinked intentionally
-- AI 0.
+### PR #86 — processed-anchor recovery fix
 
-Historical reconstruction remains gated by a completed 90-day exact-order negative proof with `purchaseWrites=0`.
+Live verification exposed a safe false negative: after the 90-day scan, the normal pipeline marked the three trusted Alza sources `processed` before the specialized recovery pass, so PR #85's REVIEW/unlinked-only anchor selector skipped the chain. No wrong Purchase was created.
 
-## COMPLETED: GYEREKJATEKBOLT FAILED PAYMENT / CANCELLATION
+PR #86 / runtime `8b4461ce836c1e1e9e1f0c0813779fdcda3acbbe`:
+- recovery eligibility now depends on trusted V2 evidence, not audit processing status,
+- DB snake_case Purchase rows are explicitly mapped to the resolver camelCase identity model,
+- early existing-Purchase proof scheduling guard fixed,
+- final exact DB duplicate check remains.
+- PR CI #446, main CI #447 and exact Render smoke #341 passed.
 
-Real order `535574`, Purchase id `ceefcd70-1b01-4c0b-94ee-3b23cb05da0e`, total 14,660 HUF.
-
-The current deterministic lifecycle parser already contained the required rules; no code change was necessary. A 30-day targeted rerun produced:
-- checked 5
-- processed 4
-- REVIEW 1
-- unlinked 0
-- writes 0
-- AI 0.
-
-Final Purchase state:
-- `payment_status=failed`
-- `current_state=cancelled`
-- `cancelled_at=2026-08-04 11:21:36+00`
-- `paid_at=null`
-- no Shipment.
-
-The standalone “Bankkártyás fizetés link” retry/action mail remains REVIEW intentionally; a payment retry link alone is not a final transaction state.
-
-## INTENTIONALLY REVIEW: MCDONALD'S POS / LOCAL ORDER IDS
-
-Four real McDonald's payment-summary emails were inspected. They include restaurant, date/time, amount, card and a short 4-digit restaurant order number, but explicitly state that the email is only an order summary and the receipt is provided at pickup.
-
-Current Purchase uniqueness uses `(user_id, merchant_domain, order_number)`. A short local/POS number such as `6356` can repeat over time, so these emails are **not** promoted to Purchase creation. No separate receipt email was found.
-
-Required future architecture: a POS/local-order identity that can safely incorporate merchant/location/time (or another stable provider ID) instead of treating a reusable 4-digit number as a global merchant order ID. Until then REVIEW is correct.
-
-## COMPLETED: SZIDIBOX / MPL
-
-Blind-test backlog exposed a real Szidibox purchase sent from public mailbox `szidibox@gmail.com` plus an MPL carrier chain.
-
-Historical Purchase before repair:
-- id `24b05d2e-be2c-4ea8-9836-befce30b4ddd`
-- order `SO-2024-30411`
-- total 26,388 HUF
-- COD
-- old incorrect merchant domain `gmail.com`
-- no Shipment initially.
-
-### PR #80 — MPL + public-mailbox safety
-
-Main runtime `3d53c3cefb61d9c2452cb9f677214fc32c0cf22d`.
-- `posta.hu` is a carrier sender domain.
-- Exact MPL sender is `kozponti.ertesites@posta.hu`.
-- Deterministic MPL states:
-  - `Csomagot adtak fel neked` => `shipped`
-  - `Csomagod a kézbesítőnél van` => `out_for_delivery`
-  - `Csomagod a postán átvehető` => `ready_for_pickup`
-- extracts tracking, parcel sender and COD.
-- MPL labels normalize to carrier slug `mpl`.
-- narrow Szidibox packing anchor requires exact `szidibox@gmail.com`, `kartonshop.hu` evidence, matching `SO-...` order ID and explicit future courier handoff; it emits only `shipment_created`.
-- generic Purchase creation now blocks public-mailbox domains such as Gmail/Outlook/Yahoo even with corroborating messages; unverified public mailbox evidence stays REVIEW.
-- PR CI #429, main CI #430, exact Render smoke #324 passed.
-
-### PR #81 — physical shipped_at + flattened MPL parsing
-
-Main runtime `5139fda8bcad1f743aef37b49340bef93ca446e4`.
-- `shipment_created` merchant anchor cannot define physical Shipment `shipped_at`.
-- physical `shipped_at` comes from first carrier-side physical progress.
-- if only pre-advice exists, no physical shipped timestamp is emitted.
-- MPL parser now accepts Nylas flattened label layout in addition to line-based text.
-- PR CI #433, main CI #434, exact Render smoke #328 passed.
-
-Final live MPL rerun:
-- 3 checked / 3 processed / 0 REVIEW / 0 unlinked / AI 0
-- all three sources parser `deterministic-lifecycle-v1`
-- phases `shipped -> out_for_delivery -> ready_for_pickup`
-- tracking `PB9S650307180`
-- parcel sender `Szidibox Karton Kft.`
-- COD 26,390 HUF
-- confidence 0.995 each.
-
-### PR #82 — MPL display name
-
-Runtime `e320ac5593f95f6535c97b865f569c9d7bbde181`.
-- carrier slug remains `mpl`
-- display name canonicalized to `MPL`
-- PR CI #435, main CI #436, exact Render smoke #330 passed.
-
-### Final Szidibox live state after guarded historical repair
+### Final live Alza state
 
 Purchase:
-- id `24b05d2e-be2c-4ea8-9836-befce30b4ddd`
-- merchant `Szidibox Karton Kft. Webáruház`
-- legal name `Szidibox Karton Kft.`
-- merchant domain repaired to `kartonshop.hu`
-- order `SO-2024-30411`
-- total 26,388 HUF
-- payment `cash_on_delivery`
-- expected carrier `MPL`
+- id `661865f5-23dd-4c26-97dd-1059f533566b`
+- merchant `Alza.hu`
+- legal name `Alza.hu Kft.`
+- domain `alza.hu`
+- order `602385238`
+- total **3,350 HUF**
+- payment status `pending`
+- payment method `Kártya átvételkor vagy online`
+- shipping method `AlzaBox`
+- expected carrier null
 - state `ready_for_pickup`
-- ordered_at `2026-07-22 13:38:20+00`
-- shipped_at corrected to first physical MPL acceptance `2026-07-23 14:44:56+00`
+- ordered_at null
+- shipped_at null
 - delivered_at null
-- confidence 0.96.
+- confidence 0.99.
 
-Shipment:
-- id `f6ed4ca1-7750-4d48-99ee-3ece45a5213c`
-- carrier `MPL`, slug `mpl`
-- tracking `PB9S650307180`
-- status `ready_for_pickup`
-- shipped_at `2026-07-23 14:44:56+00`
-- last_event_at `2026-07-24 11:46:49+00`
-- delivered_at null
-- 4 shipment source links.
-
-Integrity: exactly 1 Purchase and exactly 1 Shipment for this identity. The historical repair changed exactly one Purchase row and one Shipment row.
-
-### Remaining public-mailbox architecture gap
-
-The system is now safe against creating new `merchant_domain=gmail.com` Purchases. However, future new merchants that legitimately send from public mailboxes still need an explicit **verified merchant identity layer** (`public mailbox -> business domain/legal entity`) before they can auto-create Purchases. Until implemented, those new cases should remain REVIEW rather than guess.
+Integrity:
+- exactly **1 Purchase**
+- exactly **0 Shipments**
+- exactly **3 linked sources**: V2 processing + delayed + ready_for_pickup
+- all three sources `processed` / validated
+- 0 documents created
+- AI 0.
 
 ## OTHER COMPLETED DETERMINISTIC COVERAGE
 
+- All In Packaging / GLS historical reconstruction with 90-day proof.
+- Gyerekjatekbolt failed payment + cancellation.
+- Szidibox / MPL including public-mailbox safety and physical shipped_at semantics.
 - Gate.shop / Foxpost ready-for-pickup.
 - Scitec / BioTechUSA / Foxpost verified legal-entity COD bridge.
 - Ars Una / GLS parcel-sender + COD bridge.
@@ -199,16 +189,16 @@ The system is now safe against creating new `merchant_domain=gmail.com` Purchase
 
 Three Barion successful-payment emails remain intentionally unlinked because payment-only evidence is insufficient to create a Purchase.
 
+Four McDonald's payment-summary emails remain REVIEW because their reusable 4-digit local/POS order IDs are not safe global Purchase identities. Required future architecture: POS/local-order identity using location/time/provider identity.
+
 ## CURRENT LIVE BACKLOG
 
-Verified after Gyerekjatekbolt and Szidibox/MPL cleanup:
+Verified after Jatekbolt + Alza cleanup:
 - REVIEW: **35**
-- unlinked: **13**
-- total unresolved: **48**
+- unlinked: **10**
+- total unresolved: **45**
 - historical AI runs: **98**
-- latest AI run: `2026-08-14 21:43:08.694227+00`
-
-This is a richer two-mailbox test dataset, not by itself a regression.
+- latest AI run: `2026-08-14 21:43:08.694227+00`.
 
 ## FRONTEND STATE / REMAINING UI WORK
 
@@ -226,12 +216,12 @@ AI audit/Flow stays hidden while AI is disabled.
 
 If the user gives no different direction:
 
-1. Continue the remaining **35 REVIEW + 13 unlinked** clusters, prioritizing genuine purchase false negatives over obvious noise.
-2. Implement only reusable safe rules with negative regressions; never hard-code individual order/tracking IDs.
-3. Keep McDonald's/POS short local IDs in REVIEW until a proper local/POS identity model exists.
-4. Add a verified public-mailbox merchant identity layer before allowing future Gmail-sender merchants to auto-create Purchases.
-5. After recognition backlog improves, align top-level lifecycle labels/counters, then Warranty + Return/refund UI, later Felfedezés.
-6. Keep weak payment-only evidence unlinked unless merchant corroboration appears.
+1. Continue remaining **35 REVIEW + 10 unlinked** clusters, prioritizing genuine physical-commerce false negatives over obvious noise.
+2. Investigate remaining DPD tracking `16380124260338` and other real merchant/carrier clusters before touching payment-only noise.
+3. Keep Jatekbolt invoice REVIEW until deterministic attachment/PDF ingestion exists.
+4. Keep McDonald's/POS short local IDs REVIEW until a proper local/POS identity model exists.
+5. Add verified public-mailbox merchant identity architecture before allowing future Gmail-sender merchants to auto-create Purchases.
+6. After recognition backlog improves, align top-level lifecycle labels/counters, then Warranty + Return/refund UI, later Felfedezés.
 
 ## TEST QUALITY TARGET
 
@@ -251,4 +241,4 @@ If the user gives no different direction:
 
 ## MAINTENANCE
 
-This is a rolling snapshot, not a diary. After meaningful work update it and prepend concise detail to `BUYFLOW_WORKLOG.md`. Never store secrets, credentials or raw customer email bodies here.
+This is a rolling snapshot, not a diary. Never store secrets, credentials or raw customer email bodies here. Detailed newest recovery notes are in `BUYFLOW_WORKLOG_LATEST.md`; older history remains in `BUYFLOW_WORKLOG.md` and Git history.
