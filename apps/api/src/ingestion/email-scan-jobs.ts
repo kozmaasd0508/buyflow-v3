@@ -10,6 +10,7 @@ import { enqueueAutomaticTargetedRecoveryForSource } from './automatic-targeted-
 import { guardNylasMessageWhenAiDisabled } from './deterministic-ai-off-fallback.js';
 import { preprocessDeterministicNylasMessage } from './deterministic-commerce-parser.js';
 import { preprocessDeterministicLifecycleNylasMessage } from './deterministic-lifecycle-parser.js';
+import { reconcileDeterministicLifecycleStatesForGrant } from './deterministic-lifecycle-state.js';
 import { processEmailForAuditBenchmark } from './email-audit-benchmark.js';
 import { preprocessLimoneOrderNylasMessage } from './limone-order-adapter.js';
 
@@ -86,6 +87,31 @@ function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult 
     documentWrites: 0,
     aiCalls: 0,
   };
+}
+
+async function refreshScanOutcomeCounts(
+  db: any,
+  result: InitialEmailScanResult,
+  sourceEmailIds: Set<string>,
+): Promise<void> {
+  if (sourceEmailIds.size === 0) return;
+  const ids = [...sourceEmailIds];
+  const { data, error } = await db
+    .from('source_emails')
+    .select('id,processing_status')
+    .in('id', ids);
+  if (error) throw new Error(`Email scan final source status read failed: ${error.message}`);
+
+  result.ignored = 0;
+  result.unlinked = 0;
+  result.review = 0;
+  result.processed = 0;
+  for (const row of (data ?? []) as Array<{ processing_status?: string | null }>) {
+    if (row.processing_status === 'ignored') result.ignored += 1;
+    else if (row.processing_status === 'processed') result.processed += 1;
+    else if (row.processing_status === 'unlinked') result.unlinked += 1;
+    else result.review += 1;
+  }
 }
 
 export async function enqueueInitialEmailScan(input: {
@@ -272,6 +298,7 @@ export async function processEmailScanJob(
     let cursor: string | undefined;
     let pages = 0;
     const result = emptyScanResult();
+    const observedSourceEmailIds = new Set<string>();
 
     do {
       const page = await provider.searchMessages({
@@ -340,6 +367,8 @@ export async function processEmailScanJob(
             mode: effectiveMode,
           });
 
+        if (pipeline.sourceEmailId) observedSourceEmailIds.add(pipeline.sourceEmailId);
+
         if (
           scanJob.kind === 'initial' &&
           pipeline.status === 'unlinked' &&
@@ -367,6 +396,11 @@ export async function processEmailScanJob(
 
       cursor = page.nextCursor;
     } while (cursor && pages < maxPages);
+
+    if (scanJob.kind !== 'audit') {
+      await reconcileDeterministicLifecycleStatesForGrant(emailConnection.provider_account_id);
+      await refreshScanOutcomeCounts(db, result, observedSourceEmailIds);
+    }
 
     const { error: finishError } = await db.rpc('finish_email_scan_job', {
       p_id: jobId,
