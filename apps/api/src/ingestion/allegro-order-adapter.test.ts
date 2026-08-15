@@ -35,7 +35,7 @@ test('parses a rich Allegro marketplace purchase without AI', () => {
   });
 
   assert.ok(parsed);
-  assert.equal(parsed.parserVersion, 'allegro-order-v1.3');
+  assert.equal(parsed.parserVersion, 'allegro-order-v1.4');
   assert.equal(parsed.extraction.event_type, 'order_created');
   assert.equal(parsed.extraction.merchant, 'DemoSeller');
   assert.equal(parsed.extraction.order_number, '3fe09c80-8d79-11f1-b193-cf13a29b46f5');
