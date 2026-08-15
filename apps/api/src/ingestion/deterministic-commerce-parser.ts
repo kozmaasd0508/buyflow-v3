@@ -9,6 +9,7 @@ import { validateEmailExtraction } from '../validation/email-extraction-validato
 import { parseAboutYouCommerceEmail } from './aboutyou-commerce-adapter.js';
 import { parseAllegroOrderEmail } from './allegro-order-adapter.js';
 import { parseAlzaCommerceEmail } from './alza-commerce-adapter.js';
+import { preprocessExpressOneTerminalReceiptNylasMessage } from './expressone-terminal-receipt-adapter.js';
 import { parseGenericOrderConfirmationEmail } from './generic-order-confirmation-adapter.js';
 import { parseMerchantPreAdviceEmail } from './pre-advice-commerce-adapter.js';
 import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
@@ -416,6 +417,19 @@ export async function preprocessDeterministicNylasMessage(input: {
   grantId: string;
   messageId: string;
 }): Promise<DeterministicEmailPreprocessResult> {
+  const receipt = await preprocessExpressOneTerminalReceiptNylasMessage({
+    grantId: input.grantId,
+    messageId: input.messageId,
+    sourceQuery: 'deterministic:expressone-terminal-receipt',
+  });
+  if (receipt.matched) {
+    return {
+      matched: true,
+      ...(receipt.sourceEmailId ? { sourceEmailId: receipt.sourceEmailId } : {}),
+      parserVersion: 'expressone-terminal-receipt-v1',
+    };
+  }
+
   const db = getSupabaseAdmin() as any;
 
   const { data: connection, error: connectionError } = await db
