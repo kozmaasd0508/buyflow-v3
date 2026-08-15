@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { reconcileCarrierParcelSenderBridgesForGrant } from './carrier-parcel-sender-bridge.js';
+import { repairDeterministicFoxpostSourcesForGrant } from './foxpost-lifecycle-repair.js';
 import type { DeterministicLifecycleEvent } from './deterministic-lifecycle-parser.js';
 
 const TRUSTED_VALIDATION = new Set(['validated', 'guardrailed']);
@@ -190,6 +191,10 @@ export async function reconcileDeterministicLifecycleStatesForGrant(grantId: str
     if (updateError) throw new Error(`Lifecycle reconciliation purchase update failed: ${updateError.message}`);
     applied += 1;
   }
+
+  // Upgrade unresolved Foxpost evidence first: use the labelled CLFOX tracking ID,
+  // preserve the actual parcel sender, and keep pickup-ready separate from delivered.
+  await repairDeterministicFoxpostSourcesForGrant(grantId);
 
   // A carrier message may contain the first tracking number while the merchant's
   // shipment email only contains the order identity. Reconcile those two pieces
