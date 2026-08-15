@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { reconcileCarrierParcelSenderBridgesForGrant } from './carrier-parcel-sender-bridge.js';
+import { reconcileCorroboratedPurchaseReconstructionsForGrant } from './corroborated-purchase-reconstruction.js';
 import { repairDeterministicFoxpostSourcesForGrant } from './foxpost-lifecycle-repair.js';
 import type { DeterministicLifecycleEvent } from './deterministic-lifecycle-parser.js';
 
@@ -195,6 +196,13 @@ export async function reconcileDeterministicLifecycleStatesForGrant(grantId: str
   // Upgrade unresolved Foxpost evidence first: use the labelled CLFOX tracking ID,
   // preserve the actual parcel sender, and keep pickup-ready separate from delivered.
   await repairDeterministicFoxpostSourcesForGrant(grantId);
+
+  // Reconstruct a missing Purchase only from a strict multi-source transaction:
+  // same merchant-owned domain + same explicit order ID in separate dispatch and
+  // invoice mail, plus exactly one multi-event carrier group with matching parcel
+  // sender identity and explicit COD. One email or ambiguous carrier evidence is
+  // never enough to create a Purchase.
+  await reconcileCorroboratedPurchaseReconstructionsForGrant(grantId);
 
   // A carrier message may contain the first tracking number while the merchant's
   // shipment email only contains the order identity. Reconcile those two pieces
