@@ -4,7 +4,8 @@
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Last reconciled runtime code commit:** `ce759ed001c6f52dcb84cf2b56f431d3da2972ab`  
+**Last reconciled runtime code commit:** `5fdf20f69dc4f3518d36400223f7a522f124de79`  
+**Current main after deployment-diagnostic improvement:** `44fa37bd89b268049230dcb45e86920ac93d3cc0`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -20,13 +21,13 @@ Minimal resume phrase:
 
 BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails into one safe Purchase record. It must scale across many users, merchants, carriers and mailbox providers.
 
-- Frontend/mobile web: `apps/mobile`, Render `/app/`; Android packaging later.
+- Frontend/mobile web: `apps/mobile`, Render `/app/`; Android packaging only when explicitly requested.
 - API/backend: TypeScript in `apps/api`.
 - Database/auth: Supabase production `acjenqkrvnkdvvgordry`, eu-west-1.
-- Email ingestion: Nylas webhook + durable scan/recovery jobs.
+- Email ingestion: Nylas webhook + durable full-inbox/targeted scan jobs.
 - Recognition: deterministic-first; uncertain evidence => REVIEW.
 - AI infrastructure exists but **AI is intentionally disabled**. `BUYFLOW_AI_ENABLED` defaults false.
-- Production flow: branch -> PR -> CI -> merge -> main CI -> exact Render smoke.
+- Production flow: branch -> PR -> CI -> merge -> main CI -> exact Render runtime proof.
 
 ## NON-NEGOTIABLE SAFETY
 
@@ -41,13 +42,59 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 9. Browser-first UI. APK only on explicit user request/approval.
 10. Supabase DDL via migrations; guarded DML is allowed for verified historical repair.
 
-## FRONTEND STATE
+## FRONTEND / MULTI-GMAIL STATE
 
-Live: login, purchase list/detail, current state + next action, timeline, product edit/remove, order/tracking/document details, missing-purchase recovery and Gmail settings.
+### PR #69 — multi Gmail + full deterministic scan UI
+
+Runtime main commit: `afa01c0d21179dc6472b7e32d427c789282d34ea`.
+
+The Gmail settings UI now:
+- lists **all active Gmail/Nylas connections** for the BuyFlow user instead of only the first one,
+- shows `+ Másik Gmail hozzáadása` even when one Gmail is already connected,
+- exposes per-account **7 / 30 / 90 day full-inbox scans**,
+- recommends **30 days** for the planned blind second-account test,
+- does not require webshop/order-number search terms for the full scan,
+- displays checked / processed / REVIEW / unlinked / Purchase writes / Shipment writes / Document writes / AI calls,
+- continues to use the existing deterministic pipeline; recognition/parser/resolver rules were not weakened.
+
+Backend `/api/email-connections/:id/initial-scan` now accepts only 7, 30 or 90 day windows. A newly connected Gmail still receives the existing automatic 7-day initial scan; the user can then start the 30-day full scan from the UI.
+
+Important semantics: this is a **real deterministic write-mode inbox scan/import**, not the old AI observe-only benchmark. Safe recognized records may be written; uncertain evidence stays REVIEW. AI remains disabled.
+
+PR #69 PR CI #408 passed; main CI #409 passed.
+
+### PR #70 — repeated scan progress fix
+
+Runtime main commit: `5fdf20f69dc4f3518d36400223f7a522f124de79`.
+
+Fixed a UI race where repeating the same 7/30/90-day window could briefly see the previous completed scan before the new job was enqueued and stop polling too early. The server-side scan was safe, but the UI could fail to follow progress. Now the scan is enqueued first, the clicked button immediately shows `Indítás…`, then polling follows the new/latest job.
+
+PR #70 CI #410 passed; main CI #411 passed.
+
+### Exact production verification
+
+PR #71 upgraded `.github/workflows/render-health-diagnostic.yml` so it reads `/health`, resolves the latest runtime-changing repository commit and proves that the deployed Render commit contains that runtime commit in its ancestry.
+
+Diagnostic run #4 on 2026-08-15 reported:
+- expected runtime commit: `5fdf20f69dc4f3518d36400223f7a522f124de79`
+- deployed Render commit: `5fdf20f69dc4f3518d36400223f7a522f124de79`
+- `runtime_deployment_verified=true`
+- service version `0.4.0`
+- automation mode `write`
+
+Therefore the multi-Gmail + 7/30/90 full scan UI and repeated-scan fix are **exactly verified live on Render**.
+
+### Other frontend state
+
+Live: login, purchase list/detail, current state + next action, timeline, product edit/remove, order/tracking/document details, targeted missing-purchase recovery and multi-Gmail settings/full scans.
 
 AI audit/Flow UI stays hidden while deterministic recognition is being improved.
 
-Still unfinished: Warranty UI, Return/refund UI, Felfedezés.
+Still incomplete / lagging:
+- top-level `main.ts` lifecycle labels/counting still need full alignment for `in_transit`, `out_for_delivery`, `ready_for_pickup`, etc.; detail overview already understands these states,
+- Warranty UI,
+- Return/refund UI,
+- Felfedezés.
 
 ## CURRENT EMAIL RECOGNITION
 
@@ -62,8 +109,6 @@ PRs #59–#62 established:
 - targeted scans run lifecycle reconciliation,
 - `ready_for_pickup` is first-class and monotonic: `delivered > ready_for_pickup > in_transit`.
 
-PR #62 runtime commit: `0505fe96c872f7d6bd20c775838305035ba08b45`; main CI #395 passed.
-
 Live Gate.shop verification:
 - Purchase `20336215` = `ready_for_pickup`,
 - exactly one Foxpost Shipment,
@@ -74,85 +119,70 @@ Live Gate.shop verification:
 
 Order `1783-975-87-395`, total `16,780 HUF`.
 
-PR #65 / main `053d4e1190b6bc8fd35f1c00932508c7b473dc8c`:
-- generic parser `generic-order-confirmation-v1.2`,
-- accepts safe Hungarian `Rendelés: #...` / `Megrendelés: #...` identity,
-- accepts real `Köszönjük megrendelésedet` confirmation wording,
-- carrier/shared-platform/public-mailbox exclusions and >=2 corroborators remain mandatory,
-- stale PR #58 was closed as superseded.
+PR #65:
+- `generic-order-confirmation-v1.2`, safe Hungarian `Rendelés: #...` / `Megrendelés: #...`,
+- recognizes `Köszönjük megrendelésedet`,
+- trusted merchant + corroboration/public-mailbox safety unchanged.
 
-Live order recovery after #65:
-- 1 checked / 1 processed / 0 review / 0 unlinked,
-- exactly one Purchase created,
-- merchant Scitec, order `1783-975-87-395`, total `16,780 HUF`, confidence 0.95,
-- AI 0.
+PR #66:
+- narrow verified-brand COD fallback for `scitec.hu` + BioTechUSA Kft. + Foxpost,
+- >=2 carrier sources, exact COD+currency, <=7 days, Purchase confidence >=0.95, exactly one candidate,
+- generic carrier-only guessing remains blocked.
 
-PR #66 / main `3d73da6a1e42410955d28bca1e54024538c0b092`:
-- added a deliberately narrow verified-brand COD carrier fallback,
-- initial explicit identity: `scitec.hu` + normalized `BioTechUSA Kft.` + Foxpost,
-- requires >=2 carrier sources on one tracking, exact COD+currency, <=7-day window, Purchase confidence >=0.95 and exactly one candidate,
-- generic carrier-only evidence still cannot guess a Purchase,
-- tracking-only pre-advice may corroborate but does not count as physical shipment progress.
+PR #67:
+- Foxpost parser `foxpost-lifecycle-v1.1`, including trusted `Csomagod azonosítószáma: CLFOX...` warehouse-arrival format.
 
-Live #66 verification:
-- Foxpost tracking `CLFOX178401889449819`,
-- Purchase and Shipment became `ready_for_pickup`,
-- no delivered state,
-- AI 0.
-
-PR #67 / main runtime commit `ce759ed001c6f52dcb84cf2b56f431d3da2972ab`:
-- Foxpost parser `foxpost-lifecycle-v1.1`,
-- accepts trusted Foxpost `Csomagod azonosítószáma: CLFOX...` warehouse-arrival format,
-- exact/child `foxpost.hu`, labelled `CLFOX`, explicit parcel sender and lifecycle wording remain required,
-- main CI #405 passed.
-
-Final live Scitec/Foxpost chain:
-- `Előértesítés` -> processed + linked,
-- `Csomagod már a raktárunkban van` -> parser `foxpost-lifecycle-v1.1`, `in_transit`, BioTechUSA Kft., COD 16,780 HUF -> processed + linked,
-- `Csomagod megérkezett` -> `ready_for_pickup` -> processed + linked,
-- final targeted rerun: **3 checked / 3 processed / 0 review / 0 unlinked / AI 0**,
+Final live chain:
+- tracking `CLFOX178401889449819`,
+- 3 checked / 3 processed / 0 review / 0 unlinked / AI 0,
 - exactly one Purchase and one Foxpost Shipment,
-- Purchase + Shipment final state `ready_for_pickup`,
-- Shipment `shipped_at=2026-07-14 17:33:28+00`, first explicit physical warehouse arrival,
-- `last_event_at=2026-07-15 09:55:07+00`, delivered_at remains null.
+- final state `ready_for_pickup`,
+- `shipped_at=2026-07-14 17:33:28+00`,
+- `last_event_at=2026-07-15 09:55:07+00`,
+- delivered_at null.
 
 ### Other completed deterministic coverage
 
-- Promotional/repurchase hard-negative: strong marketing noise excluded without Gmail Promotions as a hard gate.
+- Promotional/repurchase hard-negative without Gmail Promotions as a hard gate.
 - Allegro / HappyBox24: deterministic lifecycle, DPD tracking and seller invoice.
 - Ars Una / GLS: exact GLS sender parsing, parcel sender + COD bridge, tracking `3412614699`; no false delivered state.
 - GymBeam / Express One: processing enrichment, strict missing-purchase reconstruction, terminal receipt payment resolution and outbound pickup-noise exclusion.
-- Limone: deterministic merchant order parsing active.
+- Limone deterministic merchant order parsing active.
 
 ## INTENTIONALLY UNLINKED
 
-Three Barion successful-payment emails remain unlinked because no matching Purchase/order/invoice was found. Payment-only evidence must not create a Purchase.
-
-## OPEN / INCOMPLETE WORK
-
-- Literal public Render `/health` `RENDER_GIT_COMMIT` verification is still not directly fetchable from the current tool environment. Live worker behavior proves #65–#67 behavior is active, but do not claim exact SHA smoke until `/health` is read directly.
-- Warranty UI, Return/refund UI and Felfedezés remain unfinished.
+Three Barion successful-payment emails remain intentionally unlinked because no matching Purchase/order/invoice was found. Payment-only evidence must not create a Purchase.
 
 ## CURRENT LIVE BACKLOG
 
-Latest verified live counts after the complete Scitec/Foxpost rerun:
+Last verified before any new second-Gmail test:
 - review: **28**
 - unlinked: **13**
 - total unresolved: **41**
 - historical `ai_processing_runs`: **98**
 - latest AI run: `2026-08-14 21:43:08.694227+00`
-- #65–#67 live verification created no AI run.
 
-Re-check live values before future time-sensitive claims.
+Re-check these values after any new full inbox scan; a second account will naturally change dataset totals.
 
 ## NEXT ACTION
 
 If the user gives no different direction:
 
-1. Continue the highest-value real review/unlinked clusters, starting with Gyerekjatekbolt payment rows and McDonald's receipt/payment rows, without weakening Purchase creation safety.
-2. Keep the three Barion payment-only emails unlinked unless corroborating merchant evidence appears.
-3. Verify public Render `/health` exact commit SHA when the endpoint becomes directly readable.
-4. Once deterministic recognition is very strong, return to Warranty + Return/refund frontend work, then Felfedezés.
+1. **Use the live browser UI to connect a second Gmail account.**
+2. Let its automatic 7-day initial scan finish, then run the **30-day full inbox scan** from Email és Gmail.
+3. Record the result counts and manually compare against real purchases in that second mailbox: found, missed, false Purchase, incorrect link, REVIEW, duplicates.
+4. Fix only generalizable recognition gaps; never hard-code individual order/tracking IDs.
+5. After the blind test, align the remaining top-level lifecycle labels/counters in `main.ts`.
+6. Then continue high-value unresolved clusters (Gyerekjatekbolt, McDonald's) and later Warranty + Return/refund + Felfedezés.
+7. Keep Barion payment-only rows unlinked unless corroborating merchant evidence appears.
+
+## TEST QUALITY TARGET
+
+For the 30-day cross-account validation:
+- first meaningful milestone: 20–30 real purchase chains,
+- stronger confidence: 50–100 chains across multiple mailboxes/merchants/carriers,
+- target >=95% recognition while prioritizing near-zero unsafe automatic linking,
+- REVIEW is preferred over a wrong automatic match.
 
 ## WORKFLOW PREFERENCES
 
@@ -160,7 +190,7 @@ If the user gives no different direction:
 - Keep user-facing updates short and concrete.
 - Do not repeatedly ask for confirmation when direction is clear.
 - Browser first for UI; APK only on explicit request.
-- Report exact outcomes: counts, CI/deploy, live writes, AI calls and remaining work.
+- Report exact outcomes: PR, commit, CI/deploy, live writes, AI calls and remaining work.
 
 ## MAINTENANCE
 
