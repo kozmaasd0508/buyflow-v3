@@ -30,6 +30,9 @@ test('paginates discovery and counts duplicates without creating them again', as
     async getMessage() {
       throw new Error('not used');
     },
+    async downloadAttachment() {
+      throw new Error('not used');
+    },
     async searchMessages(input) {
       requestedCursors.push(input.cursor);
 
@@ -87,6 +90,9 @@ test('stops after the requested number of new messages while skipping duplicates
   const provider: EmailProvider = {
     name: 'nylas',
     async getMessage() {
+      throw new Error('not used');
+    },
+    async downloadAttachment() {
       throw new Error('not used');
     },
     async searchMessages() {
