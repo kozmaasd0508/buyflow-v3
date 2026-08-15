@@ -4,215 +4,181 @@
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Last reconciled main commit:** `20ad2db45df68a1dd9d7e97f64fcc1401bd3b850`  
+**Last reconciled main commit:** `35dd96f1678c4bba74ecc973288cfb0f1df1dc43`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
 ## RESUME CONTRACT
 
-If a new chat starts, do not ask the user to retell BuyFlow history. Reconcile this file with current `main`, live Supabase and the latest exact Render deployment.
+If a new chat starts, do not ask the user to retell BuyFlow history. Reconcile this snapshot with current `main`, live Supabase and the latest exact Render deployment.
 
 Minimal resume phrase:
 
 > **Folytasd a BuyFlowot a GitHubból.**
 
-## PRODUCT GOAL
+## PRODUCT / ARCHITECTURE
 
-BuyFlow is an all-in-one purchase, delivery, invoice, warranty and return dashboard. It must scale to large, chaotic mailboxes and safely turn commerce email chains into one continuously updated Purchase.
+BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails into one safe Purchase record. It must scale across many users, merchants, carriers and mailbox providers.
 
-## CURRENT ARCHITECTURE
-
-- Frontend/mobile web: `apps/mobile`, served at Render `/app/`; later packaged as Android.
+- Frontend/mobile web: `apps/mobile`, Render `/app/`; later Android packaging.
 - API/backend: TypeScript in `apps/api`.
 - Database/auth: Supabase production `acjenqkrvnkdvvgordry`, eu-west-1.
-- Email ingestion: Nylas webhook + durable email scan/recovery jobs.
-- Recognition: deterministic parsers first; uncertain commerce evidence goes to REVIEW.
+- Email ingestion: Nylas webhook + durable scan/recovery jobs.
+- Recognition: deterministic-first; uncertain evidence => REVIEW.
 - AI infrastructure exists but **AI is intentionally disabled**. `BUYFLOW_AI_ENABLED` defaults false.
-- Deployment: branch -> PR -> CI -> merge -> main CI -> exact Render smoke.
+- Production flow: branch -> PR -> CI -> merge -> main CI -> exact Render smoke.
 
-## NON-NEGOTIABLE SAFETY RULES
+## NON-NEGOTIABLE SAFETY
 
-1. Purchase creation and lifecycle are separate. Shipment/delivery/invoice/payment-only mail cannot create Purchase in normal flow.
-2. Multiple plausible matches => REVIEW, never unsafe auto-link.
+1. Purchase creation != lifecycle. Shipment/delivery/invoice/payment-only mail cannot create a Purchase in normal flow.
+2. Multiple plausible candidates => REVIEW, never unsafe auto-link.
 3. Strong identity first: order ID, tracking identity, then narrow corroborated fallbacks.
-4. Carrier “delivery today” wording is not final delivered without completion evidence.
-5. Merchant/carrier-specific fixes must not weaken global rules.
-6. Gmail categories are advisory only; never a required gate.
-7. Shared platform/public mailbox domains cannot alone establish merchant identity.
-8. Payment receipts can update only an existing uniquely corroborated Purchase; never create one.
+4. “Delivery today” is not delivered without explicit completion evidence.
+5. Gmail categories are advisory only; never a gate.
+6. Shared platform/public mailbox domains cannot alone establish merchant identity.
+7. Carrier/payment evidence may update only an existing uniquely corroborated Purchase.
+8. Merchant/carrier-specific adapters must not weaken global rules.
 9. Browser-first UI. APK only on explicit user request/approval.
-10. Supabase DDL via migrations and re-check advisors after DDL.
+10. Supabase DDL via migrations; guarded DML is allowed for verified historical repair.
 
 ## FRONTEND STATE
 
-Current mobile/web modules include login, purchase list/detail, current state + next action, timeline, product edit/remove, order/tracking/document details, missing-purchase recovery and Gmail settings.
+Live: login, purchase list/detail, current state + next action, timeline, product edit/remove, order/tracking/document details, missing-purchase recovery, Gmail settings.
 
-AI audit/Flow UI is hidden while deterministic recognition is being improved.
+AI audit/Flow UI stays hidden while deterministic recognition is being improved.
 
-Still missing/unfinished:
-- Warranty UI
-- Return/refund UI
-- Felfedezés
-- Flow remains hidden while AI is off
+Still unfinished: Warranty UI, Return/refund UI, Felfedezés.
 
 ## CURRENT EMAIL RECOGNITION
 
 ### Gmail category independence
 
-A real Limone confirmation `98691-106627` landed in Gmail Personal. The global Purchases-category gate was removed. BuyFlow now evaluates signed incoming mail regardless of Gmail category.
+Real Limone order `98691-106627` landed outside Gmail Purchases. The global category gate is removed; BuyFlow evaluates signed incoming mail itself.
 
-### Generic order parser
+### Generic order recognition
 
-Generic deterministic order recognition is live for unknown merchants when several independent order signals agree. Tests cover multiple platform-like and multilingual layouts. Newsletter, abandoned-cart, carrier-only, invoice-only and payment-only mail must not become new Purchases.
+Unknown merchants can be recognized deterministically only when several independent order signals agree. Newsletter, abandoned-cart, carrier-only, invoice-only and payment-only mail must not become new Purchases.
 
-### Known live examples
+### Promotional / repurchase hard-negative
 
-- Limone `98691-106627`: recovered from non-Purchases Gmail category, AI 0.
-- Allegro / HappyBox24 UUID `3fe09c80-8d79-11f1-b193-cf13a29b46f5`: parser `allegro-order-v1.4`, total 5,675 HUF, shipping 1,990 HUF, COD/DPD, product prices 1,830 and 1,855 HUF.
-- Alza `602385238`: lifecycle chain remains conservative and did not create a false Purchase.
+PR #53 / main `6ba285ac7a8c975eb7807b07b2253fc181c8a210` added a conservative marketing exclusion.
 
-## EXPRESS ONE OUTBOUND PICKUP NOISE — COMPLETE
+- Gmail Promotions itself is NOT a gate.
+- Strong promo/repurchase evidence with no transactional anchor can be ignored.
+- Explicit order/tracking/invoice identity or real order-confirmation language overrides marketing exclusion.
+- Historical verified noise cleaned: 4 rows (Goddess/Galaxy/Sport8 examples), old machine results preserved.
+- BF synthetic Gmail test messages intentionally remain review.
 
-PR #47 / main `2bac53d5550236023824b08cbefc9fd8a708652c` added a narrow exclusion for Express One WEBCAS **outbound courier pickup bookings** (`árufelvétel` / `request_curier`). These are not consumer purchases or inbound parcel lifecycle mail.
+### Allegro / HappyBox24 lifecycle + invoice
 
-Historical cleanup:
-- 43 unresolved pickup-service rows -> 0
-- 5 false `order_created`
-- 38 false `shipment`
-- 0 Purchase links before cleanup
-- rows kept for audit as `ignored/other`, with previous machine result preserved
-- real Express One parcel mail remains eligible
+Order UUID `3fe09c80-8d79-11f1-b193-cf13a29b46f5`, merchant HappyBox24, 5,675 HUF, COD, DPD.
 
-## NEW: GYMBEAM ORDER-PROCESSING PARSER
+PR #54 / main `012b80e0273ce18bcc252e0a076ce1a566f4cccd` added `allegro-lifecycle-v1`:
+- exact Allegro purchase-history UUID + tracking bridge,
+- DPD relay tracking,
+- delivery-today => out_for_delivery, not delivered,
+- explicit successful delivery => delivered,
+- relay messages never invent order IDs.
 
-PR #49 introduced a strict parser for trusted GymBeam `rendelésed feldolgozás alatt van` summaries. PR #50 fixed the real Nylas flattened-table shape.
+Live chain:
+- tracking `13169408547018`
+- exactly 1 Purchase + 1 DPD shipment
+- all 5 lifecycle emails processed/linked.
 
-Current live parser: **`gymbeam-order-processing-v1.1`**.
+PR #55 / main `1f8c19d4dcf1ca80f09cc10a99946d4a836fd8ea` added `allegro-sales-document-v1` so document identity wins over incidental “package arrived” wording.
 
-It requires trusted GymBeam sender, explicit processing language, order number, order summary, payment + shipping method, product rows and money reconciliation. It emits:
-- event `order_updated`
-- lifecycle `order_processing`
-- **never `order_created`**
+Verified seller invoice:
+- invoice `I/00005/08/26`
+- seller internal order `46181083`
+- total 5,675 HUF
+- shipping 1,990 HUF
+- product prices 1,830 + 1,855 HUF
+- exactly 1 invoice document linked to HappyBox24 Purchase.
 
-Live verified AI-free:
-- order `3010206178`: 9,450 HUF, COD, Express One, 4 products
-- order `3010228912`: 13,240 HUF, COD, Express One, 5 products
+### Ars Una / GLS carrier bridge
 
-The existing Purchases were enriched from these validated deterministic sources:
-- `3010206178`: subtotal 7,960; shipping 1,190; total 9,450 HUF; 4 products
-- `3010228912`: subtotal 11,750; shipping 1,190; total 13,240 HUF; 5 products
+Order `192132`, Ars Una Studio Kft.
 
-## NEW: STRICT HISTORICAL RECONSTRUCTION `3010085026`
+Verified PDF invoice (rendered visually before write):
+- invoice `5133964`
+- explicit order reference `192132`
+- product 6,276 HUF
+- shipping 1,990 HUF
+- total 8,266 HUF
+- payment Utánvét
+- exactly 1 invoice document linked to Purchase.
 
-A real missing GymBeam order was found while resolving the remaining Express One messages.
+GLS carrier emails state COD 8,265 HUF: a verified 1 HUF difference from the official invoice. The system does **not** call this exact equality.
 
-Exact evidence:
-- GymBeam processing summary
-- GymBeam merchant shipment email
-- GymBeam invoice
-- three Express One lifecycle emails with one exact tracking identity
-- exact 90-day search found no `order_created` email
+PR #56 / current runtime main `35dd96f1678c4bba74ecc973288cfb0f1df1dc43` added:
+- parser `gls-lifecycle-v1`
+- bridge `carrier-sender-cod-bridge-v1`
+- exact sender `noreply@gls-hungary.com`
+- pre-advice => `shipment_created`
+- delivery today => `out_for_delivery`, never delivered
+- dynamic GLS RTT URL => tracking extraction + conservative `in_transit`
+- parcel sender + COD extraction
+- automatic bridge only when exactly one recent existing COD Purchase matches exact normalized merchant identity, carrier compatibility and amount within 1 currency unit
+- exactly one existing merchant shipment source without tracking is required before the bridge adds tracking to merchant evidence
+- zero/multiple candidates => review.
 
-Reconstructed exactly once:
-- order `3010085026`
-- total 17,270 HUF
-- subtotal/products 15,780 HUF
-- shipping 1,190 HUF
-- COD fee 300 HUF
-- payment `Utánvéttel`
-- carrier Express One
-- tracking `605855680768000013605231`
-- invoice `4008742640`
-- 11 product rows
-- Purchase confidence 0.90
+Live Ars Una verification:
+- Purchase total 8,266 HUF
+- tracking `3412614699`
+- carrier GLS
+- exactly 1 shipment
+- pre-advice and merchant pre-handoff remain `shipment_created`
+- first physical progress = delivery-today email
+- current state `in_transit`
+- no delivered state because no completion email was found
+- dynamic tracking email processed from GLS RTT URL
+- unresolved GLS rows = 0
+- AI calls = 0.
 
-Verification: 1 Purchase, 1 shipment, 1 invoice, 11 products; no duplicates.
+### Express One / GymBeam completed work
 
-## NEW: EXPRESS ONE TERMINAL RECEIPT RESOLVER
+- Express One outbound pickup noise: 43 false unresolved rows cleaned to 0; real parcel mail preserved.
+- `gymbeam-order-processing-v1.1` parses trusted processing summaries as lifecycle only, never `order_created`.
+- Missing GymBeam `3010085026` strictly reconstructed from multi-source evidence: 17,270 HUF, 11 products, tracking `605855680768000013605231`, invoice `4008742640`.
+- Express One terminal receipt resolver links successful delivery-time card receipts only to one existing COD Purchase.
+- GymBeam `3010206178` and `3010228912` receipts/payment state corrected without AI.
 
-PR #51 / current main **`20ad2db45df68a1dd9d7e97f64fcc1401bd3b850`** is live and exact Render smoke passed.
+## INTENTIONALLY UNLINKED: BARION PAYMENT-ONLY
 
-Parser/resolver: `expressone-terminal-receipt-v1`.
+Three Barion successful-payment emails remain unlinked because no matching Purchase/order/invoice was found for them in the mailbox or database. Payment-only mail must not create a Purchase. This is correct safe behavior, not a bug to force-resolve.
 
-Purpose: card-terminal receipts sent by Express One when an **existing COD parcel** is paid by card at delivery.
+## CURRENT LIVE BACKLOG
 
-Automatic linking requires ALL:
-- exact sender `slip@expressone.hu`
-- exact `Fizetési bizonylat` subject
-- successful card purchase transaction
-- exact amount + currency
-- existing Purchase marked COD / Utánvét
-- Purchase expected carrier Express One
-- Shipment carrier Express One
-- shipment event within 2 hours of receipt
-- exactly one candidate
-
-Zero or multiple candidates => REVIEW. Receipt is explicitly ineligible for Purchase creation.
-
-Live historical links:
-- 9,450 HUF MasterCard receipt -> GymBeam `3010206178`
-- 13,240 HUF MasterCard receipt -> GymBeam `3010228912`
-
-Both Purchases are now `payment_status=paid` with exact receipt timestamps.
-
-Live webhook re-test of the 9,450 HUF receipt after deployment:
-- source `payment_completed`
-- `processed`
-- `validated`
-- parser `expressone-terminal-receipt-v1`
-- exactly 1 Purchase link
-- AI 0
-
-## CURRENT LIVE BACKLOG SNAPSHOT
-
-After the above cleanup/resolution:
-- `review`: **34**
-- `unlinked`: **26**
-- Express One review/unlinked remaining: **0**
-
-Historical AI counter:
-- total `ai_processing_runs`: **98**
-- latest historical run: `2026-08-14 21:43:08.694227+00`
-- no new AI run during the current deterministic work
+Latest verified counts after Ars Una / GLS recovery:
+- review: **28**
+- unlinked: **18**
+- total unresolved: **46**
+- unresolved GLS: **0**
+- total historical `ai_processing_runs`: **98**
+- latest AI run: `2026-08-14 21:43:08.694227+00`
+- current deterministic work created no new AI runs.
 
 Re-check live values before future time-sensitive claims.
-
-## OTHER IMPORTANT COMPLETED WORK
-
-- Unlinked Resolver V2
-- Tracking Bridge V2.1–V2.6 + hard tracking identity
-- Review Resolver V3
-- Carrier delivery semantic hardening
-- Corroborated Document Resolver
-- Product edit/remove with source-evidence preservation
-- SECURITY DEFINER hardening
-- password reset token scrub + stronger password policy
-- deterministic email visibility increased from 20k to 80k characters
-
-Known tracking identities:
-- GymBeam `3010085026` -> `605855680768000013605231`
-- GymBeam `3010206178` -> `605855685055000013605231`
-- GymBeam `3010228912` -> `605855685836000013605231`
-- JatekBolt `12247833` -> `16380124260518`
 
 ## NEXT ACTION
 
 If the user gives no different direction:
 
-1. Continue through remaining `review/unlinked` rows by highest value/risk.
-2. First clean the old false `order_created` marketing rows already verified as promotions (Goddess/Shopify promo, Galaxy promo, Sport8 coupon) with narrow/generalizable deterministic rules.
-3. Leave BF-TEST Gmail synthetic examples in review; public-mailbox protection is intentional.
-4. Then inspect remaining shipment/invoice/payment clusters and improve parsers without weakening global creation gates.
-5. When AI-free recognition is very strong, return to Warranty + Return/Refund frontend work.
+1. Inspect Foxpost unresolved cluster (3 delivery + 2 shipment) by exact tracking/merchant evidence.
+2. Then Gyerekjatekbolt payment review rows and McDonald's receipt/payment rows.
+3. Keep the 3 Barion payment-only emails unlinked unless corroborating merchant evidence appears.
+4. Leave BF synthetic Gmail tests in review intentionally.
+5. Continue highest-value real review/unlinked clusters without weakening Purchase creation safety.
+6. Once AI-free recognition is very strong, return to Warranty + Return/refund frontend work.
 
 ## WORKFLOW PREFERENCES
 
 - User prefers implementation/live verification over theory.
-- Keep user-facing updates short and simple.
-- Do not ask for repeated confirmation when direction is clear.
-- Browser first for UI, APK only on explicit request.
-- Report concrete outcomes: what changed, counts, CI/deploy status, AI calls and what remains.
+- Keep user-facing updates short and concrete.
+- Do not repeatedly ask for confirmation when direction is clear.
+- Browser first for UI; APK only on explicit request.
+- Report exact outcomes: counts, CI/deploy, live writes, AI calls, remaining work.
 
-## MAINTENANCE RULE
+## MAINTENANCE
 
-This is a rolling snapshot, not a diary. After meaningful work update this file and append history to `BUYFLOW_WORKLOG.md`. Never store secrets, tokens, passwords or raw customer email bodies here.
+This is a rolling snapshot, not a diary. After meaningful work update it and prepend concise detail to `BUYFLOW_WORKLOG.md`. Never store secrets, credentials or raw customer email bodies here.
