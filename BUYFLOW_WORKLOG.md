@@ -2,6 +2,41 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Express One terminal receipt resolver
+
+- PR #51 / main commit: `20ad2db45df68a1dd9d7e97f64fcc1401bd3b850`.
+- Added `expressone-terminal-receipt-v1` for successful card-terminal receipts from exact sender `slip@expressone.hu`.
+- A receipt can only update an existing COD/Utánvét Purchase when amount, currency, Express One identity, shipment event time and single-candidate checks all agree.
+- Zero or multiple candidates => REVIEW; receipt is never eligible for Purchase creation.
+- Live links: 9,450 HUF -> GymBeam `3010206178`; 13,240 HUF -> GymBeam `3010228912`.
+- Both Purchases now have `payment_status=paid` and receipt timestamps.
+- Live webhook replay of the 9,450 HUF receipt returned `processed/validated`, parser `expressone-terminal-receipt-v1`, exactly one Purchase link, AI 0.
+- PR CI, main CI and exact Render smoke passed.
+
+## 2026-08-15 — GymBeam processing parser v1.1
+
+- PR #49 added trusted GymBeam order-processing parsing; PR #50 added the real Nylas flattened-table format.
+- Current parser: `gymbeam-order-processing-v1.1`.
+- Emits lifecycle `order_processing` / event `order_updated`, never `order_created`.
+- Requires trusted sender, explicit processing language/order identity, structured product evidence and money reconciliation.
+- Live verification AI 0:
+  - `3010206178`: 9,450 HUF, COD, Express One, 4 products.
+  - `3010228912`: 13,240 HUF, COD, Express One, 5 products.
+- Existing Purchases were enriched with subtotal, shipping, total, payment method, carrier and product rows.
+- PR #50 main commit: `e97d048cf1f8b3585eb4d5dff86a4f477f2fffff`; exact Render smoke passed.
+
+## 2026-08-15 — Strict reconstruction of missing GymBeam `3010085026`
+
+- Found while resolving the remaining Express One review/unlinked rows.
+- Exact 90-day order search showed no `order_created` email.
+- Corroborating evidence: GymBeam processing summary + GymBeam merchant shipment + GymBeam invoice + three Express One lifecycle emails sharing exact tracking identity.
+- Reconstructed exactly one Purchase: total 17,270 HUF; product subtotal 15,780; shipping 1,190; COD fee 300; payment Utánvéttel; Express One.
+- Tracking: `605855680768000013605231`.
+- Invoice: `4008742640`.
+- 11 products inserted from the verified processing summary.
+- Final verification: 1 Purchase, 1 shipment, 1 invoice, 11 products, no duplicates.
+- AI 0.
+
 ## 2026-08-15 — Express One outbound pickup noise cleanup
 
 - PR #47 / main commit: `2bac53d5550236023824b08cbefc9fd8a708652c`.
@@ -12,9 +47,7 @@
 - PR CI, main CI and exact Render smoke passed.
 - Live cleanup: 43 unresolved Express One pickup-service rows -> 0; 5 false `order_created` + 38 false `shipment`; 0 Purchase links before cleanup.
 - Old wrong machine result is retained inside the cleanup JSON for audit; source emails were not deleted.
-- Five different Express One rows remain for separate analysis (two payment receipts and three parcel lifecycle messages).
 - AI counter stayed at 98; no new AI call.
-- Live overall backlog after cleanup: 38 review, 29 unlinked.
 
 ## 2026-08-15 — Persistent handoff system
 
