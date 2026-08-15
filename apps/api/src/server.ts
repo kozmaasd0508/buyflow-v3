@@ -8,6 +8,7 @@ import { registerProductActionRoutes } from './api/product-action-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
+import { drainAlzaInternalFulfillmentRecoveryV1 } from './ingestion/alza-internal-fulfillment-recovery-v1.js';
 import { drainCorroboratedDocumentRecoveryV1 } from './ingestion/corroborated-document-recovery-v1.js';
 import { drainEmailScanJobs } from './ingestion/email-scan-jobs.js';
 import { drainHistoricalPurchaseReconstructionV1 } from './ingestion/historical-purchase-reconstruction-v1.js';
@@ -184,6 +185,25 @@ async function runRecovery() {
   } catch (error) {
     webhookStats.emailScanRecoveryFailed += 1;
     app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Email scan recovery scan failed');
+  }
+
+  try {
+    const result = await drainAlzaInternalFulfillmentRecoveryV1(env.BUYFLOW_AUTOMATION_MODE);
+    if (result.scheduled > 0 || result.candidates > 0 || result.created > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        scheduled: result.scheduled,
+        deduped: result.deduped,
+        candidates: result.candidates,
+        created: result.created,
+        resolvedSources: result.resolvedSources,
+        failed: result.failed,
+        aiCalls: result.aiCalls,
+        automationMode: env.BUYFLOW_AUTOMATION_MODE,
+      }, 'Alza Internal Fulfillment Recovery V1 completed');
+    }
+  } catch (error) {
+    app.log.error({ errorType: error instanceof Error ? error.name : 'UnknownError' }, 'Alza Internal Fulfillment Recovery V1 failed');
   }
 
   try {
