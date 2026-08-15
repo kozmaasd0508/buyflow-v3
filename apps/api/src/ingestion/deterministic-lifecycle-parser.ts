@@ -174,8 +174,8 @@ function parseMpl(input: { senderEmails?: string[]; subject?: string | null; bod
 
   const subject = normalizeText(input.subject ?? '').trim();
   const body = normalizeText(input.bodyText ?? '').replace(/\r/g, '');
-  const trackingMatch = body.match(/\bCsomagazonosito\s*:\s*\[?([A-Z0-9-]{10,32})\b/i);
-  const parcelSenderMatch = body.match(/(?:^|\n)Felado\s*:\s*([^\n]+?)(?=\n|$)/i);
+  const trackingMatch = body.match(/\bCsomagazonosito\s*:\s*(?:\[\s*)?([A-Z0-9-]{10,32})\b/i);
+  const parcelSenderMatch = body.match(/\bFelado\s*:\s*(.+?)(?=\s+Csomagazonosito\s*:|\s+Feladas datuma\s*:|\s+Kezbesitesi cim\s*:|\s+Arufizetesi osszeg\s*:|\n|$)/i);
   const codMatch = body.match(/\bArufizetesi osszeg\s*:\s*([0-9][0-9 .]*)\s*Ft\b/i);
   if (!trackingMatch?.[1] || !parcelSenderMatch?.[1]) return null;
 
@@ -189,7 +189,7 @@ function parseMpl(input: { senderEmails?: string[]; subject?: string | null; bod
     shipmentPhase = 'shipped';
   } else if (/^Csomagod a kezbesitonel van$/i.test(subject) && /\bcsomagod a kezbesitonel van\b/i.test(body)) {
     shipmentPhase = 'out_for_delivery';
-  } else if (/^Csomagod a postan atveheto$/i.test(subject) && /\bcsomagod[^\n]{0,80}atveheto az alabbi postan\b/i.test(body)) {
+  } else if (/^Csomagod a postan atveheto$/i.test(subject) && /\bcsomagod[\s\S]{0,120}?atveheto az alabbi postan\b/i.test(body)) {
     shipmentPhase = 'ready_for_pickup';
   }
   if (!shipmentPhase) return null;
