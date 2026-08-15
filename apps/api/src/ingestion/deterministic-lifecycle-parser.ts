@@ -4,6 +4,7 @@ import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extr
 import { isMerchantSender, merchantDisplayName } from '../email/sender-role.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAlzaLifecycleEmail } from './alza-lifecycle-adapter.js';
+import { parseGymBeamOrderProcessingEmail } from './gymbeam-order-processing-adapter.js';
 
 const PARSER_VERSION = 'deterministic-lifecycle-v1';
 
@@ -159,7 +160,11 @@ function parseMarketa(input: { senderDomains: string[]; subject?: string | null;
 }
 
 export function parseDeterministicLifecycleEmail(input: { senderDomains: string[]; subject?: string | null; bodyText?: string | null }): DeterministicLifecycleParseResult | null {
-  return parseGyerekjatekbolt(input) ?? parseGymBeam(input) ?? parseMarketa(input) ?? parseAlzaLifecycleEmail(input);
+  return parseGyerekjatekbolt(input)
+    ?? parseGymBeamOrderProcessingEmail(input)
+    ?? parseGymBeam(input)
+    ?? parseMarketa(input)
+    ?? parseAlzaLifecycleEmail(input);
 }
 
 export async function preprocessDeterministicLifecycleNylasMessage(input: { grantId: string; messageId: string }): Promise<DeterministicLifecyclePreprocessResult> {
