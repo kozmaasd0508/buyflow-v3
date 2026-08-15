@@ -8,6 +8,7 @@ import {
   type HistoricalReconstructionExistingPurchase,
   type HistoricalReconstructionSearchProof,
 } from '../resolution/historical-purchase-reconstruction.js';
+import { normalizeCarrierSlug } from '../resolution/shipment-resolution.js';
 import { invoiceAnchorRecoveryDedupeKey } from './invoice-anchor-recovery-v1.js';
 
 const LOOKBACK_DAYS = 90;
@@ -23,6 +24,7 @@ const EVENT_TYPES = new Set<HistoricalReconstructionEventType>([
   'subscription',
   'other',
 ]);
+const CARRIER_CLUSTER_REASON = 'merchant_shipment_missing_tracking_replaced_by_unique_carrier_cluster';
 
 interface SourceRow {
   id: string;
@@ -119,6 +121,10 @@ function toEvidence(source: SourceRow): HistoricalReconstructionEvidence | null 
     paymentStatus: stringOrNull(result.payment_status),
     confidence,
     receivedAt: source.received_at,
+    parcelSender: stringOrNull(result.parcel_sender),
+    codAmount: numberOrNull(result.cod_amount),
+    codCurrency: stringOrNull(result.cod_currency),
+    shipmentPhase: stringOrNull(result.shipment_phase),
   };
 }
 
@@ -172,6 +178,40 @@ function searchProofsForEvidence(
   }
 
   return [...proofs.values()];
+}
+
+function earliestTimestamp(rows: HistoricalReconstructionEvidence[]): string | null {
+  return [...rows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]?.receivedAt ?? null;
+}
+
+function latestTimestamp(rows: HistoricalReconstructionEvidence[]): string | null {
+  return [...rows].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]?.receivedAt ?? null;
+}
+
+function explicitDeliveryTimestamp(rows: HistoricalReconstructionEvidence[]): string | null {
+  return rows
+    .filter((row) => row.eventType === 'delivery')
+    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]?.receivedAt ?? null;
+}
+
+function firstPhysicalTimestamp(rows: HistoricalReconstructionEvidence[]): string | null {
+  return rows
+    .filter((row) => row.eventType === 'delivery' || (row.shipmentPhase && row.shipmentPhase !== 'shipment_created'))
+    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]?.receivedAt ?? null;
+}
+
+function consistentCod(rows: HistoricalReconstructionEvidence[]): { amount: number; currency: string } | null {
+  const codRows = rows.filter((row) => row.codAmount !== null && row.codAmount !== undefined && row.codCurrency);
+  if (codRows.length === 0) return null;
+  const amount = codRows[0]!.codAmount!;
+  const currency = codRows[0]!.codCurrency!.trim().toUpperCase();
+  if (!codRows.every((row) =>
+    row.codAmount !== null &&
+    row.codAmount !== undefined &&
+    Math.abs(row.codAmount - amount) < 0.001 &&
+    row.codCurrency?.trim().toUpperCase() === currency,
+  )) return null;
+  return { amount, currency };
 }
 
 export async function drainHistoricalPurchaseReconstructionV1(
@@ -318,7 +358,69 @@ export async function drainHistoricalPurchaseReconstructionV1(
           }
         }
 
-        if (candidate.carrierProofSourceEmailIds.length > 0) {
+        const carrierProofRows = evidence.filter((row) => candidate.carrierProofSourceEmailIds.includes(row.sourceEmailId));
+        const clusterMode = candidate.reasons.includes(CARRIER_CLUSTER_REASON);
+
+        if (clusterMode) {
+          const carrierSlug = normalizeCarrierSlug(candidate.expectedCarrier);
+          const shippedAt = firstPhysicalTimestamp(carrierProofRows);
+          const lastEventAt = latestTimestamp(carrierProofRows);
+          const deliveredAt = explicitDeliveryTimestamp(carrierProofRows);
+          const cod = consistentCod(carrierProofRows);
+          if (!carrierSlug || !shippedAt || !lastEventAt || !cod || carrierProofRows.length < 2) {
+            throw new Error('Historical Reconstruction V1 carrier cluster materialization proof mismatch');
+          }
+
+          const { error: purchaseEnrichmentError } = await db
+            .from('purchases')
+            .update({
+              total_amount: cod.amount,
+              currency: cod.currency,
+              payment_method: 'cash_on_delivery',
+              expected_carrier: candidate.expectedCarrier,
+            })
+            .eq('id', purchaseId)
+            .eq('user_id', candidate.userId);
+          if (purchaseEnrichmentError) {
+            throw new Error(`Historical Reconstruction V1 COD enrichment failed: ${purchaseEnrichmentError.message}`);
+          }
+
+          const primarySource = [...carrierProofRows]
+            .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+            .find((row) => row.eventType === 'delivery' || (row.shipmentPhase && row.shipmentPhase !== 'shipment_created'));
+          if (!primarySource) {
+            throw new Error('Historical Reconstruction V1 carrier cluster missing physical source');
+          }
+
+          const { data: shipmentId, error: shipmentError } = await db.rpc('controlled_upsert_shipment_with_sources', {
+            p_user_id: candidate.userId,
+            p_purchase_id: purchaseId,
+            p_carrier: candidate.expectedCarrier,
+            p_carrier_slug: carrierSlug,
+            p_tracking_number: candidate.trackingNumber,
+            p_status: deliveredAt ? 'delivered' : 'in_transit',
+            p_shipped_at: shippedAt,
+            p_delivered_at: deliveredAt,
+            p_last_event_at: lastEventAt,
+            p_source_email_id: primarySource.sourceEmailId,
+            p_confidence: candidate.confidence,
+            p_sources: carrierProofRows.map((row) => ({
+              source_email_id: row.sourceEmailId,
+              confidence: row.confidence,
+            })),
+          });
+          if (shipmentError || typeof shipmentId !== 'string' || !shipmentId) {
+            throw new Error(`Historical Reconstruction V1 shipment materialization failed: ${shipmentError?.message ?? 'missing id'}`);
+          }
+
+          const { error: carrierStatusError } = await db
+            .from('source_emails')
+            .update({ processing_status: 'processed' })
+            .in('id', candidate.carrierProofSourceEmailIds);
+          if (carrierStatusError) {
+            throw new Error(`Historical Reconstruction V1 carrier cluster status failed: ${carrierStatusError.message}`);
+          }
+        } else if (candidate.carrierProofSourceEmailIds.length > 0) {
           const { error: carrierStatusError } = await db
             .from('source_emails')
             .update({ processing_status: 'unlinked', processed_at: null })
