@@ -8,6 +8,37 @@ const CARRIER_DOMAIN_TOKENS = [
   'ups',
 ] as const;
 
+const EXACT_CARRIER_DOMAINS = new Set([
+  'posta.hu',
+]);
+
+const PUBLIC_MAILBOX_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'yahoo.co.uk',
+  'yahoo.de',
+  'yahoo.fr',
+  'ymail.com',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'proton.me',
+  'protonmail.com',
+  'gmx.com',
+  'gmx.net',
+  'mail.com',
+  'aol.com',
+  'freemail.hu',
+  'citromail.hu',
+  'indamail.hu',
+  'vipmail.hu',
+]);
+
 export type EmailSenderRole = 'carrier' | 'unknown';
 
 export type MerchantKey = 'gymbeam' | 'gyerekjatekbolt' | 'alza' | 'aboutyou' | 'zalando' | 'dorko' | 'jatektenger';
@@ -62,10 +93,15 @@ export function normalizeSenderDomain(domain: string): string {
 
 export function isCarrierSenderDomain(domain: string): boolean {
   const normalized = normalizeSenderDomain(domain);
+  if (EXACT_CARRIER_DOMAINS.has(normalized)) return true;
   return CARRIER_DOMAIN_TOKENS.some((token) => {
     const pattern = new RegExp(`(^|[.-])${token}([.-]|$)`, 'i');
     return pattern.test(normalized);
   });
+}
+
+export function isPublicMailboxSenderDomain(domain: string): boolean {
+  return PUBLIC_MAILBOX_DOMAINS.has(normalizeSenderDomain(domain));
 }
 
 export function classifyEmailSenderRole(domains: string[]): EmailSenderRole {
