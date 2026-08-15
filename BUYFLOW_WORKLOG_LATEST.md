@@ -1,6 +1,95 @@
 # BuyFlow V3 — latest recovery worklog
 
-> Newest detailed entry. Read this after `BUYFLOW_HANDOFF.md`; older historical entries remain in `BUYFLOW_WORKLOG.md` and Git history.
+> Newest detailed entries. Read this after `BUYFLOW_HANDOFF.md`; older historical entries remain in `BUYFLOW_WORKLOG.md` and Git history.
+
+## 2026-08-15 — Activepieces-inspired PDF attachment ingestion
+
+### Source idea used
+
+The user-provided Activepieces source was inspected for reusable patterns. The useful parts for this task were its attachment byte handling and PDF text extraction architecture. BuyFlow did **not** embed Activepieces or replace its deterministic core; it implemented a native Nylas/Supabase document lane with BuyFlow safety gates.
+
+### PR #88 — deterministic invoice attachment ingestion
+
+- Branch `agent/attachment-pdf-ingestion-v1`.
+- First PR CI #452 failed only because two old `EmailProvider` test doubles lacked the new `downloadAttachment()` method. No production migration had been applied at that point.
+- Updated the mocks; final PR CI #453 passed completely.
+- Merged runtime `7c7732dc0d7e611ae534f5134744b066395fc247`.
+- Main CI #454 passed.
+- Exact Render smoke #348 passed for that exact runtime commit.
+
+Implementation:
+- `EmailProvider.downloadAttachment(messageId, attachmentId)` added.
+- Nylas provider uses attachment byte download scoped by grant + message + attachment.
+- Added `unpdf` 1.4.0 text-layer extraction, PDF magic check and 250k text cap.
+- Added `pdf-invoice-v1` deterministic parser.
+- Generic invoice requires explicit invoice identity + explicit order reference.
+- Exact user + merchant-domain + normalized-order resolver requires one and only one existing Purchase; ambiguity or no match => REVIEW.
+- Jatekbolt PDF rule additionally requires `MODELL & HOBBY Kft.` and `jatekbolt.hu` inside the PDF, and normalizes `JB<digits>` to the existing Jatekbolt order identity.
+- No Purchase creation, lifecycle updates, or Purchase money updates in attachment recovery.
+- Public-mailbox senders are excluded from this auto-document lane.
+- Scanned PDF without text layer => REVIEW; no OCR in V1.
+- AI calls = 0.
+
+Database/storage migration:
+- private `buyflow-purchase-documents` bucket, PDF-only, max 10 MiB.
+- new durable `email_attachments` table with attempts/status/extraction/storage/hash provenance.
+- `documents` extended with storage bucket/path + SHA-256.
+- controlled SECURITY DEFINER attachment-document RPC verifies user, Purchase, source email, provider message, attachment provenance, PDF MIME, storage metadata/hash, invoice/order identity and confidence.
+
+### First live proof — Jatekbolt invoice
+
+Source `1d246ae8-8daf-4b49-9e73-7672d14864fe`, provider message `19fcbf6460a149b8`:
+- attachment `S26_044783.pdf`
+- 443,979 bytes
+- private Storage object created successfully
+- parser `pdf-invoice-v1`
+- extracted invoice `S26_044783`
+- PDF order reference `JB12247833` -> Purchase order `12247833`
+- confidence 0.995
+- source moved REVIEW -> processed
+- source extraction_source `pdf_attachment`
+- exactly one Purchase source link.
+
+Document:
+- id `52f22f74-460b-4cbe-a975-caedb25b6463`
+- Purchase `dfbe41c3-89f0-4f10-8dc8-e34923fba130`
+- invoice `S26_044783`
+- source_type `email_attachment`
+- exact provider message + attachment id + filename + MIME recorded
+- private bucket/path + SHA-256 recorded.
+
+Purchase integrity remained unchanged:
+- Jatekbolt order `12247833`
+- 48,245 HUF
+- state delivered
+- ordered `2026-08-02 16:49:02+00`
+- shipped `2026-08-04 08:36:08+00`
+- delivered `2026-08-05 05:54:33+00`.
+
+Other PDFs encountered in the first live pass without enough explicit invoice/order identity stayed attachment REVIEW with `invoice_identity_not_found`; none were auto-linked.
+
+### PR #89 — least privilege
+
+Production grant inspection showed `service_role` inherited technical privileges beyond CRUD on `email_attachments`.
+- PR #89 adds an explicit revoke-all then grants only SELECT/INSERT/UPDATE/DELETE.
+- PR CI #455 passed.
+- migration-only main `188340e1121fdaab6c64335f9214fa5b7d10fa1c`.
+- main CI #456 passed.
+- production grant check now shows exactly CRUD for `service_role`; no anon/authenticated grant.
+
+### Current counters after PDF recovery
+
+- source REVIEW 34
+- source unlinked 10
+- source unresolved total 44
+- historical AI runs 98
+- latest AI run `2026-08-14 21:43:08.694227+00`.
+
+### Next document step
+
+The PDF bucket is intentionally private. Add an authenticated document-open/download API that verifies user ownership and returns a short-lived signed URL, then wire that to Purchase detail UI. Do not publish the storage bucket.
+
+---
 
 ## 2026-08-15 — Jatekbolt + AlzaBox recovery
 
@@ -8,39 +97,16 @@
 
 - Blind-test backlog contained a real Jatekbolt Purchase whose financial fields were missing even though the original merchant email had full structured totals.
 - Verified exactly one live Purchase `dfbe41c3-89f0-4f10-8dc8-e34923fba130` and exactly one delivered DPD Shipment, tracking `16380124260518`.
-- Original email explicitly says it is receipt of the customer's purchase offer and not yet merchant acceptance.
 - Added PR #84 `jatekbolt-order-received-v1`: exact `jatekbolt.hu`, matching subject/body order id, explicit offer-received/not-confirmed-yet wording, structured order section, and exact arithmetic reconciliation.
-- Extracted: subtotal 52,775 HUF + DPD 750 - discount 5,280 = total 48,245 HUF; Klarna; DPD; Model & Hobby Kft.; confidence 0.995.
-- Negative regressions cover lookalike domain, mismatched order ids, dispatch template and inconsistent money.
-- PR #84 CI #440 passed after a test-only accent-normalization fix; merged runtime `c00cd8fff02f844ad9938d99df123ed732930148`; main CI #441 and exact Render smoke #335 passed.
-- Live 30-day targeted rerun: 2 checked / 2 processed / 0 review / 0 unlinked / no new Purchase/Shipment/Document writes / AI 0.
-- Existing Purchase was enriched to 48,245 HUF, Klarna pending, DPD while remaining delivered; no duplicate created.
-- Jatekbolt invoice email remains REVIEW. PDF inspection showed invoice `S26_044783`, order reference `JB12247833`, total 48,248 HUF and Model & Hobby Kft. Current Nylas deterministic runtime does not ingest attachment bytes/content, so no automatic document was created from filename/timing alone.
+- Extracted subtotal 52,775 HUF + DPD 750 - discount 5,280 = total 48,245 HUF; Klarna; DPD; Model & Hobby Kft.; confidence 0.995.
+- Runtime `c00cd8fff02f844ad9938d99df123ed732930148`; main CI #441 and exact Render smoke #335 passed.
+- Live targeted rerun enriched the same Purchase without changing delivered lifecycle state.
 
 ### Alza `602385238`
 
-- Found three trusted unlinked Alza lifecycle emails with no Purchase: processing `2026-06-24`, delayed `2026-06-25`, AlzaBox ready-for-pickup `2026-06-26`.
-- No carrier tracking exists because fulfillment is internal AlzaBox.
-- Processing email provides exact order/reference 602385238, explicit no-contract-yet wording, two agreeing totals 3,350 HUF, invoice identity `AHUW261747843`, AlzaBox, card at pickup/online, Alza.hu Kft.
-- Existing exact 90-day scan proved 4 checked / purchaseWrites 0 / AI 0.
-- PR #85 introduced `alza-order-processing-v2` and `Alza Internal Fulfillment Recovery V1` while preserving lightweight v1 processing fallback.
-- Recovery requires rich trusted V2 processing + separate delayed + separate ready-for-pickup + same user/connection/order + <=14 days + exact completed 90-day proof + no trusted order_created + no existing exact Purchase.
-- Future matching cases schedule their own deduped 90-day proof. No Shipment is invented without tracking; ordered_at remains null; `AHUW...` remains evidence rather than an invented document.
-- PR #85 initially had two CI feedback loops: first preserved the legacy processing fallback; second corrected new tests so weak rich evidence falls back to v1 without financial trust rather than becoming null. Final PR CI #444: 353/353 API tests green. Runtime `699e2fba7566b7430e4c2bc5e3a5d54dab7e4ac6`; main CI #445 and exact Render smoke #339 passed.
-- First live proof scan reparsed the rich source to `alza-order-processing-v2` but normal processing marked sources `processed` before the specialized recovery pass. No Purchase was created; this exposed a safe false negative.
-- PR #86 fixed recovery eligibility to use trusted V2 evidence independent of audit processing status, explicitly mapped DB snake_case Purchase rows to resolver camelCase identity, fixed early existing-Purchase scheduling guard, and retained the final exact DB duplicate check.
-- PR #86 CI #446 passed; runtime `8b4461ce836c1e1e9e1f0c0813779fdcda3acbbe`; main CI #447 and exact Render smoke #341 passed.
-- Final live Purchase `661865f5-23dd-4c26-97dd-1059f533566b`: Alza.hu / Alza.hu Kft., order 602385238, 3,350 HUF, payment pending, `Kártya átvételkor vagy online`, shipping method AlzaBox, expected carrier null, current state ready_for_pickup, ordered_at/shipped_at/delivered_at null, confidence 0.99.
-- Integrity: exactly 1 Purchase, exactly 0 Shipments, 3 linked validated+processed sources, 0 documents, AI 0.
-
-### Current live counters
-
-- REVIEW 35
-- unlinked 10
-- unresolved total 45
-- historical AI runs 98
-- latest AI run `2026-08-14 21:43:08.694227+00`.
-
-### Next default target
-
-Continue real physical-commerce clusters first. Investigate remaining DPD tracking `16380124260338` and nearby merchant evidence before payment-only or obvious subscription/promo noise. Keep Jatekbolt invoice REVIEW until attachment/PDF ingestion exists; keep McDonald's short POS ids REVIEW until safe local-order identity exists.
+- Three trusted Alza lifecycle emails existed with no Purchase: processing, delayed and AlzaBox ready-for-pickup.
+- Rich processing evidence: exact order/reference, explicit no-contract-yet wording, two agreeing totals 3,350 HUF, invoice identity `AHUW261747843`, AlzaBox, card pickup/online, Alza.hu Kft.
+- PR #85 added `alza-order-processing-v2` + strict internal fulfillment recovery gated by completed 90-day exact-order proof and separate lifecycle corroboration.
+- PR #86 fixed processed-anchor eligibility and DB identity mapping after live verification found a safe false negative.
+- Final runtime before PDF work `8b4461ce836c1e1e9e1f0c0813779fdcda3acbbe`; exact Render smoke #341 passed.
+- Final live Purchase: exactly 1 Purchase, 0 Shipments, 3,350 HUF, `ready_for_pickup`, no invented ordered/shipped/delivered date, three linked sources, AI 0.
