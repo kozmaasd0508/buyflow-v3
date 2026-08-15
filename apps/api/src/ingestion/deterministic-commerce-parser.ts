@@ -25,13 +25,13 @@ interface CarrierRule {
 }
 
 const CARRIER_RULES: CarrierRule[] = [
-  { name: 'Express One', domainTokens: ['expressone'] },
-  { name: 'GLS', domainTokens: ['gls'] },
-  { name: 'DPD', domainTokens: ['dpd'] },
-  { name: 'Foxpost', domainTokens: ['foxpost'] },
-  { name: 'Packeta', domainTokens: ['packeta'] },
-  { name: 'DHL', domainTokens: ['dhl'] },
-  { name: 'UPS', domainTokens: ['ups'] },
+  { name: 'Express One', domainTokens: ['expressone.hu'] },
+  { name: 'GLS', domainTokens: ['gls-hungary.com', 'gls-group.com', 'gls.hu'] },
+  { name: 'DPD', domainTokens: ['dpd.com', 'dpd.hu'] },
+  { name: 'Foxpost', domainTokens: ['foxpost.hu'] },
+  { name: 'Packeta', domainTokens: ['packeta.hu', 'packeta.com'] },
+  { name: 'DHL', domainTokens: ['dhl.com', 'dhl.hu'] },
+  { name: 'UPS', domainTokens: ['ups.com'] },
 ];
 
 const TRACKING_LABEL_PATTERN = /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|azonosito)|csomag(?:szam|azonosito)|kul[d]?emeny(?:szam|azonosito)|parcel(?:\s*(?:number|no\.?|id))|shipment(?:\s*(?:number|no\.?|id)))\s*[:#-]?\s*([a-z0-9][a-z0-9-]{7,31})\b/gi;
