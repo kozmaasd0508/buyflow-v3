@@ -2,6 +2,19 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Multi-Gmail + full 30-day deterministic scan UI
+
+- PR #69 / main runtime `afa01c0d21179dc6472b7e32d427c789282d34ea`: Gmail settings now lists every active Nylas/Gmail connection and exposes `+ Másik Gmail hozzáadása`.
+- Added per-account 7 / 30 / 90 day full-inbox scan controls; 30 days is the recommended cross-account blind-test window.
+- The scan uses the existing deterministic write-mode pipeline, not the old AI benchmark; recognition/parser/resolver rules were not weakened and uncertain evidence remains REVIEW.
+- UI shows checked, processed, review, unlinked, Purchase writes, Shipment writes, Document writes and AI call count per latest scan.
+- API `/api/email-connections/:id/initial-scan` now accepts only 7/30/90 day windows and returns job id/status/window; newly connected Gmail still gets the automatic 7-day initial scan.
+- PR #69 CI #408 and main CI #409 passed.
+- PR #70 / main runtime `5fdf20f69dc4f3518d36400223f7a522f124de79`: fixed repeated same-window scan progress so the UI follows the newly enqueued job instead of prematurely reading the previous completed result. PR CI #410 and main CI #411 passed.
+- PR #71 / main `44fa37bd89b268049230dcb45e86920ac93d3cc0`: upgraded Render health diagnostic to prove that the deployed commit contains the latest runtime-changing commit.
+- Exact production diagnostic run #4: expected runtime `5fdf20f69dc4f3518d36400223f7a522f124de79`, deployed Render commit exactly the same, `runtime_deployment_verified=true`, version 0.4.0, automation mode write.
+- No APK built. Next user-facing step: connect a second Gmail in the browser, let automatic 7-day scan finish, then run the 30-day full-inbox scan and score real found/missed/false/review/duplicate outcomes.
+
 ## 2026-08-15 — Scitec / BioTechUSA / Foxpost deterministic completion
 
 - PR #65 / main `053d4e1190b6bc8fd35f1c00932508c7b473dc8c`: generic order parser v1.2 now accepts safe Hungarian `Rendelés: #...` identities and the real `Köszönjük megrendelésedet` confirmation form; stale #58 closed as superseded.
