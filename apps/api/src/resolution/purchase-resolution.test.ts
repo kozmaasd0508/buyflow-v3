@@ -74,6 +74,43 @@ test('carrier order_created evidence never creates a purchase', () => {
   assert.equal(candidate.decision, 'lifecycle_only');
 });
 
+test('MPL sender domain is always carrier-only', () => {
+  const [candidate] = resolvePurchaseCandidates([
+    evidence({
+      senderDomain: 'posta.hu',
+      merchant: 'Magyar Posta',
+      confidence: 0.99,
+    }),
+  ]);
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'lifecycle_only');
+  assert.ok(candidate.reasons.includes('carrier_domain_never_creates_purchase'));
+});
+
+test('public mailbox order cannot create Purchase even with corroboration', () => {
+  const rows: ResolutionEvidence[] = [
+    evidence({
+      senderDomain: 'gmail.com',
+      merchant: 'Small Shop',
+      orderNumber: 'SO-2026-1001',
+      confidence: 0.99,
+    }),
+    evidence({
+      sourceEmailId: 'email-2',
+      senderDomain: 'gmail.com',
+      eventType: 'shipment',
+      merchant: 'Small Shop',
+      orderNumber: 'SO-2026-1001',
+      confidence: 0.99,
+      receivedAt: '2026-08-02T10:00:00.000Z',
+    }),
+  ];
+  const [candidate] = resolvePurchaseCandidates(rows);
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'review');
+  assert.ok(candidate.reasons.includes('public_mailbox_requires_verified_merchant_identity'));
+});
+
 test('medium-confidence order without corroboration stays in review', () => {
   const [candidate] = resolvePurchaseCandidates([
     evidence({ confidence: 0.86 }),
