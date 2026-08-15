@@ -19,7 +19,7 @@ function profile(overrides: Partial<ProtocolProfile> = {}): ProtocolProfile {
     country: 'HU',
     sender_domains: ['example-shop.hu'],
     identifier_patterns: {
-      order_id: ['Rendel(?:e|é)s(?:sz(?:a|á)m)?\\s*[:#-]?\\s*#?([A-Z0-9-]{5,30})'],
+      order_id: ['Rendel[eé]ssz[aá]m\\s*[:#-]\\s*#?([A-Z0-9-]*\\d[A-Z0-9-]*)'],
       tracking_id: [],
       invoice_id: [],
       payment_reference: [],
@@ -46,7 +46,7 @@ function profile(overrides: Partial<ProtocolProfile> = {}): ProtocolProfile {
           {
             id: 'example.order-created.body',
             field: 'body',
-            pattern: 'Rendel(?:e|é)s(?:sz(?:a|á)m)?\\s*[:#-]',
+            pattern: 'Rendel[eé]ssz[aá]m\\s*[:#-]',
             required: true,
             confidence_delta: 0.03,
             source_ids: ['official-1'],
