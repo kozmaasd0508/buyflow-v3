@@ -16,10 +16,6 @@ interface NylasApplicationResponse {
   };
 }
 
-interface NylasRedirectUrisResponse {
-  data?: Array<{ url?: string }>;
-}
-
 interface NylasTokenResponse {
   grant_id?: string;
   email?: string;
@@ -27,6 +23,8 @@ interface NylasTokenResponse {
 }
 
 type ScanWindowDays = 7 | 30 | 90;
+
+let cachedNylasApplicationId: string | null = null;
 
 async function requireUser(request: FastifyRequest, reply: FastifyReply) {
   const user = await resolveAuthenticatedApiUser(request.headers.authorization);
@@ -60,6 +58,10 @@ function scheduleScan(app: FastifyInstance, jobId: string, windowDays: ScanWindo
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function nylasJson<T>(path: string, init?: RequestInit): Promise<T> {
   const { apiKey, apiUri } = requireNylasApiConfig();
   const response = await fetch(`${apiUri}${path}`, {
@@ -80,24 +82,23 @@ async function nylasJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function nylasApplicationId(): Promise<string> {
-  const response = await nylasJson<NylasApplicationResponse>('/v3/applications');
-  const applicationId = response.data?.application_id;
-  if (!applicationId) throw new Error('Nylas application id is unavailable');
-  return applicationId;
-}
+  if (cachedNylasApplicationId) return cachedNylasApplicationId;
 
-async function ensureNylasCallbackUri(callbackUri: string): Promise<void> {
-  const response = await nylasJson<NylasRedirectUrisResponse>('/v3/applications/redirect-uris');
-  const exists = (response.data ?? []).some((entry) => entry.url === callbackUri);
-  if (exists) return;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await nylasJson<NylasApplicationResponse>('/v3/applications');
+      const applicationId = response.data?.application_id?.trim();
+      if (!applicationId) throw new Error('Nylas application id is unavailable');
+      cachedNylasApplicationId = applicationId;
+      return applicationId;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await sleep(250);
+    }
+  }
 
-  await nylasJson('/v3/applications/redirect-uris', {
-    method: 'POST',
-    body: JSON.stringify({
-      platform: 'web',
-      url: callbackUri,
-    }),
-  });
+  throw lastError instanceof Error ? lastError : new Error('Nylas application id is unavailable');
 }
 
 async function exchangeNylasCode(input: {
@@ -192,6 +193,7 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
 
     const db = getSupabaseAdmin() as any;
     const callbackUri = `${publicBaseUrl()}/auth/nylas/callback`;
+    let stage = 'ensure_user';
 
     try {
       const { error: userError } = await db
@@ -199,9 +201,10 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
         .upsert({ id: user.id, email: user.email ?? null }, { onConflict: 'id' });
       if (userError) throw new Error(`Failed to ensure BuyFlow user: ${userError.message}`);
 
+      stage = 'application_id';
       const applicationId = await nylasApplicationId();
-      await ensureNylasCallbackUri(callbackUri);
 
+      stage = 'oauth_state';
       const state = randomBytes(32).toString('base64url');
       const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
 
@@ -214,6 +217,7 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
       });
       if (stateError) throw new Error(`Failed to create OAuth state: ${stateError.message}`);
 
+      stage = 'authorize_url';
       const authorizeUrl = new URL(`${requireNylasApiConfig().apiUri}/v3/connect/auth`);
       authorizeUrl.searchParams.set('client_id', applicationId);
       authorizeUrl.searchParams.set('redirect_uri', callbackUri);
@@ -226,8 +230,9 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
     } catch (error) {
       request.log.error({
         errorType: error instanceof Error ? error.name : 'UnknownError',
+        stage,
       }, 'Failed to start Nylas email connection');
-      return reply.code(503).send({ error: 'email_connection_start_unavailable' });
+      return reply.code(503).send({ error: 'email_connection_start_unavailable', stage });
     }
   });
 

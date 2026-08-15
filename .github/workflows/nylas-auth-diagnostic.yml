@@ -1,0 +1,70 @@
+name: Nylas Auth Start Diagnostic
+
+on:
+  push:
+    paths:
+      - .github/workflows/nylas-auth-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+      NYLAS_API_URI: https://api.eu.nylas.com
+      BUYFLOW_CALLBACK_URI: https://buyflow-v3-api-dev.onrender.com/auth/nylas/callback
+    steps:
+      - name: Probe Nylas application and callback APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${NYLAS_API_KEY:-}" ]]; then
+            echo "nylas_api_key_present=false"
+            exit 1
+          fi
+          echo "nylas_api_key_present=true"
+
+          app_status="$(curl -sS -o /tmp/nylas-app.json -w '%{http_code}' \
+            -H 'Accept: application/json' \
+            -H "Authorization: Bearer $NYLAS_API_KEY" \
+            "$NYLAS_API_URI/v3/applications")"
+          echo "applications_status=$app_status"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          let body = {};
+          try { body = JSON.parse(fs.readFileSync('/tmp/nylas-app.json', 'utf8')); } catch {}
+          const data = body && typeof body.data === 'object' && body.data !== null ? body.data : {};
+          console.log(`applications_has_data=${Boolean(body && body.data)}`);
+          console.log(`applications_has_application_id=${typeof data.application_id === 'string' && data.application_id.length > 0}`);
+          console.log(`applications_has_id=${typeof data.id === 'string' && data.id.length > 0}`);
+          console.log(`applications_has_client_id=${typeof data.client_id === 'string' && data.client_id.length > 0}`);
+          console.log(`applications_data_keys=${Object.keys(data).sort().join(',')}`);
+          NODE
+
+          callback_status="$(curl -sS -o /tmp/nylas-callbacks.json -w '%{http_code}' \
+            -H 'Accept: application/json' \
+            -H "Authorization: Bearer $NYLAS_API_KEY" \
+            "$NYLAS_API_URI/v3/applications/redirect-uris")"
+          echo "callback_list_status=$callback_status"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          let body = {};
+          try { body = JSON.parse(fs.readFileSync('/tmp/nylas-callbacks.json', 'utf8')); } catch {}
+          const rows = Array.isArray(body.data) ? body.data : [];
+          const expected = process.env.BUYFLOW_CALLBACK_URI;
+          console.log(`callback_list_is_array=${Array.isArray(body.data)}`);
+          console.log(`callback_count=${rows.length}`);
+          console.log(`buyflow_callback_present=${rows.some((row) => row && row.url === expected)}`);
+          if (rows[0] && typeof rows[0] === 'object') console.log(`callback_item_keys=${Object.keys(rows[0]).sort().join(',')}`);
+          NODE
+
+          if [[ "$app_status" != "200" || "$callback_status" != "200" ]]; then
+            exit 1
+          fi
