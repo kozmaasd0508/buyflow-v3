@@ -3,7 +3,7 @@ import { createEmailProvider } from '../email/factory.js';
 import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
-const PARSER_VERSION = 'foxpost-lifecycle-v1';
+const PARSER_VERSION = 'foxpost-lifecycle-v1.1';
 const MAX_BODY_CHARS = 80_000;
 
 export interface FoxpostLifecycleParseResult {
@@ -35,7 +35,8 @@ function parseHuf(value: string): number | null {
 function foxpostTracking(text: string): string | null {
   const normalized = normalizeText(text);
   const labelled = normalized.match(/\bcsomagod\s+foxpost\s+azonositoszama\s*:\s*(CLFOX\d{10,30})\b/i)
-    ?? normalized.match(/\bfoxpost\s+(?:csomag)?azonosito(?:szama)?\s*:\s*(CLFOX\d{10,30})\b/i);
+    ?? normalized.match(/\bfoxpost\s+(?:csomag)?azonosito(?:szama)?\s*:\s*(CLFOX\d{10,30})\b/i)
+    ?? normalized.match(/\bcsomagod\s+azonositoszama\s*:\s*(CLFOX\d{10,30})\b/i);
   return labelled?.[1]?.toUpperCase() ?? null;
 }
 
