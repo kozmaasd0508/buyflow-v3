@@ -2,6 +2,47 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Ars Una / GLS deterministic carrier bridge
+
+- PR #56 / main commit: `35dd96f1678c4bba74ecc973288cfb0f1df1dc43`.
+- Added `gls-lifecycle-v1` and `carrier-sender-cod-bridge-v1`.
+- Exact GLS sender only; extracts parcel sender, tracking and COD.
+- Pre-advice stays `shipment_created`; delivery-today stays `out_for_delivery`; dynamic GLS RTT URL is `in_transit`; no delivered state without completion evidence.
+- Carrier→Purchase bridge requires one existing COD Purchase, exact normalized merchant/parcel-sender identity, GLS compatibility, <=1 currency-unit amount difference, 14-day window, and one already-linked merchant shipment source without tracking.
+- Verified Ars Una order `192132` invoice `5133964`: product 6,276 HUF + shipping 1,990 HUF = 8,266 HUF, payment Utánvét.
+- GLS states COD 8,265 HUF; explicitly treated as a 1 HUF difference, not exact equality.
+- Live tracking `3412614699`; exactly one GLS shipment created; current state `in_transit`.
+- Corrected historical shipment timestamp after all old AI evidence was reparsed: pre-advice no longer counts as shipped; first physical progress is the delivery-today evidence.
+- Dynamic tracking email was recovered from the GLS RTT URL and linked.
+- Final unresolved GLS rows: 0. AI 0.
+- PR CI, main CI and exact Render smoke passed.
+
+## 2026-08-15 — Allegro / HappyBox24 lifecycle and seller invoice
+
+- PR #54 / main `012b80e0273ce18bcc252e0a076ce1a566f4cccd`: added `allegro-lifecycle-v1`.
+- Allegro merchant mail uses exact purchase-history UUID + carrier tracking; DPD relay messages never invent order IDs.
+- `delivery today` remains out_for_delivery; only explicit successful completion becomes delivered.
+- HappyBox24 Purchase UUID `3fe09c80-8d79-11f1-b193-cf13a29b46f5` now has exactly one DPD shipment, tracking `13169408547018`, with five lifecycle sources processed/linked.
+- PR #55 / main `1f8c19d4dcf1ca80f09cc10a99946d4a836fd8ea`: added `allegro-sales-document-v1` so invoice/document identity wins over incidental delivered wording.
+- Verified PDF invoice `I/00005/08/26`, internal seller order `46181083`, total 5,675 HUF, shipping 1,990 HUF, products 1,830 + 1,855 HUF; exactly one document linked.
+- AI 0; CI/main CI/exact Render smoke passed.
+
+## 2026-08-15 — Promotional / repurchase hard-negative
+
+- PR #53 / main `6ba285ac7a8c975eb7807b07b2253fc181c8a210`.
+- Added conservative promotional/repurchase exclusion without using Gmail Promotions as a hard gate.
+- Explicit order/tracking/invoice identity and real order-confirmation wording override the marketing exclusion.
+- Cleaned four verified false commerce rows (Goddess/Galaxy/Sport8 patterns) after confirming zero Purchase links; previous machine results preserved for audit.
+- BF synthetic Gmail examples remain review intentionally.
+- AI 0; CI/main CI/exact Render smoke passed.
+
+## 2026-08-15 — Barion payment-only safety check
+
+- Inspected three unlinked successful Barion payments (two Netfone, one InnVoice).
+- No corresponding Purchase/order/invoice was found in the current database or mailbox search window.
+- Kept them unlinked: successful payment evidence alone cannot create a Purchase.
+- This is intentional safe behavior, not a forced-recovery failure.
+
 ## 2026-08-15 — Express One terminal receipt resolver
 
 - PR #51 / main commit: `20ad2db45df68a1dd9d7e97f64fcc1401bd3b850`.
