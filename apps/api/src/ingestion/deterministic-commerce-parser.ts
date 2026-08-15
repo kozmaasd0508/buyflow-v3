@@ -102,8 +102,9 @@ function normalizeText(value: string): string {
 }
 
 function domainHasToken(domain: string, token: string): boolean {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[.-])${escaped}([.-]|$)`, 'i').test(domain);
+  const normalized = normalizeDomain(domain);
+  const trusted = normalizeDomain(token);
+  return normalized === trusted || normalized.endsWith(`.${trusted}`);
 }
 
 function domainMatches(domain: string, expected: string): boolean {
