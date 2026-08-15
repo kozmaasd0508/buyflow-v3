@@ -2,6 +2,7 @@ import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extr
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 
 const PARSER_VERSION = 'generic-order-confirmation-v1.2';
+const JATEKBOLT_PARSER_VERSION = 'jatekbolt-order-received-v1';
 
 const SHARED_PLATFORM_SENDER_DOMAINS = [
   'shopifyemail.com',
@@ -285,6 +286,88 @@ function extractSimpleProducts(text: string, fallbackCurrency: string | null): P
   return products.slice(0, 50);
 }
 
+function extractJatekboltHuf(body: string, labelPattern: RegExp): number | null {
+  const match = body.match(labelPattern);
+  const raw = match?.[1];
+  if (!raw) return null;
+  const value = Number(raw.replace(/[^0-9]/g, ''));
+  return Number.isFinite(value) ? value : null;
+}
+
+function parseJatekboltOrderReceived(input: {
+  domains: string[];
+  subject: string;
+  body: string;
+}): GenericOrderParseResult | null {
+  if (!input.domains.some((domain) => domainMatches(domain, 'jatekbolt.hu'))) return null;
+
+  const subjectOrder = input.subject.match(/^\s*megrendelesi szam\s*:\s*#?(\d{6,12})\s*$/i)?.[1] ?? null;
+  const bodyOrder = input.body.match(/(?:^|\n)\s*rendelesi szam\s*:\s*#?(\d{6,12})\b/i)?.[1] ?? null;
+  if (!subjectOrder || !bodyOrder || subjectOrder !== bodyOrder) return null;
+
+  const explicitlyOrderReceived = /\bkoszonjuk rendelesed\b/i.test(input.body);
+  const explicitlyNotAcceptance = /\bez az e-mail nem minosul a megrendeles visszaigazolasanak\b/i.test(input.body);
+  const explicitOfferReceipt = /\bveteli ajanlat megerkezeserol ertesitunk\b/i.test(input.body);
+  const orderDetails = /\bmegrendelesed reszletei\b/i.test(input.body);
+  if (!explicitlyOrderReceived || !explicitlyNotAcceptance || !explicitOfferReceipt || !orderDetails) return null;
+
+  const subtotal = extractJatekboltHuf(input.body, /(?:^|\n)\s*termekek osszesen\s*:\s*([0-9][0-9 .]*)\s*ft\b/i);
+  const shippingAmount = extractJatekboltHuf(input.body, /(?:^|\n)\s*futarszolgalat\s+dpd\s*:\s*([0-9][0-9 .]*)\s*ft\b/i);
+  const discountAmount = extractJatekboltHuf(input.body, /(?:^|\n)\s*engedmeny(?:\s*\([^\n)]*\))?\s*:\s*-?([0-9][0-9 .]*)\s*ft\b/i);
+  const total = extractJatekboltHuf(input.body, /(?:^|\n)\s*osszesen\s*:\s*([0-9][0-9 .]*)\s*ft\b/i);
+  const paymentMethod = extractLineAfterLabel(input.body, PAYMENT_LABELS);
+  const shippingMethod = extractLineAfterLabel(input.body, SHIPPING_LABELS);
+
+  if (
+    subtotal === null ||
+    shippingAmount === null ||
+    discountAmount === null ||
+    total === null ||
+    !paymentMethod ||
+    !shippingMethod ||
+    !/\bdpd\b/i.test(shippingMethod)
+  ) return null;
+
+  if (subtotal + shippingAmount - discountAmount !== total) return null;
+
+  return {
+    extraction: {
+      event_type: 'order_created',
+      merchant: 'JatekBolt.hu',
+      merchant_legal_name: 'Model & Hobby Kft.',
+      order_number: bodyOrder,
+      subtotal,
+      shipping_amount: shippingAmount,
+      discount_amount: discountAmount,
+      total,
+      currency: 'HUF',
+      payment_status: /\bklarna\b/i.test(paymentMethod) ? 'pending' : detectPaymentStatus(paymentMethod, input.body),
+      payment_method: paymentMethod,
+      paid_amount: null,
+      paid_currency: null,
+      shipping_method: shippingMethod,
+      tracking_number: null,
+      carrier: 'DPD',
+      parcel_sender: null,
+      cod_amount: null,
+      cod_currency: null,
+      invoice_number: null,
+      products: [],
+      confidence: 0.995,
+    },
+    parserVersion: JATEKBOLT_PARSER_VERSION,
+    reasons: [
+      'exact_jatekbolt_sender_domain',
+      'subject_and_body_order_identity_agree',
+      'explicit_order_offer_received',
+      'explicitly_not_merchant_acceptance_yet',
+      'structured_jatekbolt_money_reconciliation',
+      'explicit_payment_method',
+      'explicit_dpd_shipping_method',
+    ],
+  };
+}
+
 export function parseGenericOrderConfirmationEmail(input: {
   senderDomains: string[];
   subject?: string | null;
@@ -302,6 +385,10 @@ export function parseGenericOrderConfirmationEmail(input: {
 
   const subject = normalizeText(input.subject ?? '');
   const body = normalizeText(input.bodyText ?? '');
+
+  const jatekbolt = parseJatekboltOrderReceived({ domains, subject, body });
+  if (jatekbolt) return jatekbolt;
+
   const context = `${subject}\n${body}`;
   const orderNumber = extractOrderNumber(context);
   if (!orderNumber) return null;
