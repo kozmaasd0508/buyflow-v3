@@ -36,12 +36,29 @@ const CARRIER_RULES: CarrierRule[] = [
 
 const TRACKING_LABEL_PATTERN = /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|azonosito)|csomag(?:szam|azonosito)|kul[d]?emeny(?:szam|azonosito)|parcel(?:\s*(?:number|no\.?|id))|shipment(?:\s*(?:number|no\.?|id)))\s*[:#-]?\s*([a-z0-9][a-z0-9-]{7,31})\b/gi;
 
+const PRE_ADVICE_PATTERNS = [
+  /\bfelado elektronikusan rogzitette a kuldemenyt\b/i,
+  /\bcimke elkeszult\b/i,
+  /\bshipment information received\b/i,
+  /\blabel (?:has been )?created\b/i,
+];
+
+const SHIPPED_PATTERNS = [
+  /\ba kuldemenyt a futar atvette a feladotol\b/i,
+  /\bkuldemenyt a futar atvette\b/i,
+  /\bcsomag(?:jat|od)? atvettuk szallitasra\b/i,
+  /\bhas shipped\b/i,
+  /\bhas been shipped\b/i,
+  /\bpicked up from (?:the )?sender\b/i,
+];
+
 const FUTURE_DELIVERY_PATTERNS = [
   /\bout for delivery\b/i,
   /\bkezbesites alatt\b/i,
   /\bkezbesitesre kerul\b/i,
   /\bkezbesitjuk\b/i,
   /\bkezbesites varhato\b/i,
+  /\bkezbesitonel van\b/i,
 ];
 
 const DELIVERED_PATTERNS = [
@@ -51,7 +68,8 @@ const DELIVERED_PATTERNS = [
   /\bsuccessfully delivered\b/i,
   /\bsikeresen kezbesitett(?:uk|ek)?\b/i,
   /\bkezbesitve\b/i,
-  /\batvette\b/i,
+  /\bcimzett(?:\s+[a-z0-9_-]+){0,4}\s+atvette\b/i,
+  /\batvette\s+(?:a\s+)?cimzett\b/i,
   /\batvetel megtortent\b/i,
 ];
 
@@ -188,15 +206,13 @@ export function extractLabeledTrackingNumber(text: string): string | null {
   return match[1].trim().toUpperCase();
 }
 
-function detectCarrierEventType(text: string): BuyFlowEmailEventType {
+function detectCarrierShipmentPhase(text: string): DeterministicShipmentPhase | undefined {
   const normalized = normalizeText(text);
-  if (FUTURE_DELIVERY_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return 'shipment';
-  }
-  if (DELIVERED_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return 'delivery';
-  }
-  return 'shipment';
+  if (DELIVERED_PATTERNS.some((pattern) => pattern.test(normalized))) return 'delivered';
+  if (FUTURE_DELIVERY_PATTERNS.some((pattern) => pattern.test(normalized))) return 'out_for_delivery';
+  if (SHIPPED_PATTERNS.some((pattern) => pattern.test(normalized))) return 'shipped';
+  if (PRE_ADVICE_PATTERNS.some((pattern) => pattern.test(normalized))) return 'shipment_created';
+  return undefined;
 }
 
 function parseKnownCarrierEmail(input: {
@@ -211,14 +227,24 @@ function parseKnownCarrierEmail(input: {
   const trackingNumber = extractLabeledTrackingNumber(contextText);
   if (!trackingNumber) return null;
 
-  const eventType = detectCarrierEventType(contextText);
+  const shipmentPhase = detectCarrierShipmentPhase(contextText);
+  const eventType: BuyFlowEmailEventType = shipmentPhase === 'delivered' ? 'delivery' : 'shipment';
   return {
     extraction: baseExtraction({ eventType, trackingNumber, carrier, confidence: 0.96 }),
     parserVersion: PARSER_VERSION,
+    ...(shipmentPhase ? { shipmentPhase } : {}),
     reasons: [
       'known_carrier_sender',
       'explicit_tracking_label',
-      eventType === 'delivery' ? 'explicit_delivery_evidence' : 'shipment_or_transit_evidence',
+      shipmentPhase === 'delivered'
+        ? 'explicit_delivery_evidence'
+        : shipmentPhase === 'out_for_delivery'
+          ? 'explicit_out_for_delivery_evidence'
+          : shipmentPhase === 'shipped'
+            ? 'explicit_carrier_acceptance'
+            : shipmentPhase === 'shipment_created'
+              ? 'explicit_pre_advice_evidence'
+              : 'shipment_evidence_without_explicit_phase',
     ],
   };
 }
