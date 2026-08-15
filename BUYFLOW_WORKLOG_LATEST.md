@@ -1,125 +1,100 @@
 # BuyFlow V3 — latest recovery worklog
 
-> Newest detailed entry. Read after `BUYFLOW_HANDOFF.md`. Previous latest entries are preserved in Git history and `BUYFLOW_WORKLOG.md`.
+> Newest detailed entry. Read after `BUYFLOW_HANDOFF.md`. Previous latest entries remain in Git history and `BUYFLOW_WORKLOG.md`.
 
-## 2026-08-16 — user-supplied 100-email blind benchmark
+## 2026-08-16 — Protocol / Merchant Library Foundation
 
-### Source / goal
+### Goal
 
-The user uploaded `buyflow_demo_emails_100(1).xlsx` to stress-test BuyFlow with many complete purchase journeys rather than only isolated email samples.
+Create a versioned, source-auditable knowledge layer in front of the existing deterministic classifier without rebuilding BuyFlow, enabling AI, or changing existing Purchase/lifecycle/resolution safety.
 
-Workbook structure:
-- 100 emails total
-- 70 purchase/lifecycle messages
-- 30 noise/hard negatives
-- 10 purchase threads
-- 20 event labels
-- merchants: Alza, eMAG, Notino, Amazon.de, MediaMarkt, ABOUT YOU, IKEA, iStyle, Decathlon, SHEIN
-- carriers: GLS, Express One, DPD, DHL, Packeta, MPL, Foxpost, plus store pickup
+### PR #99 — `Add Protocol Library foundation`
 
-The corpus covers order created, payment success/failure/action-required, processing, packing, pre-advice, shipped, in-transit, out-for-delivery, ready-for-pickup, delivery failure, delivered, cancel, return, refund, warranty and invoice.
+Branch: `agent/protocol-library-foundation-v1`.
 
-The workbook deliberately uses reserved demo carrier senders such as `gls-demo.example`. Those domains were never added to production trust. The benchmark normalizes them only inside the test to already trusted carrier identities, so it measures parser semantics without weakening sender security.
+Added runtime foundation under `apps/api/src/protocols/`:
+- `types.ts` — common protocol/evidence contract
+- `detect.ts` — source-specific evidence detector
+- `registry.ts` — deliberately empty Foundation V1 registry
+- `safety.ts` — provenance eligibility and authority precedence
+- `profile-validator.ts` — version/source/regex/confidence validation
+- `index.ts` — stable library exports
+- `protocol-library.test.ts` — safety regressions
 
-### PR #97 — first blind run
+Added knowledge-base structure:
+- `/protocols/schema`
+- `/protocols/commerce`
+- `/protocols/merchants/hu`
+- `/protocols/carriers`
+- `/protocols/payments`
+- `/protocols/invoicing`
 
-Branch `agent/user-100-email-benchmark-v1`.
+### Contract / safety
 
-First blind CI #477 ran the current deterministic core before parser changes. It failed usefully.
+Profiles can emit candidate evidence for all current BuyFlow lifecycle families, including order, payment, fulfillment, delivery, cancellation, invoice, return, refund and warranty.
 
-Machine safety findings:
-- 30/30 noise messages stayed out of deterministic commerce/lifecycle parsing
-- zero wrong order/tracking identities
-- zero lifecycle messages promoted to `order_created`
-- **six SHIPPED messages were incorrectly classified as delivery**
-- **three SHIPMENT_CREATED/pre-advice messages were recognized without an explicit phase**
+Every result preserves:
+- protocol id/version/kind
+- event candidate
+- confidence
+- order/tracking/invoice/payment-reference identifiers
+- matched positive rules
+- matched negative rules
+- `blocked_by_negative_evidence`
+- explicit prohibitions
+- provenance levels
+- `production_eligible`
 
-Affected SHIPPED fixtures were GLS, DPD, DHL, Packeta, Foxpost and Express One. Their body used the legitimate sender-side sentence `A küldeményt a futár átvette a feladótól.` The generic delivery detector normalized `átvette` to `atvette` and treated the bare word as delivery, even though the recipient had not received anything.
+Provenance levels:
+- observed real email
+- official documentation
+- verified template
+- community example
+- inferred
+- unknown
 
-The phase problem was also real: `shipment-resolution.ts` considered any `eventType=shipment` with phase other than `shipment_created` physical progress. Therefore `phase=null` silently counted as physical carrier evidence.
+`inferred`/`unknown` alone can never become production-eligible. Production evidence threshold is 0.85, but eligibility never bypasses existing classifier/resolution/write gates.
 
-### Safety fix
+Formal evidence authority was added:
+- direct carrier > merchant wording for logistics
+- direct payment provider > merchant wording for payment
+- invoice provider/PDF > merchant invoice wording
 
-The benchmark was not weakened.
+This is precedence of evidence only; it never performs entity linking.
 
-`deterministic-commerce-parser.ts` now:
-- removes bare `átvette` as delivery proof
-- keeps explicit delivered wording (`sikeresen kézbesítettük`, delivered-success language, recipient-specific receipt)
-- detects strong generic carrier phases:
-  - pre-advice / label created -> `shipment_created`
-  - carrier picked up from sender -> `shipped`
-  - delivery-today / courier-out wording -> `out_for_delivery`
-  - explicit completed delivery -> `delivered`
-- returns delivery event only for explicit `delivered` phase
+Protocol sender matching uses exact domain or true subdomain suffix, rejecting attacker lookalikes.
 
-`shipment-resolution.ts` now counts physical shipment evidence only for explicit phases:
-- `shipped`
-- `in_transit`
-- `out_for_delivery`
-- `ready_for_pickup`
+Profile validation requires semantic versioning, source-backed rules, valid/length-bounded event and identifier regexes, and confidence in range.
 
-`shipment_created` and `phase=null` are non-physical by default.
+### Useful CI failures before merge
 
-Added regressions for:
-- sender pickup is shipped, never delivered
-- pre-advice is shipment_created
-- delivery-today is out_for_delivery, never delivered
-- explicit completed delivery remains delivered
-- phase-less shipment cannot prove physical progress
+First PR CI #485 failed TypeScript because an identifier-pattern helper lost its type through `Object.entries()`. Fixed with explicit typed arrays; no safety semantics changed.
 
-### Final PR result
+Second PR CI #486 passed typecheck but one new protocol test failed: the sample order-ID regex was too broad and extracted part of `visszaigazol...` from the subject instead of `HU-12345`. The example rule was tightened to explicit `Rendelésszám:` plus a digit-bearing identifier. The detector was not loosened.
 
-PR #97 final head `7480e8efefe5fd64b361eb547fe04ad71ba7aa3b`.
-- final PR CI #481: **376/376 API tests passed**
-- API build green
-- mobile typecheck green
-- mobile web build green
-- merged runtime main: `994be825f3f91b329ced10080bdb8dae43c9492e`
-- main CI #482 green
-- exact Render smoke #376 green for exact `994be825...` runtime
+Final PR CI #487 was fully green: API typecheck/tests/build and mobile typecheck/build all passed.
 
-### Final 100-email machine report
+### Merge / deploy
 
-Safety:
-- fixtures: 100
-- purchase-related: 70
-- noise: 30
-- noise parser matches: **0**
-- wrong order/tracking identity: **0**
-- unsafe lifecycle promotion: **0**
-- recognized pre-advice without explicit `shipment_created`: **0**
+Merged runtime main:
+`70b90b4cc227a018ce4f56afdd2319e6f002f6eb`
 
-Exact newly covered carrier semantics:
-- SHIPMENT_CREATED: **3/4**
-- SHIPPED: **6/6**
+- main CI #488: green
+- exact Render Webhook Smoke #382: green for the exact runtime commit
 
-The one missing SHIPMENT_CREATED case is the synthetic MPL demo wording. Real MPL handling intentionally requires the stricter official sender/syntax path and was not loosened for the benchmark.
+Foundation V1 registers **zero production profiles**, so current BuyFlow recognition behavior remains unchanged and no new production email/Purchase/Shipment/Document data was written.
 
-Current generic corpus coverage after safety fixes:
-- recognized purchase-related fixtures: **9/70**
-- exact semantic matches across whole workbook: 39/100, of which 30 are correctly rejected noise and 9 are exact purchase/carrier events
+### Next
 
-This number must not be presented as overall production BuyFlow recall. The workbook is deliberately adversarial/new and much of it uses generic lifecycle language not yet covered by the merchant-specific production adapters.
+Start primary-source WooCommerce research and create the first versioned commerce profile in `research`/`test` status. Do not promote it to production until positive and hard-negative fixtures pass and the permanent 100-email benchmark shows no safety regression.
 
-### Coverage gaps exposed by the workbook
+### Previous benchmark baseline
 
-Priority order for future safe deterministic work:
-1. generic order confirmation sentence `Rögzítettük a(z) <id> azonosítójú megrendelést`
-2. payment success / payment failed / action required with stable order identity
-3. processing / packing / cancellation lifecycle
-4. transit/out-for-delivery/delivered carrier messages where tracking is present but not in current explicit label form
-5. ready-for-pickup and store-pickup
-6. return / refund / warranty
-7. invoice email anchors; keep PDF attachment ingestion separate
-8. strict MPL handling
+PR #97 permanent 100-email benchmark remains the safety baseline:
+- 70 purchase/lifecycle fixtures + 30 noise
+- 30/30 noise excluded
+- 0 wrong order/tracking identities
+- 0 unsafe lifecycle promotions
+- new generic purchase-related recognition 9/70
 
-Do not optimize the benchmark score by adding broad catch-all rules. Each new rule must keep false Purchase = 0, wrong auto-link = 0 and ambiguity => REVIEW.
-
-### Previous recent work
-
-Immediately before this benchmark:
-- PR #95 added 24 web-derived unseen notification fixtures and fixed a second carrier lookalike-domain path.
-- PR #93 added the original 31-email demo benchmark and fixed Spanish order-id extraction plus carrier-domain identity hardening.
-- private PDF ingestion/opening is live; Jatekbolt `S26_044783.pdf` remains the proven document case.
-
-See Git history and `BUYFLOW_WORKLOG.md` for the full older chronology.
+The Protocol Library should improve coverage incrementally while preserving false Purchase=0 and wrong auto-link=0.
