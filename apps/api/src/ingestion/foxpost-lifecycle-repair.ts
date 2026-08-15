@@ -70,7 +70,7 @@ export function parseFoxpostLifecycleEmail(input: {
   let shipmentPhase: FoxpostLifecycleParseResult['shipmentPhase'] | null = null;
   const reasons = ['trusted_foxpost_sender', 'explicit_foxpost_tracking', 'explicit_parcel_sender'];
 
-  if (/\beloretesites\b/i.test(subject) && /\bmeg\s+nem\s+adtak\s+at\s+a\s+foxpost\s+reszere\b/i.test(body)) {
+  if (/\beloertesites\b/i.test(subject) && /\bmeg\s+nem\s+adtak\s+at\s+a\s+foxpost\s+reszere\b/i.test(body)) {
     shipmentPhase = 'shipment_created';
     reasons.push('explicit_pre_advice_not_yet_handed_over');
   } else if (/\bcsomagod\s+mar\s+a\s+raktarunkban\s+van\b/i.test(subject) || /\bbeerkezett\s+raktarunkba\b/i.test(body)) {
