@@ -28,15 +28,11 @@ function currencyEvidence(text: string, currency: string): boolean {
   const normalized = text.toLowerCase();
   const code = currency.trim().toLowerCase();
 
-  const aliases: Record<string, string[]> = {
-    huf: ['huf', ' ft', 'forint'],
-    eur: ['eur', '€', 'euro'],
-    usd: ['usd', '$', 'dollar'],
-    gbp: ['gbp', '£', 'pound'],
-  };
-
-  const candidates = aliases[code] ?? [code];
-  return candidates.some((candidate) => normalized.includes(candidate));
+  if (code === 'huf') return /(?:^|[^a-z])(?:huf|ft|forint)\b/i.test(normalized);
+  if (code === 'eur') return /(?:^|[^a-z])eur\b|€|(?:^|[^a-z])euro\b/i.test(normalized);
+  if (code === 'usd') return /(?:^|[^a-z])usd\b|\$|(?:^|[^a-z])dollar\b/i.test(normalized);
+  if (code === 'gbp') return /(?:^|[^a-z])gbp\b|£|(?:^|[^a-z])pound\b/i.test(normalized);
+  return normalized.includes(code);
 }
 
 function hasMonetaryContext(text: string): boolean {
