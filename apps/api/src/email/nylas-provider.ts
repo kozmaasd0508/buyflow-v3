@@ -57,6 +57,15 @@ type NylasClientShape = {
       data: NylasMessageLike;
     }>;
   };
+  attachments: {
+    downloadBytes(input: {
+      identifier: string;
+      attachmentId: string;
+      queryParams: {
+        messageId: string;
+      };
+    }): Promise<Uint8Array>;
+  };
 };
 
 type NylasConstructor = new (config: {
@@ -158,5 +167,17 @@ export class NylasEmailProvider implements EmailProvider {
     });
 
     return normalizeNylasMessage(response.data);
+  }
+
+  async downloadAttachment(providerMessageId: string, attachmentId: string): Promise<Buffer> {
+    const bytes = await this.client.attachments.downloadBytes({
+      identifier: this.grantId,
+      attachmentId,
+      queryParams: {
+        messageId: providerMessageId,
+      },
+    });
+
+    return Buffer.from(bytes);
   }
 }
