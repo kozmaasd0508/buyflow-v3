@@ -1,252 +1,67 @@
 # BuyFlow V3 — persistent worklog
 
-> Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
+> Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
+
+## 2026-08-15 — Gyerekjatekbolt failure/cancel + Szidibox/MPL recovery
+
+- Reviewed the remaining second-Gmail REVIEW/unlinked backlog and prioritized real commerce clusters over obvious subscription/promo/noise.
+- Gyerekjatekbolt order `535574` already had the correct deterministic lifecycle rules in current main. Targeted 30-day rerun: 5 checked / 4 processed / 1 REVIEW / 0 unlinked / 0 writes / AI 0.
+- Final `535574`: `payment_status=failed`, `current_state=cancelled`, `cancelled_at=2026-08-04 11:21:36+00`, paid_at null, no Shipment. The standalone retry-payment-link email intentionally remains REVIEW.
+- Inspected four real McDonald's payment-summary emails. Each uses a short 4-digit restaurant/POS order number and explicitly says the email is only an order summary; no separate receipt email was found. Because those IDs can repeat and current uniqueness is merchant-domain + order-number, the cluster remains REVIEW. Follow-up architecture: POS/local-order identity using location/time/provider identity rather than globally trusting the 4-digit number.
+- Found Szidibox order `SO-2024-30411`: historical Purchase already existed but incorrectly used `merchant_domain=gmail.com`; merchant sends from `szidibox@gmail.com`, message contains `kartonshop.hu`, and MPL carrier chain uses tracking `PB9S650307180`.
+- PR #80 / main `3d53c3cefb61d9c2452cb9f677214fc32c0cf22d`: added deterministic MPL lifecycle and public-mailbox safety. Exact `kozponti.ertesites@posta.hu`; shipped/out-for-delivery/ready-for-pickup states; tracking/parcel-sender/COD extraction; MPL slug normalization; narrow Szidibox packing anchor as `shipment_created`; generic public-mailbox Purchase creation now stays REVIEW. PR CI #429, main CI #430, exact Render smoke #324 passed.
+- First live Szidibox rerun correctly reparsed merchant packing as `shipment_created`, but exposed two real gaps: carrier bridge used the packing timestamp as physical `shipped_at`, and Nylas flattened MPL labels prevented the new parser from replacing legacy carrier results.
+- PR #81 / main `5139fda8bcad1f743aef37b49340bef93ca446e4`: `shipment_created` anchors can no longer define physical shipped time; first physical carrier event does. MPL parser now handles line-oriented and flattened Nylas text. PR CI #433, main CI #434, exact Render smoke #328 passed.
+- Final MPL targeted rerun: 3 checked / 3 processed / 0 REVIEW / 0 unlinked / AI 0. All three carrier sources now use `deterministic-lifecycle-v1`, confidence 0.995, COD 26,390 HUF, parcel sender Szidibox Karton Kft.; phases `shipped -> out_for_delivery -> ready_for_pickup`.
+- PR #82 / main `e320ac5593f95f6535c97b865f569c9d7bbde181`: canonicalized bridged MPL display name from raw `mpl` to `MPL`. PR CI #435, main CI #436, exact Render smoke #330 passed.
+- Guarded historical repair updated exactly one Purchase and one Shipment. Final Purchase `24b05d2e-be2c-4ea8-9836-befce30b4ddd`: merchant domain `kartonshop.hu`, legal name Szidibox Karton Kft., 26,388 HUF COD, expected carrier MPL, state `ready_for_pickup`, shipped_at `2026-07-23 14:44:56+00`, delivered_at null.
+- Final Shipment `f6ed4ca1-7750-4d48-99ee-3ece45a5213c`: MPL / `mpl`, tracking `PB9S650307180`, `ready_for_pickup`, shipped_at `2026-07-23 14:44:56+00`, last_event_at `2026-07-24 11:46:49+00`, delivered_at null, 4 shipment source links.
+- Integrity: exactly 1 Purchase and 1 Shipment for this identity. Historical AI count remains 98; no new AI calls. Backlog reduced to **35 REVIEW + 13 unlinked**.
+- Safety follow-up: new unverified Gmail/Outlook/Yahoo merchant evidence cannot create a Purchase. A future verified public-mailbox merchant identity layer is still needed before legitimate public-mailbox merchants can auto-create new Purchases; until then REVIEW is intentional.
 
 ## 2026-08-15 — Second Gmail blind test + All In Packaging historical recovery
 
-- PR #73 improved Gmail OAuth-start resilience and stage diagnostics; PR #74 added session-refresh retry and concrete browser error reporting.
-- Root cause of the repeated Gmail-connect 503 was production DB privilege drift on `email_oauth_states`: `service_role` lacked SELECT/INSERT/DELETE.
-- PR #75 / main `a9a833ed05809b1c66769e6d910c702d04f4321f` restored the minimum server-only grants; `anon`/`authenticated` have no table access. Production migration and rollback-safe OAuth-state smoke passed.
-- Second Gmail connected successfully. Automatic 7-day scan: 34 checked, 30 ignored, 4 review, 0 unlinked, 0 writes, AI 0.
-- First 30-day attempt exposed an enqueue bug: the per-connection initial job was reused without resetting `window_days` or status, and the live DB function still rejected 90 days.
-- PR #76 / main `d27ffed0062b73fb2c4845fd1083f70f12235159` fixed repeat full scans: only 7/30/90 are accepted, completed/retry/pending jobs safely restart, active processing jobs cannot be overwritten. PR CI #422, main CI #423 and exact Render smoke #317 passed; production migration applied.
-- Real second-Gmail 30-day blind scan: 3 pages / 149 checked / 130 ignored / 14 REVIEW / 5 unlinked / 0 Purchase / 0 Shipment / 0 Document writes / AI 0. Safety: zero false automatic Purchases.
-- The blind scan exposed a genuine false negative: All In Packaging order `148810` had merchant dispatch + merchant invoice + a GLS chain, but no `order_created` email in the scanned history.
-- PR #77 attempted a parallel reconstruction path but was closed **unmerged** after CI exposed a domain-matching safety issue and the existing stronger 90-day historical reconstruction architecture was identified.
-- PR #78 / runtime main `ebe06d3ee8c6c203bc363ed58eb992670758f667` extended the existing historical lane instead. PR CI #425, main CI #426 and exact Render smoke #320 passed.
-- Added `generic-hu-transaction-anchor-v1`: strict merchant-owned Hungarian dispatch/invoice subject anchors; they never emit `order_created`, reject public/shared/carrier senders and require merchant-label/domain agreement.
-- Historical fallback still requires completed 90-day exact-order proof with `purchaseWrites=0`; then, only when merchant tracking is absent, it may use exactly one >=2-email trusted carrier cluster with physical progress, matching parcel sender, consistent explicit COD+currency and <=7-day proximity. Multiple COD clusters block reconstruction; no-COD clusters do not compete.
-- Live `148810` proof scan: 2 checked / 2 unlinked / 0 writes / AI 0; no hidden order-created Purchase existed.
-- Live reconstruction created exactly one Purchase `def961ae-202e-4cb7-b757-8e5215f6f51d`: All In Packaging, 16,670 HUF, cash on delivery, GLS, `in_transit`, confidence 0.90, `ordered_at=null` intentionally.
-- Created exactly one Shipment `274cb215-c441-4d98-9a97-2dade4c8310f`, GLS tracking `3219379224`, `in_transit`, physical `shipped_at=2026-08-04 05:52:38+00`, `last_event_at=2026-08-04 07:03:17+00`, delivered_at null.
-- Purchase `shipped_at=2026-07-31 11:22:50+00` is intentionally the trusted merchant “order sent” timestamp; Shipment `shipped_at` is first physical carrier progress. These are different evidence layers by design.
-- Five correct merchant/carrier sources are linked and processed. Separate GLS tracking `3219379250` remains unlinked because it has no explicit COD proof.
-- Duplicate verification: Purchase count 1; Shipment count 1.
-- Historical AI runs remain 98; latest AI run remains `2026-08-14 21:43:08.694227+00`; all work in this flow used AI 0.
-- Current unresolved after second mailbox + recovery: review 40, unlinked 15.
+- PRs #73–#76 completed second-Gmail OAuth and repeat 7/30/90 scan reliability.
+- Second Gmail 7-day scan: 34 checked / 30 ignored / 4 REVIEW / 0 unlinked / AI 0.
+- Real 30-day blind scan: 149 checked / 130 ignored / 14 REVIEW / 5 unlinked / 0 Purchase / 0 Shipment / 0 Document writes / AI 0; zero false automatic Purchases.
+- All In Packaging order `148810` exposed a real false negative with merchant dispatch + merchant invoice + GLS chain but no order-created mail.
+- PR #77 was closed unmerged after CI exposed a safety issue; existing stricter historical architecture was used instead.
+- PR #78 / runtime `ebe06d3ee8c6c203bc363ed58eb992670758f667`: extended strict 90-day historical reconstruction for carrier-only tracking with merchant/domain anchors, exact negative proof, multi-event carrier corroboration, parcel sender, COD+currency and uniqueness checks.
+- Live `148810`: exactly 1 Purchase (16,670 HUF COD, GLS) and 1 Shipment tracking `3219379224`; second no-COD GLS tracking `3219379250` remains unlinked. AI 0.
 
-## 2026-08-15 — Multi-Gmail + full 30-day deterministic scan UI
+## 2026-08-15 — Multi-Gmail + deterministic scan UI
 
-- PR #69 / main runtime `afa01c0d21179dc6472b7e32d427c789282d34ea`: Gmail settings now lists every active Nylas/Gmail connection and exposes `+ Másik Gmail hozzáadása`.
-- Added per-account 7 / 30 / 90 day full-inbox scan controls; 30 days is the recommended cross-account blind-test window.
-- The scan uses the existing deterministic write-mode pipeline, not the old AI benchmark; recognition/parser/resolver rules were not weakened and uncertain evidence remains REVIEW.
-- UI shows checked, processed, review, unlinked, Purchase writes, Shipment writes, Document writes and AI call count per latest scan.
-- API `/api/email-connections/:id/initial-scan` now accepts only 7/30/90 day windows and returns job id/status/window; newly connected Gmail still gets the automatic 7-day initial scan.
-- PR #69 CI #408 and main CI #409 passed.
-- PR #70 / main runtime `5fdf20f69dc4f3518d36400223f7a522f124de79`: fixed repeated same-window scan progress so the UI follows the newly enqueued job instead of prematurely reading the previous completed result. PR CI #410 and main CI #411 passed.
-- PR #71 / main `44fa37bd89b268049230dcb45e86920ac93d3cc0`: upgraded Render health diagnostic to prove that the deployed commit contains the latest runtime-changing commit.
-- Exact production diagnostic run #4: expected runtime `5fdf20f69dc4f3518d36400223f7a522f124de79`, deployed Render commit exactly the same, `runtime_deployment_verified=true`, version 0.4.0, automation mode write.
-- No APK built. Next user-facing step: connect a second Gmail in the browser, let automatic 7-day scan finish, then run the 30-day full-inbox scan and score real found/missed/false/review/duplicate outcomes.
+- PR #69 added all connected Gmail accounts and per-account 7/30/90 full deterministic scans.
+- PR #70 fixed repeated same-window UI polling.
+- PR #71 added exact Render deployment ancestry verification.
+- PR #75 repaired server-only OAuth-state DB grants; PR #76 repaired repeat scan enqueue/reset semantics.
+- Browser-first remains the project rule; no APK for routine backend/UI changes.
 
-## 2026-08-15 — Scitec / BioTechUSA / Foxpost deterministic completion
+## 2026-08-15 — Key deterministic recognition milestones
 
-- PR #65 / main `053d4e1190b6bc8fd35f1c00932508c7b473dc8c`: generic order parser v1.2 now accepts safe Hungarian `Rendelés: #...` identities and the real `Köszönjük megrendelésedet` confirmation form; stale #58 closed as superseded.
-- Live Scitec `1783-975-87-395`: 1 checked / 1 processed / 1 Purchase write / 0 review / 0 unlinked / AI 0; total 16,780 HUF, confidence 0.95.
-- PR #66 / main `3d73da6a1e42410955d28bca1e54024538c0b092`: narrow verified-brand COD carrier fallback for explicit `scitec.hu` + BioTechUSA Kft. + Foxpost identity. Requires >=2 carrier sources, exact COD+currency, <=7 days, confidence >=0.95 and one Purchase candidate; generic carrier-only guessing remains blocked.
-- Live tracking `CLFOX178401889449819` linked to exactly one Scitec Purchase/Shipment and advanced to `ready_for_pickup`; no delivered state.
-- PR #67 / main runtime `ce759ed001c6f52dcb84cf2b56f431d3da2972ab`: Foxpost parser v1.1 accepts the trusted generic `Csomagod azonosítószáma: CLFOX...` label used by the warehouse-arrival email; strict Foxpost sender, parcel-sender and lifecycle gates remain.
-- PR #65, #66, #67 PR CI and main CI passed; #67 main CI was #405.
-- Final live tracking rerun: 3 checked / 3 processed / 0 review / 0 unlinked / AI 0. All three Foxpost stages are linked to the same Purchase.
-- Final Shipment status `ready_for_pickup`; `shipped_at=2026-07-14 17:33:28+00` from first explicit physical warehouse arrival; `last_event_at=2026-07-15 09:55:07+00`; delivered_at null.
-- Historical AI run count remains 98. Live unresolved counts after completion: review 28, unlinked 13.
-- Literal exact Render `/health` commit-SHA verification remains unavailable in the current tool environment; functional live worker behavior proves the new logic is active but exact SHA smoke is still a separate check.
+- Gate.shop / Foxpost: ready-for-pickup lifecycle and exact carrier bridge.
+- Scitec / BioTechUSA / Foxpost: generic Hungarian confirmation + verified legal-entity COD bridge + Foxpost lifecycle.
+- Ars Una / GLS: exact sender, parcel sender + COD bridge, correct physical shipment semantics.
+- Allegro / HappyBox24: order lifecycle, DPD tracking and seller invoice.
+- GymBeam / Express One: processing enrichment, strict missing-purchase reconstruction, terminal receipt payment resolution and outbound pickup-noise exclusion.
+- Promotional/repurchase hard negatives and Limone deterministic merchant parsing remain active.
+- Three Barion payment-only rows intentionally remain unlinked without merchant corroboration.
 
-## 2026-08-15 — Gate.shop / Foxpost ready-for-pickup completion
+## 2026-08-14/15 — Foundation / security / frontend
 
-- PR #62 merged to main as `0505fe96c872f7d6bd20c775838305035ba08b45`.
-- Main CI run #395 passed.
-- `ready_for_pickup` now survives the carrier parcel-sender bridge and is supported by controlled shipment creation.
-- State precedence is monotonic: delivered > ready_for_pickup > in_transit; weaker later evidence cannot downgrade pickup-ready.
-- Controlled shipment SECURITY DEFINER path/execute rights were hardened in the deployed migration.
-- Live targeted recovery for `Z3493891717`: 2 checked, 2 processed, 0 review, 0 unlinked, AI 0.
-- Gate.shop order `20336215` now has Purchase `current_state=ready_for_pickup` and one Foxpost shipment with tracking `CLFOX178524111362058`, status `ready_for_pickup`.
-- Historical AI run count stayed 98; latest AI run remains 2026-08-14 21:43:08.694227+00.
-- Literal exact Render `/health` commit-SHA verification could not be fetched from the current tool environment; behavioral live verification passed, exact SHA smoke remains to be checked separately.
-- Live unresolved counts after rerun: review 29, unlinked 14; one older 2026-07-15 Foxpost source remains unlinked and is separate from Gate.shop.
-
-## 2026-08-15 — Ars Una / GLS deterministic carrier bridge
-
-- PR #56 / main commit: `35dd96f1678c4bba74ecc973288cfb0f1df1dc43`.
-- Added `gls-lifecycle-v1` and `carrier-sender-cod-bridge-v1`.
-- Exact GLS sender only; extracts parcel sender, tracking and COD.
-- Pre-advice stays `shipment_created`; delivery-today stays `out_for_delivery`; dynamic GLS RTT URL is `in_transit`; no delivered state without completion evidence.
-- Carrier→Purchase bridge requires one existing COD Purchase, exact normalized merchant/parcel-sender identity, GLS compatibility, <=1 currency-unit amount difference, 14-day window, and one already-linked merchant shipment source without tracking.
-- Verified Ars Una order `192132` invoice `5133964`: product 6,276 HUF + shipping 1,990 HUF = 8,266 HUF, payment Utánvét.
-- GLS states COD 8,265 HUF; explicitly treated as a 1 HUF difference, not exact equality.
-- Live tracking `3412614699`; exactly one GLS shipment created; current state `in_transit`.
-- Corrected historical shipment timestamp after all old AI evidence was reparsed: pre-advice no longer counts as shipped; first physical progress is the delivery-today evidence.
-- Dynamic tracking email was recovered from the GLS RTT URL and linked.
-- Final unresolved GLS rows: 0. AI 0.
-- PR CI, main CI and exact Render smoke passed.
-
-## 2026-08-15 — Allegro / HappyBox24 lifecycle and seller invoice
-
-- PR #54 / main `012b80e0273ce18bcc252e0a076ce1a566f4cccd`: added `allegro-lifecycle-v1`.
-- Allegro merchant mail uses exact purchase-history UUID + carrier tracking; DPD relay messages never invent order IDs.
-- `delivery today` remains out_for_delivery; only explicit successful completion becomes delivered.
-- HappyBox24 Purchase UUID `3fe09c80-8d79-11f1-b193-cf13a29b46f5` now has exactly one DPD shipment, tracking `13169408547018`, with five lifecycle sources processed/linked.
-- PR #55 / main `1f8c19d4dcf1ca80f09cc10a99946d4a836fd8ea`: added `allegro-sales-document-v1` so document identity wins over incidental “package arrived” wording.
-- Verified seller invoice:
-  - invoice `I/00005/08/26`
-  - seller internal order `46181083`
-  - total 5,675 HUF
-  - shipping 1,990 HUF
-  - product prices 1,830 + 1,855 HUF
-  - exactly 1 invoice document linked to HappyBox24 Purchase.
-- AI 0; CI/main CI/exact Render smoke passed.
-
-## 2026-08-15 — Promotional / repurchase hard-negative
-
-- PR #53 / main `6ba285ac7a8c975eb7807b07b2253fc181c8a210`.
-- Added conservative promotional/repurchase exclusion without using Gmail Promotions as a hard gate.
-- Explicit order/tracking/invoice identity and real order-confirmation wording override the marketing exclusion.
-- Cleaned four verified false commerce rows (Goddess/Galaxy/Sport8 patterns) after confirming zero Purchase links; previous machine results preserved for audit.
-- BF synthetic Gmail examples remain review intentionally.
-- AI 0; CI/main CI/exact Render smoke passed.
-
-## 2026-08-15 — Barion payment-only safety check
-
-- Inspected three unlinked successful Barion payments (two Netfone, one InnVoice).
-- No corresponding Purchase/order/invoice was found in the current database or mailbox search window.
-- Kept them unlinked: successful payment evidence alone cannot create a Purchase.
-- This is intentional safe behavior, not a forced-recovery failure.
-
-## 2026-08-15 — Express One terminal receipt resolver
-
-- PR #51 / main commit: `20ad2db45df68a1dd9d7e97f64fcc1401bd3b850`.
-- Added `expressone-terminal-receipt-v1` for successful card-terminal receipts from exact sender `slip@expressone.hu`.
-- A receipt can only update an existing COD/Utánvét Purchase when amount, currency, Express One identity, shipment event time and single-candidate checks all agree.
-- Zero or multiple candidates => REVIEW; receipt is never eligible for Purchase creation.
-- Live links: 9,450 HUF -> GymBeam `3010206178`; 13,240 HUF -> GymBeam `3010228912`.
-- Both Purchases now have `payment_status=paid` and receipt timestamps.
-- Live webhook replay of the 9,450 HUF receipt returned `processed/validated`, parser `expressone-terminal-receipt-v1`, exactly one Purchase link, AI 0.
-- PR CI, main CI and exact Render smoke passed.
-
-## 2026-08-15 — GymBeam processing parser v1.1
-
-- PR #49 added trusted GymBeam order-processing parsing; PR #50 added the real Nylas flattened-table format.
-- Current parser: `gymbeam-order-processing-v1.1`.
-- Emits lifecycle `order_processing` / event `order_updated`, never `order_created`.
-- Requires trusted sender, explicit processing language/order identity, structured product evidence and money reconciliation.
-- Live verification AI 0:
-  - `3010206178`: 9,450 HUF, COD, Express One, 4 products.
-  - `3010228912`: 13,240 HUF, COD, Express One, 5 products.
-- Existing Purchases were enriched with subtotal, shipping, total, payment method, carrier and product rows.
-- PR #50 main commit: `e97d048cf1f8b3585eb4d5dff86a4f477f2fffff`; exact Render smoke passed.
-
-## 2026-08-15 — Strict reconstruction of missing GymBeam `3010085026`
-
-- Found while resolving the remaining Express One review/unlinked rows.
-- Exact 90-day order search showed no `order_created` email.
-- Corroborating evidence: GymBeam processing summary + GymBeam merchant shipment + GymBeam invoice + three Express One lifecycle emails sharing exact tracking identity.
-- Reconstructed exactly one Purchase: total 17,270 HUF; product subtotal 15,780; shipping 1,190; COD fee 300; payment Utánvéttel; Express One.
-- Tracking: `605855680768000013605231`.
-- Invoice: `4008742640`.
-- 11 products inserted from the verified processing summary.
-- Final verification: 1 Purchase, 1 shipment, 1 invoice, 11 products, no duplicates.
-- AI 0.
-
-## 2026-08-15 — Express One outbound pickup noise cleanup
-
-- PR #47 / main commit: `2bac53d5550236023824b08cbefc9fd8a708652c`.
-- Root cause: Express One WEBCAS courier-pickup bookings use purchase-like wording (`megrendelés`), causing old review/unlinked rows to look like consumer purchases or shipments.
-- Added a narrow exclusion requiring Express One sender plus strong outbound `árufelvétel` / `request_curier` evidence.
-- Regression tests verify that real incoming Express One parcel/delivery mail is not excluded.
-- Removed temporary Allegro fallback diagnostics from PR #44.
-- PR CI, main CI and exact Render smoke passed.
-- Live cleanup: 43 unresolved Express One pickup-service rows -> 0; 5 false `order_created` + 38 false `shipment`; 0 Purchase links before cleanup.
-- Old wrong machine result is retained inside the cleanup JSON for audit; source emails were not deleted.
-- AI counter stayed at 98; no new AI call.
-
-## 2026-08-15 — Persistent handoff system
-
-- Added root `AGENTS.md` with mandatory startup/shutdown instructions for future AI sessions.
-- Added `BUYFLOW_HANDOFF.md` as the rolling current-state source.
-- Added this append-style worklog.
-- Goal: a new chat should be able to continue from GitHub without the user retelling project history.
-
-## 2026-08-15 — Allegro / HappyBox24 deterministic recovery
-
-- Real Allegro purchase from seller `HappyBox24` initially fell through to the AI-off fallback.
-- Hardened Allegro recognition across flattened HTML/text and Hungarian money spacing.
-- Final live deterministic parse: `allegro-order-v1.4`, `order_created`, confidence 0.995.
-- Correct values verified live: total 5,675 HUF, shipping 1,990 HUF, products 1,830 HUF and 1,855 HUF, cash on delivery, DPD.
-- Existing Purchase and product rows reflect the corrected values.
-- AI calls remained unchanged at 98 during final deterministic verification.
-- Alza `602385238` lifecycle chain did not create a false Purchase.
-
-## 2026-08-15 — PR #44 safe Allegro diagnostics
-
-- Merge commit: `1bef49b47c6a8d3168d1002c373c540a80cd3911`.
-- Added safe temporary diagnostics only for unmatched Allegro email fallback.
-- Diagnostics record lengths and boolean signal presence, never email body content.
-- Main CI and exact Render smoke passed.
-- Follow-up completed in PR #47: temporary diagnostics removed after real HappyBox24 deterministic recognition stabilized.
-
-## 2026-08-15 — PR #43 long deterministic email support
-
-- Merge commit: `dadd19d67374f6621e91dc516522587a47389423`.
-- Deterministic Nylas parser visibility raised from 20k to 80k compacted characters.
-- Added regression test for order evidence located after old 20k cutoff.
-- Existing safety gates unchanged.
-- PR CI, main CI and exact Render smoke passed.
-
-## 2026-08-14/15 — Frontend catch-up V1
-
-- Merge commit: `1895ce54f9def646719339d97bac88685677f326`.
-- Activated existing product detail/edit/remove and targeted recovery modules.
-- Added purchase detail current-state/next-action panel.
-- Added Gmail settings sheet.
-- Browser preview verified live after exact Render smoke.
-- Later AI-off UI removed active AI audit/Flow surfaces while deterministic recognition is developed.
-- Remaining frontend gaps: Warranty, Return/Refund and Felfedezés; Flow stays hidden while AI is off.
-- Browser-first rule reaffirmed: no APK after small changes.
-
-## 2026-08-14 — Auth reset hardening
-
-- Merge commit: `6bf190105b36170fb6ce15825eb4530553acb6a2`.
-- Reset token removed from URL fragment immediately.
-- Password policy: 12–128 chars with lowercase, uppercase, digit and special.
-- Specific weak-password UI, noindex/noarchive behavior.
-- Leaked-password protection was not toggled by connector; never claim it is enabled unless later verified.
-
-## 2026-08-14 — Security DEFINER hardening
-
-- Merge commit: `916fa354b35314afbeee71ffc43a573971c89cbf`.
-- Hardened legacy SECURITY DEFINER search paths and execute rights.
-- Service-only RLS INFO items intentionally left without broad user policies.
-
-## 2026-08-14 — Corroborated Document Resolver V1
-
-- Merge commit: `d56f88dbe36d234dc0ccffa8eed632f33d3d5ca5`.
-- Created exactly two GymBeam invoice documents without duplicates or new AI calls:
-  - order `3010228912` -> invoice `4008874007`
-  - order `3010206178` -> invoice `4008874475`
-
-## 2026-08-14 — Historical purchase reconstruction and tracking hardening
-
-- Strict historical reconstruction created exactly two GymBeam purchases:
-  - `3010206178`, confidence 0.90
-  - `3010228912`, confidence 0.88
-- A cross-linked tracking bug was found and corrected.
-- Final tracking identities:
-  - `3010206178` -> `605855685055000013605231`
-  - `3010228912` -> `605855685836000013605231`
-- Carrier semantic hardening prevents "delivery today" from becoming final delivered without completion wording.
+- Persistent `AGENTS.md`, `BUYFLOW_HANDOFF.md`, `BUYFLOW_WORKLOG.md` allow new chats to continue from GitHub.
+- Auth reset and SECURITY DEFINER hardening completed.
+- Browser frontend supports purchase list/detail, current state/next action, timeline, product edit/remove, order/tracking/documents, targeted recovery and multi-Gmail scans.
+- AI/Flow audit UI stays hidden while AI is disabled.
+- Remaining UI gaps: top-level lifecycle label/count alignment, Warranty, Return/refund, Felfedezés.
 
 ## Maintenance format
 
-For future entries use roughly:
+After meaningful work prepend a concise entry with:
+- PR/commit and CI/deploy proof,
+- changed behavior,
+- live verification/data writes,
+- safety notes,
+- remaining backlog/next architecture gap.
 
-```md
-## YYYY-MM-DD — short title
-
-- PR/commit: ...
-- Changed: ...
-- Live verification: ...
-- Data writes: ...
-- Safety notes: ...
-- Remaining: ...
-```
-
-Do not paste raw customer emails, credentials, secrets, tokens or private personal data here.
+Never store secrets, credentials or raw customer email bodies here.
