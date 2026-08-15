@@ -1,4 +1,5 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
+import { parseAllegroLifecycleEmail } from './allegro-lifecycle-adapter.js';
 
 const PARSER_VERSION = 'allegro-order-v1.4';
 const ALLEGRO_SENDER_DOMAINS = new Set(['allegro.com', 'allegro.hu', 'allegro.pl', 'allegro.cz', 'allegro.sk']);
@@ -8,6 +9,7 @@ export interface AllegroOrderParseResult {
   extraction: EmailExtraction;
   parserVersion: string;
   reasons: string[];
+  shipmentPhase?: 'shipped' | 'out_for_delivery' | 'delivered';
 }
 
 function normalizeDomain(value: string): string {
@@ -179,6 +181,9 @@ export function parseAllegroOrderEmail(input: {
   subject?: string | null;
   bodyText?: string | null;
 }): AllegroOrderParseResult | null {
+  const lifecycle = parseAllegroLifecycleEmail(input);
+  if (lifecycle) return lifecycle;
+
   const domains = input.senderDomains.map(normalizeDomain);
   if (!domains.some((domain) => ALLEGRO_SENDER_DOMAINS.has(domain))) return null;
 
