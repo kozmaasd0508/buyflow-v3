@@ -12,26 +12,66 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 7
     steps:
-      - name: Read non-sensitive webhook counters
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for latest runtime code on Render
         shell: bash
+        env:
+          HEALTH_URL: https://buyflow-v3-api-dev.onrender.com/health
         run: |
-          set -euo pipefail
-          # BFTEST-002 diagnostic rerun
-          body="$(curl -fsS --max-time 30 https://buyflow-v3-api-dev.onrender.com/health)"
-          echo "$body" | node -e '
-            let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
-              const h=JSON.parse(s); const w=h.webhook || {};
-              console.log(`version=${h.version ?? "unknown"}`);
-              console.log(`automation_mode=${h.automationMode ?? "unknown"}`);
-              console.log(`posts_received=${w.postsReceived ?? -1}`);
-              console.log(`invalid_signatures=${w.invalidSignatures ?? -1}`);
-              console.log(`valid_signatures=${w.validSignatures ?? -1}`);
-              console.log(`parsed_message_created=${w.parsedMessageCreated ?? -1}`);
-              console.log(`unsupported_signed_events=${w.unsupportedSignedEvents ?? -1}`);
-              console.log(`pipeline_completed=${w.pipelineCompleted ?? -1}`);
-              console.log(`pipeline_failed=${w.pipelineFailed ?? -1}`);
-              console.log(`unknown_grant=${w.unknownGrant ?? -1}`);
-            });
-          '
+          set -uo pipefail
+
+          expected_runtime="$(git log -1 --format=%H -- apps/ package.json package-lock.json)"
+          if [[ -z "$expected_runtime" ]]; then
+            echo "Could not resolve latest runtime commit"
+            exit 1
+          fi
+          echo "expected_runtime_commit=$expected_runtime"
+
+          last_deployed=""
+          for attempt in $(seq 1 36); do
+            if body="$(curl -fsS --max-time 30 "$HEALTH_URL")"; then
+              deployed="$(printf '%s' "$body" | node -e '
+                let s="";
+                process.stdin.on("data",d=>s+=d);
+                process.stdin.on("end",()=>{
+                  try { const h=JSON.parse(s); process.stdout.write(String(h.commit ?? "")); }
+                  catch { process.stdout.write(""); }
+                });
+              ')"
+              last_deployed="$deployed"
+
+              printf '%s' "$body" | node -e '
+                let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
+                  const h=JSON.parse(s); const w=h.webhook || {};
+                  console.log(`deployed_commit=${h.commit ?? "unknown"}`);
+                  console.log(`version=${h.version ?? "unknown"}`);
+                  console.log(`automation_mode=${h.automationMode ?? "unknown"}`);
+                  console.log(`posts_received=${w.postsReceived ?? -1}`);
+                  console.log(`valid_signatures=${w.validSignatures ?? -1}`);
+                  console.log(`pipeline_completed=${w.pipelineCompleted ?? -1}`);
+                  console.log(`pipeline_failed=${w.pipelineFailed ?? -1}`);
+                });
+              '
+
+              if [[ -n "$deployed" ]] && git cat-file -e "$deployed^{commit}" 2>/dev/null; then
+                if git merge-base --is-ancestor "$expected_runtime" "$deployed"; then
+                  echo "runtime_deployment_verified=true"
+                  exit 0
+                fi
+              fi
+            else
+              echo "health_request_failed attempt=$attempt"
+            fi
+
+            echo "runtime_deployment_verified=false attempt=$attempt"
+            sleep 10
+          done
+
+          echo "Expected runtime commit $expected_runtime was not present in the deployed Render ancestry. last_deployed=${last_deployed:-unknown}"
+          exit 1
