@@ -2,6 +2,29 @@
 
 > Append concise newest-first entries after meaningful work. Keep `BUYFLOW_HANDOFF.md` as the current-state snapshot.
 
+## 2026-08-15 — Second Gmail blind test + All In Packaging historical recovery
+
+- PR #73 improved Gmail OAuth-start resilience and stage diagnostics; PR #74 added session-refresh retry and concrete browser error reporting.
+- Root cause of the repeated Gmail-connect 503 was production DB privilege drift on `email_oauth_states`: `service_role` lacked SELECT/INSERT/DELETE.
+- PR #75 / main `a9a833ed05809b1c66769e6d910c702d04f4321f` restored the minimum server-only grants; `anon`/`authenticated` have no table access. Production migration and rollback-safe OAuth-state smoke passed.
+- Second Gmail connected successfully. Automatic 7-day scan: 34 checked, 30 ignored, 4 review, 0 unlinked, 0 writes, AI 0.
+- First 30-day attempt exposed an enqueue bug: the per-connection initial job was reused without resetting `window_days` or status, and the live DB function still rejected 90 days.
+- PR #76 / main `d27ffed0062b73fb2c4845fd1083f70f12235159` fixed repeat full scans: only 7/30/90 are accepted, completed/retry/pending jobs safely restart, active processing jobs cannot be overwritten. PR CI #422, main CI #423 and exact Render smoke #317 passed; production migration applied.
+- Real second-Gmail 30-day blind scan: 3 pages / 149 checked / 130 ignored / 14 REVIEW / 5 unlinked / 0 Purchase / 0 Shipment / 0 Document writes / AI 0. Safety: zero false automatic Purchases.
+- The blind scan exposed a genuine false negative: All In Packaging order `148810` had merchant dispatch + merchant invoice + a GLS chain, but no `order_created` email in the scanned history.
+- PR #77 attempted a parallel reconstruction path but was closed **unmerged** after CI exposed a domain-matching safety issue and the existing stronger 90-day historical reconstruction architecture was identified.
+- PR #78 / runtime main `ebe06d3ee8c6c203bc363ed58eb992670758f667` extended the existing historical lane instead. PR CI #425, main CI #426 and exact Render smoke #320 passed.
+- Added `generic-hu-transaction-anchor-v1`: strict merchant-owned Hungarian dispatch/invoice subject anchors; they never emit `order_created`, reject public/shared/carrier senders and require merchant-label/domain agreement.
+- Historical fallback still requires completed 90-day exact-order proof with `purchaseWrites=0`; then, only when merchant tracking is absent, it may use exactly one >=2-email trusted carrier cluster with physical progress, matching parcel sender, consistent explicit COD+currency and <=7-day proximity. Multiple COD clusters block reconstruction; no-COD clusters do not compete.
+- Live `148810` proof scan: 2 checked / 2 unlinked / 0 writes / AI 0; no hidden order-created Purchase existed.
+- Live reconstruction created exactly one Purchase `def961ae-202e-4cb7-b757-8e5215f6f51d`: All In Packaging, 16,670 HUF, cash on delivery, GLS, `in_transit`, confidence 0.90, `ordered_at=null` intentionally.
+- Created exactly one Shipment `274cb215-c441-4d98-9a97-2dade4c8310f`, GLS tracking `3219379224`, `in_transit`, physical `shipped_at=2026-08-04 05:52:38+00`, `last_event_at=2026-08-04 07:03:17+00`, delivered_at null.
+- Purchase `shipped_at=2026-07-31 11:22:50+00` is intentionally the trusted merchant “order sent” timestamp; Shipment `shipped_at` is first physical carrier progress. These are different evidence layers by design.
+- Five correct merchant/carrier sources are linked and processed. Separate GLS tracking `3219379250` remains unlinked because it has no explicit COD proof.
+- Duplicate verification: Purchase count 1; Shipment count 1.
+- Historical AI runs remain 98; latest AI run remains `2026-08-14 21:43:08.694227+00`; all work in this flow used AI 0.
+- Current unresolved after second mailbox + recovery: review 40, unlinked 15.
+
 ## 2026-08-15 — Multi-Gmail + full 30-day deterministic scan UI
 
 - PR #69 / main runtime `afa01c0d21179dc6472b7e32d427c789282d34ea`: Gmail settings now lists every active Nylas/Gmail connection and exposes `+ Másik Gmail hozzáadása`.
