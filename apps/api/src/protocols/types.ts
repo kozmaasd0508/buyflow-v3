@@ -125,6 +125,7 @@ export interface ProtocolEvidence {
   identifiers: ProtocolIdentifiers;
   evidence: ProtocolMatchedEvidence[];
   negative_evidence: ProtocolMatchedEvidence[];
+  blocked_by_negative_evidence: boolean;
   prohibitions: ProtocolProhibition[];
   provenance_levels: ProtocolProvenanceLevel[];
   production_eligible: boolean;
