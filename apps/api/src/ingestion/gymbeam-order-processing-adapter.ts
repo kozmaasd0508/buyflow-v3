@@ -1,7 +1,9 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 import { isMerchantSender } from '../email/sender-role.js';
 
-const PARSER_VERSION = 'gymbeam-order-processing-v1';
+const PARSER_VERSION = 'gymbeam-order-processing-v1.1';
+const STOP_LABELS = 'Szállítás|Utánvét|Szállítási mód|Fizetési mód|Bruttó összeg|Szállítási cím|Számlázási cím';
+const PRODUCT_DETAIL_LABEL = /\b(?:Grammsúly|Ízesítés|Kapszula|Méret|Kiszerelés(?:\s*\(ml\))?|Tabletta)\s*:/i;
 
 export interface GymBeamOrderProcessingParseResult {
   extraction: EmailExtraction;
@@ -25,28 +27,62 @@ function parseHuf(value: string): number | null {
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function labeledHuf(text: string, label: string): number | null {
-  const normalized = normalizeText(text);
-  const escaped = normalizeText(label).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = normalized.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*:\\s*([0-9][0-9 .]*)\\s*(?:Ft|HUF)\\b`, 'i'));
+  const normalized = normalizeText(text).replace(/\s+/g, ' ');
+  const escaped = escapeRegExp(normalizeText(label));
+  const match = normalized.match(new RegExp(`\\b${escaped}\\s*:\\s*([0-9][0-9 .]*)\\s*(?:Ft|HUF)\\b`, 'i'));
   return match?.[1] ? parseHuf(match[1]) : null;
 }
 
-function lineAfterLabel(text: string, label: string): string | null {
-  const lines = text.replace(/\r/g, '').split('\n').map((line) => line.trim());
-  const expected = normalizeText(label).toLowerCase();
-  for (const line of lines) {
-    const normalized = normalizeText(line).toLowerCase();
-    if (!normalized.startsWith(expected)) continue;
-    const colon = line.indexOf(':');
-    if (colon < 0) continue;
-    const value = line.slice(colon + 1).trim();
-    if (value) return value;
-  }
-  return null;
+function valueAfterLabel(text: string, label: string): string | null {
+  const collapsed = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const match = collapsed.match(new RegExp(
+    `${escapeRegExp(label)}\\s*:\\s*(.+?)(?=\\s+(?:${STOP_LABELS})\\s*:|$)`,
+    'i',
+  ));
+  return match?.[1]?.trim() || null;
 }
 
-function parseProducts(text: string): ProductExtraction[] {
+function product(input: {
+  quantity: number;
+  name: string;
+  variant: string | null;
+  totalPrice: number;
+}): ProductExtraction {
+  return {
+    name: input.name,
+    brand: null,
+    model: null,
+    variant: input.variant,
+    sku: null,
+    gtin: null,
+    category: null,
+    quantity: input.quantity,
+    unit_price: Number((input.totalPrice / input.quantity).toFixed(2)),
+    total_price: input.totalPrice,
+    currency: 'HUF',
+    product_url: null,
+    image_url: null,
+    confidence: 0.99,
+  };
+}
+
+function splitNameAndVariant(value: string): { name: string; variant: string | null } {
+  const detail = PRODUCT_DETAIL_LABEL.exec(value);
+  if (!detail || detail.index <= 0) {
+    return { name: value.trim(), variant: null };
+  }
+  return {
+    name: value.slice(0, detail.index).trim(),
+    variant: value.slice(detail.index).trim().slice(0, 500) || null,
+  };
+}
+
+function parseProductsByLines(text: string): ProductExtraction[] {
   const lines = text.replace(/\r/g, '').split('\n').map((line) => line.trim()).filter(Boolean);
   const summaryIndex = lines.findIndex((line) => /\brendelesi osszesito\b/i.test(normalizeText(line)));
   if (summaryIndex < 0) return [];
@@ -68,13 +104,11 @@ function parseProducts(text: string): ProductExtraction[] {
     const details: string[] = [];
     let price: number | null = null;
     let cursor = index + 1;
-
     while (cursor < lines.length) {
       const raw = lines[cursor] ?? '';
       const normalized = normalizeText(raw);
       if (/^\d+\s*x\s+/i.test(raw)) break;
       if (/^(?:szallitas|utanvet|szallitasi mod|fizetesi mod|brutto osszeg)\s*:/i.test(normalized)) break;
-
       const priceMatch = raw.match(/^([0-9][0-9 .]*)\s*(?:Ft|HUF)$/i);
       if (priceMatch?.[1]) {
         price = parseHuf(priceMatch[1]);
@@ -86,27 +120,52 @@ function parseProducts(text: string): ProductExtraction[] {
     }
 
     if (Number.isFinite(quantity) && quantity > 0 && name && price !== null) {
-      products.push({
-        name,
-        brand: null,
-        model: null,
-        variant: details.length > 0 ? details.join(' | ').slice(0, 500) : null,
-        sku: null,
-        gtin: null,
-        category: null,
+      products.push(product({
         quantity,
-        unit_price: Number((price / quantity).toFixed(2)),
-        total_price: price,
-        currency: 'HUF',
-        product_url: null,
-        image_url: null,
-        confidence: 0.99,
-      });
+        name,
+        variant: details.length > 0 ? details.join(' | ').slice(0, 500) : null,
+        totalPrice: price,
+      }));
     }
     index = Math.max(cursor, index + 1);
   }
-
   return products.slice(0, 50);
+}
+
+function parseProductsCollapsed(text: string): ProductExtraction[] {
+  const collapsed = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  const summary = collapsed.match(/Rendelési összesítő\s*:\s*([\s\S]+?)(?=\s+Szállítás\s*:)/i);
+  if (!summary?.[1]) return [];
+  const section = summary[1].trim();
+
+  const starts = [...section.matchAll(/(?:^|\s)(\d+)\s*x\s+/gi)];
+  const products: ProductExtraction[] = [];
+  for (let i = 0; i < starts.length; i += 1) {
+    const start = starts[i];
+    const quantityText = start?.[1];
+    if (!quantityText || start.index === undefined) continue;
+    const quantity = Number(quantityText);
+    const prefixLength = start[0].length;
+    const chunkStart = start.index + prefixLength;
+    const chunkEnd = starts[i + 1]?.index ?? section.length;
+    const chunk = section.slice(chunkStart, chunkEnd).trim();
+    const priceMatches = [...chunk.matchAll(/([0-9][0-9 .]*)\s*(?:Ft|HUF)\b/gi)];
+    const priceMatch = priceMatches.at(-1);
+    if (!priceMatch?.[1] || priceMatch.index === undefined || !Number.isFinite(quantity) || quantity <= 0) continue;
+    const totalPrice = parseHuf(priceMatch[1]);
+    if (totalPrice === null) continue;
+    const description = chunk.slice(0, priceMatch.index).trim();
+    const parsed = splitNameAndVariant(description);
+    if (!parsed.name) continue;
+    products.push(product({ quantity, name: parsed.name, variant: parsed.variant, totalPrice }));
+  }
+  return products.slice(0, 50);
+}
+
+function parseProducts(text: string): ProductExtraction[] {
+  const lineBased = parseProductsByLines(text);
+  const collapsed = parseProductsCollapsed(text);
+  return collapsed.length > lineBased.length ? collapsed : lineBased;
 }
 
 export function parseGymBeamOrderProcessingEmail(input: {
@@ -130,11 +189,11 @@ export function parseGymBeamOrderProcessingEmail(input: {
   const total = labeledHuf(bodyText, 'Bruttó összeg');
   const shippingAmount = labeledHuf(bodyText, 'Szállítás');
   const codFee = labeledHuf(bodyText, 'Utánvét');
-  const paymentMethod = lineAfterLabel(bodyText, 'Fizetési mód');
-  const shippingMethod = lineAfterLabel(bodyText, 'Szállítási mód');
+  const paymentMethod = valueAfterLabel(bodyText, 'Fizetési mód');
+  const shippingMethod = valueAfterLabel(bodyText, 'Szállítási mód');
   const products = parseProducts(bodyText);
   const productSubtotal = products.length > 0
-    ? Number(products.reduce((sum, product) => sum + (product.total_price ?? 0), 0).toFixed(2))
+    ? Number(products.reduce((sum, item) => sum + (item.total_price ?? 0), 0).toFixed(2))
     : null;
 
   if (total === null || !paymentMethod || !shippingMethod || products.length === 0) return null;
