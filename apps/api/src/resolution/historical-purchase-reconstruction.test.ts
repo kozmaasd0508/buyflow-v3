@@ -47,6 +47,19 @@ function proof(orderNumber = '3010228912', overrides: Partial<HistoricalReconstr
   };
 }
 
+function proofFor(row: HistoricalReconstructionEvidence, overrides: Partial<HistoricalReconstructionSearchProof> = {}): HistoricalReconstructionSearchProof {
+  const key = historicalReconstructionGroupKey(row);
+  assert.ok(key);
+  return {
+    key,
+    status: 'processed',
+    windowDays: 90,
+    checked: 5,
+    purchaseWrites: 0,
+    ...overrides,
+  };
+}
+
 function purchase(overrides: Partial<HistoricalReconstructionExistingPurchase> = {}): HistoricalReconstructionExistingPurchase {
   return {
     userId,
@@ -91,6 +104,93 @@ function gymbeam3010228912(): HistoricalReconstructionEvidence[] {
       paymentStatus: null,
       confidence: 0.93,
       receivedAt: '2026-07-15T21:20:43.000Z',
+    }),
+  ];
+}
+
+function allInPackagingChain(): HistoricalReconstructionEvidence[] {
+  return [
+    evidence({
+      sourceEmailId: 'allin-invoice',
+      senderDomain: 'allinpackaging.com',
+      merchant: 'All In Packaging',
+      merchantLegalName: null,
+      orderNumber: '148810',
+      paymentStatus: null,
+      confidence: 0.9,
+      receivedAt: '2026-08-03T09:24:42.000Z',
+    }),
+    evidence({
+      sourceEmailId: 'allin-dispatch',
+      senderDomain: 'allinpackaging.com',
+      processingStatus: 'unlinked',
+      eventType: 'shipment',
+      merchant: 'All In Packaging',
+      merchantLegalName: null,
+      orderNumber: '148810',
+      trackingNumber: null,
+      carrier: null,
+      paymentStatus: null,
+      confidence: 0.92,
+      receivedAt: '2026-07-31T11:22:50.000Z',
+      shipmentPhase: 'shipped',
+    }),
+    evidence({
+      sourceEmailId: 'gls-pre-advice',
+      senderDomain: 'gls-hungary.com',
+      isCarrierSender: true,
+      processingStatus: 'unlinked',
+      validationStatus: 'guardrailed',
+      eventType: 'shipment',
+      merchant: null,
+      merchantLegalName: null,
+      orderNumber: null,
+      trackingNumber: '3219379224',
+      carrier: 'GLS',
+      paymentStatus: null,
+      confidence: 0.995,
+      receivedAt: '2026-08-03T09:20:35.000Z',
+      parcelSender: 'Nordtek Imexco Kft. (Allinpackaging)',
+      codAmount: 16670,
+      codCurrency: 'HUF',
+      shipmentPhase: 'shipment_created',
+    }),
+    evidence({
+      sourceEmailId: 'gls-out-for-delivery',
+      senderDomain: 'gls-hungary.com',
+      isCarrierSender: true,
+      processingStatus: 'unlinked',
+      validationStatus: 'guardrailed',
+      eventType: 'shipment',
+      merchant: null,
+      merchantLegalName: null,
+      orderNumber: null,
+      trackingNumber: '3219379224',
+      carrier: 'GLS',
+      paymentStatus: null,
+      confidence: 0.995,
+      receivedAt: '2026-08-04T05:52:38.000Z',
+      parcelSender: 'Nordtek Imexco Kft. (Allinpackaging)',
+      codAmount: 16670,
+      codCurrency: 'HUF',
+      shipmentPhase: 'out_for_delivery',
+    }),
+    evidence({
+      sourceEmailId: 'gls-dynamic',
+      senderDomain: 'gls-hungary.com',
+      isCarrierSender: true,
+      processingStatus: 'unlinked',
+      validationStatus: 'guardrailed',
+      eventType: 'shipment',
+      merchant: null,
+      merchantLegalName: null,
+      orderNumber: null,
+      trackingNumber: '3219379224',
+      carrier: 'GLS',
+      paymentStatus: null,
+      confidence: 0.99,
+      receivedAt: '2026-08-04T07:03:17.000Z',
+      shipmentPhase: 'in_transit',
     }),
   ];
 }
@@ -148,8 +248,76 @@ test('reconstructs GymBeam 3010206178 with invoice shipment delivery and exact c
   assert.ok(candidates[0]?.reasons.includes('merchant_delivery_corroborates_reconstruction'));
 });
 
+test('reconstructs missing merchant tracking only from one strict multi-event COD carrier cluster', () => {
+  const rows = allInPackagingChain();
+  const invoice = rows[0]!;
+  const candidates = resolveHistoricalPurchaseReconstructions(rows, [proofFor(invoice)]);
+  assert.equal(candidates.length, 1);
+  const candidate = candidates[0]!;
+  assert.equal(candidate.orderNumber, '148810');
+  assert.equal(candidate.expectedCarrier, 'GLS');
+  assert.equal(candidate.trackingNumber, '3219379224');
+  assert.equal(candidate.orderedAt, null);
+  assert.deepEqual(new Set(candidate.carrierProofSourceEmailIds), new Set([
+    'gls-pre-advice',
+    'gls-out-for-delivery',
+    'gls-dynamic',
+  ]));
+  assert.ok(candidate.reasons.includes('merchant_shipment_missing_tracking_replaced_by_unique_carrier_cluster'));
+});
+
+test('a second same-merchant tracking cluster without COD does not create ambiguity', () => {
+  const rows = allInPackagingChain();
+  rows.push(
+    evidence({
+      sourceEmailId: 'gls-other-1',
+      senderDomain: 'gls-hungary.com',
+      isCarrierSender: true,
+      processingStatus: 'unlinked',
+      validationStatus: 'guardrailed',
+      eventType: 'shipment',
+      merchant: null,
+      merchantLegalName: null,
+      orderNumber: null,
+      trackingNumber: '3219379250',
+      carrier: 'GLS',
+      paymentStatus: null,
+      confidence: 0.995,
+      receivedAt: '2026-08-04T12:10:28.000Z',
+      parcelSender: 'Nordtek Imexco Kft. (Allinpackaging)',
+      codAmount: null,
+      codCurrency: null,
+      shipmentPhase: 'shipment_created',
+    }),
+    evidence({
+      sourceEmailId: 'gls-other-2',
+      senderDomain: 'gls-hungary.com',
+      isCarrierSender: true,
+      processingStatus: 'unlinked',
+      validationStatus: 'guardrailed',
+      eventType: 'shipment',
+      merchant: null,
+      merchantLegalName: null,
+      orderNumber: null,
+      trackingNumber: '3219379250',
+      carrier: 'GLS',
+      paymentStatus: null,
+      confidence: 0.995,
+      receivedAt: '2026-08-05T05:55:48.000Z',
+      parcelSender: 'Nordtek Imexco Kft. (Allinpackaging)',
+      codAmount: null,
+      codCurrency: null,
+      shipmentPhase: 'out_for_delivery',
+    }),
+  );
+  const candidates = resolveHistoricalPurchaseReconstructions(rows, [proofFor(rows[0]!)]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.trackingNumber, '3219379224');
+});
+
 test('never reconstructs without a completed 90-day exact-order search proof', () => {
   assert.deepEqual(resolveHistoricalPurchaseReconstructions(gymbeam3010228912(), []), []);
+  assert.deepEqual(resolveHistoricalPurchaseReconstructions(allInPackagingChain(), []), []);
 });
 
 test('search that already wrote a purchase blocks reconstruction', () => {
@@ -159,7 +327,7 @@ test('search that already wrote a purchase blocks reconstruction', () => {
   ), []);
 });
 
-test('exact carrier-side tracking proof is mandatory', () => {
+test('exact carrier-side tracking proof is mandatory for the legacy reconstruction lane', () => {
   const rows = gymbeam3010228912().filter((row) => !row.isCarrierSender);
   assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proof()]), []);
 });
@@ -171,9 +339,40 @@ test('carrier tracking from another user cannot corroborate reconstruction', () 
   assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proof()]), []);
 });
 
-test('invoice plus shipment without an additional merchant lifecycle event is insufficient', () => {
+test('invoice plus shipment without an additional merchant lifecycle event is insufficient without the strict carrier-cluster proof', () => {
   const rows = gymbeam3010228912().filter((row) => row.eventType !== 'order_updated');
   assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proof()]), []);
+});
+
+test('carrier cluster fallback requires explicit COD', () => {
+  const rows = allInPackagingChain().map((row) => row.isCarrierSender ? { ...row, codAmount: null, codCurrency: null } : row);
+  assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proofFor(rows[0]!)]), []);
+});
+
+test('carrier cluster fallback requires at least two carrier source emails', () => {
+  const rows = allInPackagingChain().filter((row) => !row.isCarrierSender || row.sourceEmailId === 'gls-out-for-delivery');
+  assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proofFor(rows[0]!)]), []);
+});
+
+test('carrier cluster fallback requires parcel sender to match the merchant identity', () => {
+  const rows = allInPackagingChain().map((row) => row.isCarrierSender ? { ...row, parcelSender: 'Different Merchant Kft.' } : row);
+  assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proofFor(rows[0]!)]), []);
+});
+
+test('carrier cluster fallback requires physical progress beyond pre-advice', () => {
+  const rows = allInPackagingChain().map((row) => row.isCarrierSender ? { ...row, shipmentPhase: 'shipment_created' } : row);
+  assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proofFor(rows[0]!)]), []);
+});
+
+test('two eligible COD tracking clusters remain ambiguous and block reconstruction', () => {
+  const rows = allInPackagingChain();
+  const duplicateCluster = rows.filter((row) => row.isCarrierSender).map((row, index) => ({
+    ...row,
+    sourceEmailId: `other-cod-${index}`,
+    trackingNumber: '9999999999',
+  }));
+  rows.push(...duplicateCluster);
+  assert.deepEqual(resolveHistoricalPurchaseReconstructions(rows, [proofFor(rows[0]!)]), []);
 });
 
 test('any order-created source leaves ownership to Review Resolver and blocks historical reconstruction', () => {

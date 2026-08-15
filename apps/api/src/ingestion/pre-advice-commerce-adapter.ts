@@ -1,5 +1,6 @@
 import type { EmailExtraction } from '../ai/openai-email-extractor.js';
 import { isMerchantSender, merchantDisplayName } from '../email/sender-role.js';
+import { parseGenericHuTransactionAnchor } from './generic-hu-transaction-anchor.js';
 
 const PARSER_VERSION = 'deterministic-pre-advice-v1';
 
@@ -7,7 +8,7 @@ export interface PreAdviceCommerceParseResult {
   extraction: EmailExtraction;
   parserVersion: string;
   reasons: string[];
-  shipmentPhase: 'shipment_created';
+  shipmentPhase?: 'shipment_created' | 'shipped';
 }
 
 function normalizeText(value: string): string {
@@ -146,5 +147,7 @@ export function parseMerchantPreAdviceEmail(input: {
   subject?: string | null;
   bodyText?: string | null;
 }): PreAdviceCommerceParseResult | null {
-  return parseGymBeamPreAdvice(input) ?? parseJatektengerPreAdvice(input);
+  return parseGymBeamPreAdvice(input)
+    ?? parseJatektengerPreAdvice(input)
+    ?? parseGenericHuTransactionAnchor(input);
 }
