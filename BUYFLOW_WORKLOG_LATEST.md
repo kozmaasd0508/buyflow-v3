@@ -2,6 +2,79 @@
 
 > Newest detailed entries. Read this after `BUYFLOW_HANDOFF.md`; older historical entries remain in `BUYFLOW_WORKLOG.md` and Git history.
 
+## 2026-08-15 — isolated demo mailbox benchmark
+
+### Goal
+
+The user asked to test BuyFlow against a completely fresh account/mailbox containing many orders and different lifecycle paths. We did not fabricate a Gmail/Nylas OAuth grant or inject synthetic commerce data into production. Instead, PR #93 adds an isolated synthetic mailbox benchmark that executes the same deterministic parsing/validation/resolution/state logic and is now part of the normal API regression suite.
+
+### Coverage
+
+31 synthetic emails:
+- 20 mandatory commerce/lifecycle positives
+- 8 hard-negative/noise messages
+- 3 probes
+
+Scenarios include HU/EN/DE/FR/ES generic order confirmations, COD, GymBeam + Express One full delivery lifecycle, Gyerekjatekbolt failed payment + cancellation, AlzaBox without carrier tracking, Szidibox public Gmail packing + MPL shipped/out-for-delivery/pickup, and noise from shared platforms, public mailboxes, lookalike carriers, newsletters, OTP, subscriptions, surveys and password-reset mail.
+
+Benchmark order mirrors the deterministic core:
+`lifecycle parser -> commerce parser -> validator -> Purchase resolution -> Shipment resolution -> lifecycle state safety`.
+
+### First blind run: failed usefully
+
+The first run found two real defects rather than being adjusted to pass:
+
+1. Spanish order false negative. `Confirmacion de pedido` / `Gracias por tu pedido` caused the Spanish order regex to accept an earlier non-numeric candidate and never reach the later explicit `Numero de pedido: ES-50005` field.
+2. Carrier identity security weakness. Loose brand-token matching allowed `gls-security.example` to enter generic carrier parsing as GLS.
+
+First-run metrics before fixes:
+- 19/20 must-positive recognized
+- 1/8 hard negatives entered deterministic parsing
+- 7 generic direct Purchase candidates
+- GymBeam/Express One still linked to delivered correctly
+- Gyerekjatekbolt still ended cancelled + payment failed
+- packing monotonicity safety held.
+
+### Fixes
+
+Spanish order id extraction now scans successive matches in a pattern until a candidate containing a digit is found. Dedicated regression proves subject/context `pedido` wording cannot hide the later labelled body id.
+
+Carrier identity moved from loose brand tokens to trusted domain suffixes. General trusted domains now include Express One `expressone.hu`; GLS `gls-hungary.com`, `gls-group.com`, `gls.hu`; DPD `dpd.com`, `dpd.hu`; Foxpost `foxpost.hu`; Packeta `packeta.hu`, `packeta.com`; DHL `dhl.com`, `dhl.hu`; UPS `ups.com`; MPL `posta.hu` in sender-role classification. Legitimate subdomains remain supported; lookalikes such as `gls-security.example` and trusted-domain-prefix attacker domains are rejected.
+
+Added dedicated carrier-domain safety tests plus two benchmark regressions for Spanish order id and GLS lookalike rejection.
+
+### Final result
+
+PR #93 final head `9573e9b18f026e1f18b443b4fb0f5d37b63b18f9`.
+- PR CI #468: **369/369 API tests passed**, API build passed, mobile typecheck/build passed.
+- merged runtime `09dc10193b2be8404dcdac2306caf4a28bd4b564`.
+- main CI #469 passed.
+- exact Render smoke #363 passed for the exact runtime commit.
+
+Final machine-readable benchmark:
+- fixtures: 31
+- must positives: **20/20 recognized**
+- hard negatives: **0/8 false positive parser matches**
+- generic directly creatable Purchases: **8**
+- GymBeam/Express One: one linkable shipment, final `delivered`, carrier `express-one`, 3 evidence rows
+- Gyerekjatekbolt: final Purchase state `cancelled`, payment status `failed`
+- packing evidence does not downgrade physical shipment state
+- MPL pickup remains `ready_for_pickup`, never delivered.
+
+Probe results:
+- McDonald’s short 4-digit POS id: intentionally not recognized, still requires a safe local/POS identity model.
+- weak rich order without confirmation evidence: intentionally not recognized.
+- generic DPD delivery-today: carrier + tracking recognized and guardrailed as shipment, but generic path currently emits no explicit `out_for_delivery` phase. This is the clearest next benchmark-derived gap; fix it without ever treating delivery-today as delivered.
+
+Other expected safety behavior:
+- Alza evidence stays lifecycle-only in the generic resolver; the existing specialized 90-day historical recovery lane is responsible for Purchase reconstruction.
+- Szidibox Gmail evidence remains REVIEW in generic Purchase resolution; verified public-mailbox logic is specialized.
+- MPL carrier evidence without a synthetic merchant Purchase anchor remains unmatched in the generic shipment resolver, while the MPL lifecycle parser itself correctly recognizes shipped/out-for-delivery/ready-for-pickup phases.
+
+A truly fresh Gmail remains the strongest end-to-end follow-up. Google OAuth requires the user to authorize that Gmail once through BuyFlow; after that, run a 30/90-day blind scan and compare it against this benchmark.
+
+---
+
 ## 2026-08-15 — private invoice PDF opening
 
 ### PR #91 — signed PDF URLs in Purchase detail
