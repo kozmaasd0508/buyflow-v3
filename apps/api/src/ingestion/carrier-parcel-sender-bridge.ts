@@ -156,6 +156,17 @@ function earliestPhysicalCarrierSource(group: CarrierBridgeEvidence[]): CarrierB
   return physical[0] ?? null;
 }
 
+export function carrierBridgeShippedAt(
+  merchantAnchor: CarrierBridgeEvidence | null,
+  carrierRows: CarrierBridgeEvidence[],
+): string | null {
+  const firstPhysicalCarrierAt = earliestPhysicalCarrierSource(carrierRows)?.receivedAt ?? null;
+  if (merchantAnchor?.shipmentPhase === 'shipment_created') {
+    return firstPhysicalCarrierAt;
+  }
+  return merchantAnchor?.receivedAt ?? firstPhysicalCarrierAt;
+}
+
 function uniqueSourceCount(group: CarrierBridgeEvidence[]): number {
   return new Set(group.map((row) => row.sourceEmailId)).size;
 }
@@ -412,11 +423,9 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
     if (carrierRows.length === 0) continue;
     const physicalCarrierRows = carrierRows.filter((row) => row.eventType === 'delivery' || Boolean(row.shipmentPhase && row.shipmentPhase !== 'shipment_created'));
     if (!merchantAnchor && physicalCarrierRows.length === 0) continue;
-    const firstCarrierAt = [...carrierRows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]!.receivedAt;
-    const firstPhysicalCarrierAt = physicalCarrierRows.length > 0
-      ? [...physicalCarrierRows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]!.receivedAt
-      : firstCarrierAt;
     const lastEventAt = [...carrierRows].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]!.receivedAt;
+    const shippedAt = carrierBridgeShippedAt(merchantAnchor, carrierRows);
+    if (!shippedAt) continue;
 
     const { error: upsertError } = await db.rpc('controlled_upsert_shipment_with_sources', {
       p_user_id: connection.user_id,
@@ -425,7 +434,7 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
       p_carrier_slug: decision.carrierSlug,
       p_tracking_number: decision.trackingNumber,
       p_status: decision.shipmentStatus,
-      p_shipped_at: merchantAnchor?.receivedAt ?? firstPhysicalCarrierAt,
+      p_shipped_at: shippedAt,
       p_delivered_at: null,
       p_last_event_at: lastEventAt,
       p_source_email_id: primarySource.sourceEmailId,
