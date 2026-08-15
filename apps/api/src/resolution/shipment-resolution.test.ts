@@ -17,7 +17,7 @@ function purchase(overrides: Partial<ShipmentPurchaseIdentity> = {}): ShipmentPu
 function evidence(overrides: Partial<ShipmentResolutionEvidence> = {}): ShipmentResolutionEvidence {
   return {
     sourceEmailId: 'email-1', userId: 'user-1', senderDomain: 'service.shop.example',
-    eventType: 'shipment', shipmentPhase: null, merchant: 'Example Shop', orderNumber: 'ORDER-1',
+    eventType: 'shipment', shipmentPhase: 'shipped', merchant: 'Example Shop', orderNumber: 'ORDER-1',
     trackingNumber: 'TRACK-123', carrier: 'Express One', confidence: 0.86,
     receivedAt: '2026-08-01T10:00:00.000Z', ...overrides,
   };
@@ -54,6 +54,15 @@ test('shipment-created merchant evidence anchors tracking but is not physical pr
   assert.equal(candidate.decision, 'linkable');
   assert.equal(candidate.purchaseId, 'purchase-1');
   assert.equal(candidate.merchantAnchorCount, 1);
+  assert.equal(candidate.physicalShipmentEvidenceCount, 0);
+  assert.equal(candidate.recommendedStatus, 'shipment_created');
+  assert.ok(candidate.reasons.includes('shipment_created_without_physical_progress'));
+});
+
+test('phase-less shipment evidence is conservative and never proves physical progress', () => {
+  const [candidate] = resolveShipmentCandidates([purchase()], [evidence({ shipmentPhase: null })]);
+  assert.ok(candidate);
+  assert.equal(candidate.decision, 'linkable');
   assert.equal(candidate.physicalShipmentEvidenceCount, 0);
   assert.equal(candidate.recommendedStatus, 'shipment_created');
   assert.ok(candidate.reasons.includes('shipment_created_without_physical_progress'));
