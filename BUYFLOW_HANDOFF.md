@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Last reconciled main commit:** `35dd96f1678c4bba74ecc973288cfb0f1df1dc43`  
+**Last reconciled main commit:** `0505fe96c872f7d6bd20c775838305035ba08b45`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -20,7 +20,7 @@ Minimal resume phrase:
 
 BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails into one safe Purchase record. It must scale across many users, merchants, carriers and mailbox providers.
 
-- Frontend/mobile web: `apps/mobile`, Render `/app/`; later Android packaging.
+- Frontend/mobile web: `apps/mobile`, Render `/app/`; Android packaging later.
 - API/backend: TypeScript in `apps/api`.
 - Database/auth: Supabase production `acjenqkrvnkdvvgordry`, eu-west-1.
 - Email ingestion: Nylas webhook + durable scan/recovery jobs.
@@ -43,7 +43,7 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 
 ## FRONTEND STATE
 
-Live: login, purchase list/detail, current state + next action, timeline, product edit/remove, order/tracking/document details, missing-purchase recovery, Gmail settings.
+Live: login, purchase list/detail, current state + next action, timeline, product edit/remove, order/tracking/document details, missing-purchase recovery and Gmail settings.
 
 AI audit/Flow UI stays hidden while deterministic recognition is being improved.
 
@@ -51,112 +51,60 @@ Still unfinished: Warranty UI, Return/refund UI, Felfedezés.
 
 ## CURRENT EMAIL RECOGNITION
 
-### Gmail category independence
+### Gate.shop / Foxpost carrier bridge — completed
 
-Real Limone order `98691-106627` landed outside Gmail Purchases. The global category gate is removed; BuyFlow evaluates signed incoming mail itself.
+Order `20336215` is the current canonical cross-sender bridge example.
 
-### Generic order recognition
+PRs #59–#62 establish the full deterministic flow:
+- merchant shipment anchor + carrier parcel-sender bridge,
+- exact Foxpost lifecycle repair,
+- prefer real `CLFOX...` tracking over Packeta `Z...` identity,
+- targeted/initial scans run the same lifecycle reconciliation as webhook ingestion,
+- explicit pickup-ready evidence is first-class `ready_for_pickup`, never `delivered`,
+- monotonic precedence: `delivered > ready_for_pickup > in_transit`,
+- weaker later evidence cannot downgrade pickup-ready state,
+- controlled shipment RPC accepts `ready_for_pickup`, with SECURITY DEFINER hardening and service-role-only execution.
 
-Unknown merchants can be recognized deterministically only when several independent order signals agree. Newsletter, abandoned-cart, carrier-only, invoice-only and payment-only mail must not become new Purchases.
+PR #62 merged to main as `0505fe96c872f7d6bd20c775838305035ba08b45`; main CI run #395 passed.
 
-### Promotional / repurchase hard-negative
+Live verification after merge:
+- Purchase `20336215` current_state = `ready_for_pickup`,
+- exactly one Foxpost Shipment,
+- tracking `CLFOX178524111362058`,
+- Shipment status = `ready_for_pickup`,
+- targeted recovery for `Z3493891717`: 2 checked / 2 processed / 0 review / 0 unlinked / AI 0,
+- historical `ai_processing_runs` remained 98.
 
-PR #53 / main `6ba285ac7a8c975eb7807b07b2253fc181c8a210` added a conservative marketing exclusion.
+The current session could not directly fetch the public `/health` endpoint to compare `RENDER_GIT_COMMIT`, so do **not** claim literal exact-commit Render smoke is complete yet. The live worker behavior proves the new ready-for-pickup logic is active, but the exact health SHA remains a separate verification item.
 
-- Gmail Promotions itself is NOT a gate.
-- Strong promo/repurchase evidence with no transactional anchor can be ignored.
-- Explicit order/tracking/invoice identity or real order-confirmation language overrides marketing exclusion.
-- Historical verified noise cleaned: 4 rows (Goddess/Galaxy/Sport8 examples), old machine results preserved.
-- BF synthetic Gmail test messages intentionally remain review.
+### Other completed deterministic coverage
 
-### Allegro / HappyBox24 lifecycle + invoice
+- Promotional/repurchase hard-negative: strong marketing noise is excluded without using Gmail Promotions as a hard gate.
+- Allegro / HappyBox24: deterministic order lifecycle, DPD tracking, delivery-today semantics and seller invoice handling.
+- Ars Una / GLS: exact GLS sender parsing, parcel sender + COD bridge, tracking `3412614699`; no false delivered state.
+- GymBeam / Express One: order-processing enrichment, strict missing-purchase reconstruction, terminal receipt payment resolution and outbound pickup-noise exclusion.
+- Limone: deterministic merchant order parsing remains active.
 
-Order UUID `3fe09c80-8d79-11f1-b193-cf13a29b46f5`, merchant HappyBox24, 5,675 HUF, COD, DPD.
+## INTENTIONALLY UNLINKED
 
-PR #54 / main `012b80e0273ce18bcc252e0a076ce1a566f4cccd` added `allegro-lifecycle-v1`:
-- exact Allegro purchase-history UUID + tracking bridge,
-- DPD relay tracking,
-- delivery-today => out_for_delivery, not delivered,
-- explicit successful delivery => delivered,
-- relay messages never invent order IDs.
+Three Barion successful-payment emails remain unlinked because no matching Purchase/order/invoice was found. Payment-only evidence must not create a Purchase.
 
-Live chain:
-- tracking `13169408547018`
-- exactly 1 Purchase + 1 DPD shipment
-- all 5 lifecycle emails processed/linked.
+## OPEN / INCOMPLETE WORK
 
-PR #55 / main `1f8c19d4dcf1ca80f09cc10a99946d4a836fd8ea` added `allegro-sales-document-v1` so document identity wins over incidental “package arrived” wording.
-
-Verified seller invoice:
-- invoice `I/00005/08/26`
-- seller internal order `46181083`
-- total 5,675 HUF
-- shipping 1,990 HUF
-- product prices 1,830 + 1,855 HUF
-- exactly 1 invoice document linked to HappyBox24 Purchase.
-
-### Ars Una / GLS carrier bridge
-
-Order `192132`, Ars Una Studio Kft.
-
-Verified PDF invoice (rendered visually before write):
-- invoice `5133964`
-- explicit order reference `192132`
-- product 6,276 HUF
-- shipping 1,990 HUF
-- total 8,266 HUF
-- payment Utánvét
-- exactly 1 invoice document linked to Purchase.
-
-GLS carrier emails state COD 8,265 HUF: a verified 1 HUF difference from the official invoice. The system does **not** call this exact equality.
-
-PR #56 / current runtime main `35dd96f1678c4bba74ecc973288cfb0f1df1dc43` added:
-- parser `gls-lifecycle-v1`
-- bridge `carrier-sender-cod-bridge-v1`
-- exact sender `noreply@gls-hungary.com`
-- pre-advice => `shipment_created`
-- delivery today => `out_for_delivery`, never delivered
-- dynamic GLS RTT URL => tracking extraction + conservative `in_transit`
-- parcel sender + COD extraction
-- automatic bridge only when exactly one recent existing COD Purchase matches exact normalized merchant identity, carrier compatibility and amount within 1 currency unit
-- exactly one existing merchant shipment source without tracking is required before the bridge adds tracking to merchant evidence
-- zero/multiple candidates => review.
-
-Live Ars Una verification:
-- Purchase total 8,266 HUF
-- tracking `3412614699`
-- carrier GLS
-- exactly 1 shipment
-- pre-advice and merchant pre-handoff remain `shipment_created`
-- first physical progress = delivery-today email
-- current state `in_transit`
-- no delivered state because no completion email was found
-- dynamic tracking email processed from GLS RTT URL
-- unresolved GLS rows = 0
-- AI calls = 0.
-
-### Express One / GymBeam completed work
-
-- Express One outbound pickup noise: 43 false unresolved rows cleaned to 0; real parcel mail preserved.
-- `gymbeam-order-processing-v1.1` parses trusted processing summaries as lifecycle only, never `order_created`.
-- Missing GymBeam `3010085026` strictly reconstructed from multi-source evidence: 17,270 HUF, 11 products, tracking `605855680768000013605231`, invoice `4008742640`.
-- Express One terminal receipt resolver links successful delivery-time card receipts only to one existing COD Purchase.
-- GymBeam `3010206178` and `3010228912` receipts/payment state corrected without AI.
-
-## INTENTIONALLY UNLINKED: BARION PAYMENT-ONLY
-
-Three Barion successful-payment emails remain unlinked because no matching Purchase/order/invoice was found for them in the mailbox or database. Payment-only mail must not create a Purchase. This is correct safe behavior, not a bug to force-resolve.
+- PR #58 `Recognize Hungarian Rendelés colon order IDs` is still open and currently not mergeable against the latest main. It covers the generic `Rendelés: #<id>` / `Megrendelés: #<id>` form, with Scitec order `1783-975-87-395` as the regression example.
+- One older Foxpost source from 2026-07-15 with subject `Csomagod megérkezett` remains `unlinked`; inspect it independently instead of weakening the Gate.shop rules.
+- Warranty UI, Return/refund UI and Felfedezés remain unfinished.
 
 ## CURRENT LIVE BACKLOG
 
-Latest verified counts after Ars Una / GLS recovery:
-- review: **28**
-- unlinked: **18**
-- total unresolved: **46**
-- unresolved GLS: **0**
+Latest verified live counts after the Gate.shop rerun:
+- review: **29**
+- unlinked: **14**
+- total unresolved: **43**
+- unresolved Foxpost: **1** old unlinked source
 - total historical `ai_processing_runs`: **98**
 - latest AI run: `2026-08-14 21:43:08.694227+00`
-- current deterministic work created no new AI runs.
+- the Gate.shop completion created no new AI run.
 
 Re-check live values before future time-sensitive claims.
 
@@ -164,20 +112,20 @@ Re-check live values before future time-sensitive claims.
 
 If the user gives no different direction:
 
-1. Inspect Foxpost unresolved cluster (3 delivery + 2 shipment) by exact tracking/merchant evidence.
-2. Then Gyerekjatekbolt payment review rows and McDonald's receipt/payment rows.
-3. Keep the 3 Barion payment-only emails unlinked unless corroborating merchant evidence appears.
-4. Leave BF synthetic Gmail tests in review intentionally.
-5. Continue highest-value real review/unlinked clusters without weakening Purchase creation safety.
-6. Once AI-free recognition is very strong, return to Warranty + Return/refund frontend work.
+1. Verify exact Render `/health` commit SHA equals current main `0505fe96c872f7d6bd20c775838305035ba08b45` when an endpoint-capable tool is available.
+2. Inspect the single older unlinked Foxpost source from 2026-07-15 and resolve only with unique merchant/tracking evidence.
+3. Reconcile/rebase PR #58 against latest main, rerun its CI and verify the Scitec example live before merge.
+4. Continue highest-value real review/unlinked clusters, especially Gyerekjatekbolt and McDonald's payment/receipt rows, without weakening Purchase creation safety.
+5. Keep the three Barion payment-only emails unlinked unless corroborating merchant evidence appears.
+6. Once deterministic recognition is very strong, return to Warranty + Return/refund frontend work.
 
 ## WORKFLOW PREFERENCES
 
-- User prefers implementation/live verification over theory.
+- Prefer implementation/live verification over theory.
 - Keep user-facing updates short and concrete.
 - Do not repeatedly ask for confirmation when direction is clear.
 - Browser first for UI; APK only on explicit request.
-- Report exact outcomes: counts, CI/deploy, live writes, AI calls, remaining work.
+- Report exact outcomes: counts, CI/deploy, live writes, AI calls and remaining work.
 
 ## MAINTENANCE
 
