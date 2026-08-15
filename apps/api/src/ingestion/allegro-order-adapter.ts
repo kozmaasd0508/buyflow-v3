@@ -1,10 +1,8 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 
-const PARSER_VERSION = 'allegro-order-v1.3';
+const PARSER_VERSION = 'allegro-order-v1.4';
 const ALLEGRO_SENDER_DOMAINS = new Set(['allegro.com', 'allegro.hu', 'allegro.pl', 'allegro.cz', 'allegro.sk']);
 const ORDER_UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const MONEY_TOKEN = '(?:[0-9]{1,3}(?:[\\s.][0-9]{3})+(?:,[0-9]{2})?|[0-9]+(?:[.,][0-9]{2})?)';
-const CURRENCY_TOKEN = '(Ft|HUF|EUR|USD|GBP|€|\\$|£)';
 
 export interface AllegroOrderParseResult {
   extraction: EmailExtraction;
@@ -17,12 +15,7 @@ function normalizeDomain(value: string): string {
 }
 
 function normalizeText(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\u00a0/g, ' ')
-    .replace(/[^\S\n]+/g, ' ')
-    .replace(/\r/g, '');
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\u00a0/g, ' ').replace(/\r/g, '');
 }
 
 function money(raw: string): number | null {
@@ -96,14 +89,6 @@ function offerIdentity(url: string): { canonicalUrl: string; sku: string | null;
   }
 }
 
-function extractMoneyFromText(text: string): { amount: number; currency: string } | null {
-  const match = normalizeText(text).match(new RegExp(`(?:^|\\s)(${MONEY_TOKEN})\\s*${CURRENCY_TOKEN}\\b`, 'i'));
-  if (!match?.[1] || !match[2]) return null;
-  const amount = money(match[1]);
-  const parsedCurrency = currency(match[2]);
-  return amount !== null && parsedCurrency ? { amount, currency: parsedCurrency } : null;
-}
-
 function extractProducts(body: string, fallbackCurrency: string): ProductExtraction[] {
   const products: ProductExtraction[] = [];
   const urlPattern = /(?:\[URL:\s*|\]\()(https?:\/\/[^\]\s)]+\/ajanlat\/[^\]\s)]+)/gi;
@@ -118,8 +103,11 @@ function extractProducts(body: string, fallbackCurrency: string): ProductExtract
 
     const start = match.index ?? 0;
     const tail = body.slice(start + match[0].length, start + match[0].length + 700);
-    const price = extractMoneyFromText(tail);
-    if (!price) continue;
+    const priceMatch = tail.match(/([0-9][0-9\s.,'’]{0,20})\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)\b/i);
+    if (!priceMatch?.[1] || !priceMatch[2]) continue;
+    const amount = money(priceMatch[1]);
+    const itemCurrency = currency(priceMatch[2]) ?? fallbackCurrency;
+    if (amount === null) continue;
 
     products.push({
       name: identity.name,
@@ -130,9 +118,9 @@ function extractProducts(body: string, fallbackCurrency: string): ProductExtract
       gtin: null,
       category: null,
       quantity: 1,
-      unit_price: price.amount,
-      total_price: price.amount,
-      currency: price.currency ?? fallbackCurrency,
+      unit_price: amount,
+      total_price: amount,
+      currency: itemCurrency,
       product_url: identity.canonicalUrl,
       image_url: null,
       confidence: 0.98,
@@ -143,8 +131,7 @@ function extractProducts(body: string, fallbackCurrency: string): ProductExtract
 }
 
 function extractLabeledTotal(body: string): { amount: number; currency: string } | null {
-  const normalized = normalizeText(body);
-  const match = normalized.match(new RegExp(`\\bOSSZESEN\\b\\s*(${MONEY_TOKEN})\\s*${CURRENCY_TOKEN}\\b`, 'i'));
+  const match = normalizeText(body).match(/\bOSSZESEN\b\s*([0-9][0-9\s.,'’]{0,20})\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)\b/i);
   if (!match?.[1] || !match[2]) return null;
   const amount = money(match[1]);
   const totalCurrency = currency(match[2]);
@@ -180,10 +167,11 @@ function extractShipping(body: string): { method: string | null; amount: number 
         : null;
 
   const shippingSection = normalized.match(/\bFutar\b[\s\S]{0,260}/i)?.[0] ?? '';
-  const shippingPrice = extractMoneyFromText(shippingSection);
+  const shippingPriceMatch = shippingSection.match(/(?:^|\s)([0-9]{1,3}(?:[\s.][0-9]{3})*(?:,[0-9]{2})?|[0-9]+(?:[.,][0-9]{2})?)\s*(Ft|HUF|EUR|USD|GBP|€|\$|£)\b/i);
+  const shippingAmount = shippingPriceMatch?.[1] ? money(shippingPriceMatch[1]) : null;
   const cod = /\bFutar\s+utanvet\b/i.test(normalized);
   const method = carrier ? `Futár${cod ? ' utánvét' : ''}, ${carrier}` : (cod ? 'Futár utánvét' : null);
-  return { method, amount: shippingPrice?.amount ?? null, carrier };
+  return { method, amount: shippingAmount, carrier };
 }
 
 export function parseAllegroOrderEmail(input: {
