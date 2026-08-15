@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  normalizeCarrierSlug,
   resolveShipmentCandidates,
   type ShipmentPurchaseIdentity,
   type ShipmentResolutionEvidence,
@@ -21,6 +22,12 @@ function evidence(overrides: Partial<ShipmentResolutionEvidence> = {}): Shipment
     receivedAt: '2026-08-01T10:00:00.000Z', ...overrides,
   };
 }
+
+test('normalizes common MPL carrier labels to one slug', () => {
+  assert.equal(normalizeCarrierSlug('MPL'), 'mpl');
+  assert.equal(normalizeCarrierSlug('MPL Futárszolgálat'), 'mpl');
+  assert.equal(normalizeCarrierSlug('Magyar Posta Logisztika (MPL)'), 'mpl');
+});
 
 test('merchant order anchor links carrier lifecycle evidence by the same tracking number', () => {
   const rows: ShipmentResolutionEvidence[] = [

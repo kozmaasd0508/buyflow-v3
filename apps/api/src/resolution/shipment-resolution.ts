@@ -72,6 +72,7 @@ export function normalizeCarrierSlug(carrier: string | null): string | null {
   if (value.includes('gls')) return 'gls';
   if (value.includes('foxpost')) return 'foxpost';
   if (value.includes('packeta')) return 'packeta';
+  if (/\bmpl\b/.test(value) || value.includes('magyar posta logisztika')) return 'mpl';
   const slug = value
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
