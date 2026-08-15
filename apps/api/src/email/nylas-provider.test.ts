@@ -68,6 +68,9 @@ function providerWithPages(
     async getMessage() {
       throw new Error('getMessage must not be used by the purchases gate');
     },
+    async downloadAttachment() {
+      throw new Error('downloadAttachment must not be used by the purchases gate');
+    },
   };
 }
 
