@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Last reconciled main commit:** `0505fe96c872f7d6bd20c775838305035ba08b45`  
+**Last reconciled runtime code commit:** `0505fe96c872f7d6bd20c775838305035ba08b45`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -65,7 +65,7 @@ PRs #59–#62 establish the full deterministic flow:
 - weaker later evidence cannot downgrade pickup-ready state,
 - controlled shipment RPC accepts `ready_for_pickup`, with SECURITY DEFINER hardening and service-role-only execution.
 
-PR #62 merged to main as `0505fe96c872f7d6bd20c775838305035ba08b45`; main CI run #395 passed.
+PR #62 merged as runtime code commit `0505fe96c872f7d6bd20c775838305035ba08b45`; main CI run #395 passed.
 
 Live verification after merge:
 - Purchase `20336215` current_state = `ready_for_pickup`,
@@ -112,7 +112,7 @@ Re-check live values before future time-sensitive claims.
 
 If the user gives no different direction:
 
-1. Verify exact Render `/health` commit SHA equals current main `0505fe96c872f7d6bd20c775838305035ba08b45` when an endpoint-capable tool is available.
+1. Verify the public Render `/health` `commit` value matches the latest deployed `main` commit; note that docs-only commits can advance main without changing runtime code behavior.
 2. Inspect the single older unlinked Foxpost source from 2026-07-15 and resolve only with unique merchant/tracking evidence.
 3. Reconcile/rebase PR #58 against latest main, rerun its CI and verify the Scitec example live before merge.
 4. Continue highest-value real review/unlinked clusters, especially Gyerekjatekbolt and McDonald's payment/receipt rows, without weakening Purchase creation safety.
