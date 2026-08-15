@@ -2,6 +2,32 @@
 
 > Newest detailed entries. Read this after `BUYFLOW_HANDOFF.md`; older historical entries remain in `BUYFLOW_WORKLOG.md` and Git history.
 
+## 2026-08-15 — private invoice PDF opening
+
+### PR #91 — signed PDF URLs in Purchase detail
+
+- Runtime commit `f7d25a3384e864a45d5c9f10bff833b31304151a`.
+- PR CI #459 passed completely.
+- Main CI #460 passed completely.
+- Exact Render smoke #354 passed for the exact runtime commit.
+- No migration and no Purchase/Shipment/Document writes.
+
+Behavior:
+- `GET /api/purchases/:id` already verifies the Purchase belongs to the authenticated user before loading children.
+- For document rows with `source_type=email_attachment`, `mime_type=application/pdf`, private `storage_bucket` and `storage_path`, and no permanent external URL, the backend creates a Supabase signed URL with a 60-second TTL.
+- Storage bucket/path are used only internally and are stripped by the public document DTO; the client receives only the temporary HTTPS URL.
+- Purchase detail response is `Cache-Control: no-store`.
+- If signed URL creation fails, the document remains visible as saved metadata but no open link is emitted.
+- The existing mobile/web `documentsSection()` already renders `externalUrl` as the `Megnyitás` link, so no new UI architecture or public bucket was needed.
+- Reopening Purchase detail generates a fresh signed URL.
+- AI remains off / 0 calls.
+
+Expected live UX for the proven Jatekbolt invoice:
+- Purchase `12247833` -> Irattár / Dokumentumok -> `Számla` / `S26_044783` -> `Megnyitás`.
+- Link opens the private `S26_044783.pdf` through Supabase signed access.
+
+---
+
 ## 2026-08-15 — Activepieces-inspired PDF attachment ingestion
 
 ### Source idea used
@@ -84,10 +110,6 @@ Production grant inspection showed `service_role` inherited technical privileges
 - source unresolved total 44
 - historical AI runs 98
 - latest AI run `2026-08-14 21:43:08.694227+00`.
-
-### Next document step
-
-The PDF bucket is intentionally private. Add an authenticated document-open/download API that verifies user ownership and returns a short-lived signed URL, then wire that to Purchase detail UI. Do not publish the storage bucket.
 
 ---
 
