@@ -4,8 +4,8 @@
 
 **Last updated:** 2026-08-15 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Current main:** includes migration-only PR #89  
-**Last reconciled runtime code commit:** `7c7732dc0d7e611ae534f5134744b066395fc247`  
+**Current main:** includes runtime PR #91  
+**Last reconciled runtime code commit:** `f7d25a3384e864a45d5c9f10bff833b31304151a`  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -46,77 +46,94 @@ BuyFlow turns chaotic purchase, delivery, invoice, warranty and return emails in
 
 Multi-Gmail + per-account 7/30/90 deterministic full scans are live. Second Gmail 30-day blind scan checked 149 messages with zero false automatic Purchases. Real misses are converted into reusable deterministic rules, not order-specific hard-codes.
 
-## NEW: PDF INVOICE ATTACHMENT INGESTION — PR #88
+## PDF INVOICE ATTACHMENT INGESTION — PR #88
 
-User-provided Activepieces source showed a useful pattern: fetch attachment bytes, extract PDF text, then process structured evidence. BuyFlow now implements its own deterministic version around Nylas + Supabase.
+User-provided Activepieces source showed a useful pattern: fetch attachment bytes, extract PDF text, then process structured evidence. BuyFlow implements its own deterministic version around Nylas + Supabase.
 
-Runtime commit: `7c7732dc0d7e611ae534f5134744b066395fc247`.
-- PR #88 CI #453 passed after updating two legacy EmailProvider test doubles.
+Runtime base: `7c7732dc0d7e611ae534f5134744b066395fc247`.
+- PR #88 CI #453 passed.
 - Main CI #454 passed.
-- Exact Render smoke #348 passed for the exact runtime commit.
+- Exact Render smoke #348 passed.
 
-### Pipeline
-
+Pipeline:
 `Nylas message -> attachment metadata -> Nylas attachment bytes -> private Supabase Storage -> unpdf text layer -> pdf-invoice-v1 -> exact Purchase resolver -> controlled document RPC`
 
 Rules:
 - PDF only, max 10 MiB.
-- Private bucket: `buyflow-purchase-documents`, `public=false`, allowed MIME only `application/pdf`.
-- Raw PDF is stored privately; full extracted PDF text is **not** persisted in Postgres.
-- `email_attachments` durably tracks pending/processing/processed/review/ignored/error, attempts and structured extraction.
-- SHA-256 is persisted for provenance.
-- Generic PDF invoice requires explicit invoice number + explicit order reference.
+- Private bucket `buyflow-purchase-documents`, `public=false`, PDF MIME only.
+- Raw PDF stored privately; full extracted PDF text is not persisted in Postgres.
+- `email_attachments` durably tracks processing/review/error attempts and structured extraction.
+- SHA-256 persisted for provenance.
+- Generic PDF invoice requires explicit invoice identity + explicit order reference.
 - Auto-link requires exactly one existing Purchase with same user + merchant domain + normalized order identity.
 - Ambiguous/unmatched => REVIEW.
-- Public mailbox merchants are excluded from this automatic document lane.
-- No Purchase creation, no lifecycle changes, no monetary Purchase changes, AI 0.
-- Scanned/raster PDF without a text layer remains REVIEW; no OCR fallback in V1.
+- Public mailbox merchants excluded from automatic document lane.
+- No Purchase creation/lifecycle/money changes from attachment recovery.
+- Scanned/raster PDF without text layer remains REVIEW; no OCR fallback in V1.
+- AI 0.
 
 ### Jatekbolt live proof
 
-Source email `1d246ae8-8daf-4b49-9e73-7672d14864fe`, attachment `S26_044783.pdf`:
-- Nylas attachment downloaded successfully: 443,979 bytes.
-- Parser `pdf-invoice-v1` extracted invoice `S26_044783` and PDF order reference `JB12247833`.
-- Jatekbolt-specific identity requires `MODELL & HOBBY Kft.` + `jatekbolt.hu` inside the document, then normalizes `JB12247833` -> existing Purchase order `12247833`.
-- Source is now `processed`, validated, `extraction_source=pdf_attachment`, confidence 0.995.
-- Exactly 1 invoice document exists:
+Source `1d246ae8-8daf-4b49-9e73-7672d14864fe`, attachment `S26_044783.pdf`:
+- 443,979 bytes downloaded from Nylas.
+- Parser `pdf-invoice-v1` extracted invoice `S26_044783` and order reference `JB12247833`.
+- Jatekbolt PDF identity requires `MODELL & HOBBY Kft.` + `jatekbolt.hu`, then normalizes `JB12247833` -> Purchase `12247833`.
+- source `processed`, validated, `extraction_source=pdf_attachment`, confidence 0.995.
+- exactly one invoice document exists:
   - Purchase `dfbe41c3-89f0-4f10-8dc8-e34923fba130`
   - document `52f22f74-460b-4cbe-a975-caedb25b6463`
-  - type invoice
-  - number `S26_044783`
+  - invoice `S26_044783`
   - source_type `email_attachment`
   - filename `S26_044783.pdf`
-  - MIME `application/pdf`
   - private storage path + SHA-256 recorded.
-- Existing Purchase remained unchanged: 48,245 HUF, `delivered`, same ordered/shipped/delivered timestamps.
-- The invoice itself is 48,248 HUF; attachment identity does not overwrite Purchase order totals.
-- Exactly one attachment + one invoice document; no duplicate.
+- Existing Purchase remains 48,245 HUF, `delivered`; invoice total 48,248 HUF does not overwrite Purchase total.
+- no duplicate.
 
-Other PDFs discovered during the first live recovery that lacked sufficient explicit invoice/order identity remained REVIEW with `invoice_identity_not_found`; they were not linked automatically.
+Other PDFs lacking explicit invoice/order identity remain attachment REVIEW with `invoice_identity_not_found`.
 
-## PR #89 — ATTACHMENT TABLE LEAST-PRIVILEGE HARDENING
+## PR #89 — ATTACHMENT TABLE LEAST PRIVILEGE
 
-Migration-only main commit `188340e1121fdaab6c64335f9214fa5b7d10fa1c`.
-- Production inspection showed `service_role` inherited technical table grants beyond CRUD on `email_attachments`.
-- Follow-up migration revokes all and grants only SELECT/INSERT/UPDATE/DELETE.
-- `anon` / `authenticated` / `public` have no table grant.
-- PR CI #455 and main CI #456 passed.
-- No runtime recognition logic changed.
+Migration-only main `188340e1121fdaab6c64335f9214fa5b7d10fa1c`.
+- `service_role` on `email_attachments` reduced to SELECT/INSERT/UPDATE/DELETE only.
+- no anon/authenticated/public table grant.
+- PR CI #455 + main CI #456 passed.
+
+## NEW: PRIVATE PDF OPENING — PR #91
+
+Runtime `f7d25a3384e864a45d5c9f10bff833b31304151a`.
+- PR CI #459 passed.
+- Main CI #460 passed.
+- Exact Render smoke #354 passed for the exact runtime commit.
+
+Behavior:
+- authenticated `GET /api/purchases/:id` first proves Purchase ownership.
+- document storage bucket/path are selected only internally for the already-owned Purchase.
+- only `source_type=email_attachment` + `application/pdf` + valid private bucket/path get a signed URL.
+- signed URL TTL is **60 seconds**.
+- storage bucket/path are stripped from the public DTO; the client receives only temporary `externalUrl`.
+- Purchase detail response has `Cache-Control: no-store`.
+- signed URL generation failure is fail-safe: document metadata stays visible but no open link is emitted.
+- existing mobile/web document UI already renders `externalUrl` as **Megnyitás**, so no new UI architecture was required.
+- reopening Purchase detail generates a fresh signed URL.
+- bucket remains private.
+
+Expected live Jatekbolt UX:
+`Vásárlások -> JatekBolt.hu #12247833 -> Irattár / Dokumentumok -> Számla S26_044783 -> Megnyitás`.
 
 ## COMPLETED REAL-WORLD RECOVERY CASES
 
-- Jatekbolt `12247833`: 48,245 HUF, Klarna, delivered DPD tracking `16380124260518`; strict `jatekbolt-order-received-v1`; now invoice attachment also linked.
+- Jatekbolt `12247833`: 48,245 HUF, Klarna, delivered DPD tracking `16380124260518`; strict `jatekbolt-order-received-v1`; invoice PDF now ingested and privately openable.
 - Alza `602385238`: strict internal AlzaBox historical recovery, 3,350 HUF, `ready_for_pickup`, exactly 1 Purchase, 0 Shipments, no invented dates/tracking.
 - All In Packaging `148810` + GLS: 90-day proof historical reconstruction, 16,670 HUF COD, one safe Shipment; second no-COD tracking remains unlinked.
 - Gyerekjatekbolt `535574`: payment failed + cancelled.
 - Szidibox `SO-2024-30411` + MPL: public-mailbox safety, MPL deterministic lifecycle, correct physical `shipped_at`.
-- Gate.shop/Foxpost, Scitec/BioTechUSA/Foxpost, Ars Una/GLS, Allegro/DPD, GymBeam/Express One and other earlier deterministic cases remain covered.
+- Gate.shop/Foxpost, Scitec/BioTechUSA/Foxpost, Ars Una/GLS, Allegro/DPD, GymBeam/Express One and earlier deterministic cases remain covered.
 
 Four McDonald's payment summaries remain REVIEW because reusable four-digit local/POS order ids are not safe global Purchase identities. Three Barion payment-only emails remain intentionally unlinked.
 
 ## CURRENT LIVE BACKLOG
 
-Verified after the first PDF attachment recovery:
+Verified after first PDF attachment recovery:
 - REVIEW: **34**
 - unlinked: **10**
 - unresolved source emails: **44**
@@ -125,22 +142,20 @@ Verified after the first PDF attachment recovery:
 
 `email_attachments` has its own REVIEW state and is not included in the above source-email backlog count.
 
-## FRONTEND / DOCUMENT NEXT STEP
+## FRONTEND / DOCUMENT STATE
 
-Purchase detail already returns document metadata, but private stored PDFs do not have a public `external_url` by design.
+Working now:
+- Purchase detail document metadata.
+- Private stored PDF invoice returns short-lived signed `externalUrl` after authenticated Purchase ownership check.
+- Existing `Megnyitás` link opens the temporary PDF URL.
+- bucket remains private.
 
-Next document UX:
-1. authenticated API verifies the document belongs to the user's Purchase,
-2. backend creates a short-lived signed Supabase Storage URL,
-3. web/mobile opens the invoice through that signed URL,
-4. never make `buyflow-purchase-documents` public.
-
-Other UI backlog remains: top-level lifecycle labels/counters, Warranty, Return/refund, Felfedezés. AI Flow remains hidden while AI is disabled.
+Remaining UI backlog: top-level lifecycle labels/counters, Warranty, Return/refund, Felfedezés. AI Flow remains hidden while AI is disabled.
 
 ## NEXT ACTION
 
 If the user gives no different direction:
-1. Add authenticated signed document-download/open endpoint and wire it into Purchase detail UI.
+1. User/live browser verification of `JatekBolt.hu #12247833 -> S26_044783 -> Megnyitás`.
 2. Continue remaining 34 REVIEW + 10 unlinked physical-commerce clusters, starting with DPD tracking `16380124260338` and merchant evidence.
 3. Extend deterministic PDF parsers only where real review attachments provide safe identity patterns; never infer from filename/timing alone.
 4. Keep scanned PDFs REVIEW until a separately designed OCR lane exists.
