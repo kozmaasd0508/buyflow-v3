@@ -10,4 +10,6 @@ export interface EmailProvider {
   searchMessages(input: SearchMessagesInput): Promise<SearchMessagesPage>;
 
   getMessage(providerMessageId: string): Promise<NormalizedEmail>;
+
+  downloadAttachment(providerMessageId: string, attachmentId: string): Promise<Buffer>;
 }
