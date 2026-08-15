@@ -43,7 +43,7 @@ test('parses strict Jatekbolt order-received message without pretending it is me
   assert.equal(parsed.extraction.currency, 'HUF');
   assert.equal(parsed.extraction.payment_method, 'Klarna');
   assert.equal(parsed.extraction.payment_status, 'pending');
-  assert.equal(parsed.extraction.shipping_method, 'Futárszolgálat DPD');
+  assert.equal(parsed.extraction.shipping_method, 'Futarszolgalat DPD');
   assert.equal(parsed.extraction.carrier, 'DPD');
   assert.ok(parsed.reasons.includes('explicitly_not_merchant_acceptance_yet'));
 });
