@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
+import {
+  DOCUMENT_SIGNED_URL_TTL_SECONDS,
+  isPrivateStoredPdf,
+} from './document-access.js';
 import { applyUserProductOverrides, loadUserProductOverrideRuns } from './product-user-overrides.js';
 
 function publicPurchase(row: any) {
@@ -215,7 +219,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         .order('created_at', { ascending: false }),
       supabase
         .from('documents')
-        .select('id,purchase_id,type,document_number,issued_at,source_type,external_url,filename,mime_type,created_at')
+        .select('id,purchase_id,type,document_number,issued_at,source_type,external_url,filename,mime_type,storage_bucket,storage_path,created_at')
         .eq('purchase_id', purchaseId)
         .order('created_at', { ascending: false }),
       supabase
@@ -239,6 +243,33 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: 'purchase_unavailable' });
     }
 
+    const documents = await Promise.all((documentResult.data ?? []).map(async (row: any) => {
+      if (row.external_url) return row;
+
+      const access = {
+        sourceType: row.source_type as string | null,
+        mimeType: row.mime_type as string | null,
+        storageBucket: row.storage_bucket as string | null,
+        storagePath: row.storage_path as string | null,
+      };
+      if (!isPrivateStoredPdf(access)) return row;
+
+      const { data: signed, error: signedError } = await supabase.storage
+        .from(access.storageBucket!)
+        .createSignedUrl(access.storagePath!, DOCUMENT_SIGNED_URL_TTL_SECONDS);
+
+      if (signedError || !signed?.signedUrl) {
+        request.log.warn({ errorType: 'DocumentSignedUrlError', documentId: row.id }, 'Private document signed URL could not be created');
+        return row;
+      }
+
+      return {
+        ...row,
+        external_url: signed.signedUrl,
+      };
+    }));
+
+    reply.header('Cache-Control', 'no-store');
     return {
       purchase: {
         ...publicPurchase(purchase),
@@ -252,7 +283,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         cancelledAt: purchase.cancelled_at,
         products: products.map(publicProduct),
         shipments: (shipmentResult.data ?? []).map(publicShipment),
-        documents: (documentResult.data ?? []).map(publicDocument),
+        documents: documents.map(publicDocument),
       },
     };
   });
