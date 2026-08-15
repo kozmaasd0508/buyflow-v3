@@ -15,6 +15,7 @@ import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
 
 const PARSER_VERSION = 'deterministic-commerce-v2';
 const AI_OFF_FALLBACK_PARSER_VERSION = 'deterministic-ai-off-fallback-v1';
+const DETERMINISTIC_BODY_MAX_CHARS = 80_000;
 
 interface CarrierRule {
   name: string;
@@ -436,8 +437,8 @@ export async function preprocessDeterministicNylasMessage(input: {
   const email = await provider.getMessage(input.messageId);
   const domains = senderDomains(email.from);
   const bodyText = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml)
-    : (email.snippet ?? '').trim().slice(0, 20_000);
+    ? htmlToCompactText(email.bodyHtml, DETERMINISTIC_BODY_MAX_CHARS)
+    : (email.snippet ?? '').trim().slice(0, DETERMINISTIC_BODY_MAX_CHARS);
 
   const parsed = parseDeterministicCommerceEmail({
     senderDomains: domains,
