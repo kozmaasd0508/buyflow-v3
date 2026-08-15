@@ -97,7 +97,11 @@ function trackingKey(userId: string, trackingNumber: string): string {
 }
 
 function isPhysicalShipmentEvidence(row: ShipmentResolutionEvidence): boolean {
-  return row.eventType === 'shipment' && row.shipmentPhase !== 'shipment_created';
+  if (row.eventType !== 'shipment') return false;
+  return row.shipmentPhase === 'shipped'
+    || row.shipmentPhase === 'in_transit'
+    || row.shipmentPhase === 'out_for_delivery'
+    || row.shipmentPhase === 'ready_for_pickup';
 }
 
 export function resolveShipmentCandidates(
