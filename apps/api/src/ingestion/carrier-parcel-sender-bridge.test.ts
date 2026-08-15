@@ -75,26 +75,32 @@ function scitecPurchase(overrides: Partial<CarrierBridgePurchase> = {}): Carrier
 
 function scitecCarrierChain(): CarrierBridgeEvidence[] {
   return [
+    // Mirrors the current historical deterministic pre-advice row: tracking is
+    // trustworthy, but parcel sender/COD/phase are not yet enriched.
     carrier({
       sourceEmailId: 'fox-pre-advice',
-      receivedAt: '2026-07-14T08:48:28.000Z',
+      receivedAt: '2026-07-14T08:48:29.000Z',
       trackingNumber: 'CLFOX178401889449819',
-      parcelSender: 'BioTechUSA Kft.',
-      shipmentPhase: 'shipment_created',
-      codAmount: 16780,
-      codCurrency: 'HUF',
-      confidence: 0.99,
+      parcelSender: null,
+      shipmentPhase: null,
+      codAmount: null,
+      codCurrency: null,
+      confidence: 0.96,
     }),
+    // The warehouse email exists in the mailbox but may still be review-only
+    // and therefore lacks a trusted tracking identity; it must not be needed.
     carrier({
-      sourceEmailId: 'fox-warehouse',
-      receivedAt: '2026-07-14T17:33:27.000Z',
-      trackingNumber: 'CLFOX178401889449819',
-      parcelSender: 'BioTechUSA Kft.',
-      shipmentPhase: 'in_transit',
-      codAmount: 16780,
-      codCurrency: 'HUF',
+      sourceEmailId: 'fox-warehouse-review-shape',
+      receivedAt: '2026-07-14T17:33:28.000Z',
+      trackingNumber: null,
+      parcelSender: null,
+      shipmentPhase: null,
+      codAmount: null,
+      codCurrency: null,
       confidence: 0.99,
     }),
+    // Pickup-ready evidence provides the verified legal sender, exact COD and
+    // explicit physical lifecycle state.
     carrier({
       sourceEmailId: 'fox-pickup',
       receivedAt: '2026-07-15T09:55:07.000Z',
@@ -144,7 +150,7 @@ test('legal suffixes do not block a strong merchant match', () => {
   assert.equal(decision?.decision, 'linkable');
 });
 
-test('verified Scitec legal-entity alias bridges an exact COD multi-event Foxpost chain', () => {
+test('verified Scitec legal-entity alias bridges exact COD using two independently observed tracking events', () => {
   const [decision] = resolveCarrierParcelSenderBridges([scitecPurchase()], scitecCarrierChain());
   assert.ok(decision);
   assert.equal(decision.decision, 'linkable');
@@ -152,19 +158,20 @@ test('verified Scitec legal-entity alias bridges an exact COD multi-event Foxpos
   assert.equal(decision.trackingNumber, 'CLFOX178401889449819');
   assert.equal(decision.shipmentStatus, 'ready_for_pickup');
   assert.equal(decision.merchantAnchorSourceId, null);
-  assert.equal(decision.primarySourceId, 'fox-warehouse');
+  assert.equal(decision.primarySourceId, 'fox-pickup');
+  assert.deepEqual(new Set(decision.sourceEmailIds), new Set(['fox-pre-advice', 'fox-pickup']));
   assert.ok(decision.reasons.includes('verified_brand_legal_entity_alias'));
   assert.ok(decision.reasons.includes('exact_cod_matches_purchase_total'));
   assert.ok(decision.reasons.includes('multi_event_carrier_chain'));
 });
 
 test('verified brand fallback rejects a wrong COD amount', () => {
-  const rows = scitecCarrierChain().map((row) => ({ ...row, codAmount: 16779 }));
+  const rows = scitecCarrierChain().map((row) => ({ ...row, codAmount: row.codAmount === null ? null : 16779 }));
   const [decision] = resolveCarrierParcelSenderBridges([scitecPurchase()], rows);
   assert.equal(decision?.decision, 'unmatched');
 });
 
-test('verified brand fallback rejects a single carrier event', () => {
+test('verified brand fallback rejects a single carrier event even with exact COD', () => {
   const [decision] = resolveCarrierParcelSenderBridges([scitecPurchase()], [scitecCarrierChain()[2]!]);
   assert.equal(decision?.decision, 'unmatched');
 });
@@ -172,6 +179,14 @@ test('verified brand fallback rejects a single carrier event', () => {
 test('same amount and parcel sender cannot bridge an unverified merchant domain', () => {
   const [decision] = resolveCarrierParcelSenderBridges(
     [scitecPurchase({ merchantDomain: 'unrelated-shop.hu', merchantName: 'Unrelated Shop' })],
+    scitecCarrierChain(),
+  );
+  assert.equal(decision?.decision, 'unmatched');
+});
+
+test('verified brand fallback rejects low-confidence purchase identity', () => {
+  const [decision] = resolveCarrierParcelSenderBridges(
+    [scitecPurchase({ confidence: 0.94 })],
     scitecCarrierChain(),
   );
   assert.equal(decision?.decision, 'unmatched');
