@@ -31,6 +31,12 @@ interface JobRow {
   result: Record<string, unknown> | null;
 }
 
+interface PurchaseDbRow {
+  user_id: string;
+  merchant_domain: string | null;
+  order_number: string | null;
+}
+
 export interface AlzaRecoveryEvidence {
   sourceEmailId: string;
   userId: string;
@@ -308,23 +314,28 @@ export async function drainAlzaInternalFulfillmentRecoveryV1(
 
   const sourceRows = (sourceData ?? []) as SourceRow[];
   const evidence = sourceRows.map(toEvidence).filter((row: AlzaRecoveryEvidence | null): row is AlzaRecoveryEvidence => Boolean(row));
-  const unresolvedAnchors = evidence.filter((row) =>
-    (row.processingStatus === 'review' || row.processingStatus === 'unlinked')
-    && normalizeDomain(row.senderDomain) === 'alza.hu'
+  const recoveryAnchors = evidence.filter((row) =>
+    normalizeDomain(row.senderDomain) === 'alza.hu'
+    && TRUSTED.has(row.validationStatus ?? '')
     && row.parserVersion === PROCESSING_PARSER
     && row.lifecycleEvent === 'order_processing'
     && row.eventType === 'order_updated'
   );
-  result.scanned = unresolvedAnchors.length;
-  if (unresolvedAnchors.length === 0) return result;
+  result.scanned = recoveryAnchors.length;
+  if (recoveryAnchors.length === 0) return result;
 
-  const userIds = [...new Set(unresolvedAnchors.map((row) => row.userId))];
+  const userIds = [...new Set(recoveryAnchors.map((row) => row.userId))];
   const { data: purchaseData, error: purchaseError } = await db
     .from('purchases')
     .select('user_id,merchant_domain,order_number')
     .in('user_id', userIds);
   if (purchaseError) throw new Error(`Alza Internal Fulfillment Recovery purchase read failed: ${purchaseError.message}`);
-  const purchases = (purchaseData ?? []) as AlzaRecoveryExistingPurchase[];
+  const purchases: AlzaRecoveryExistingPurchase[] = ((purchaseData ?? []) as PurchaseDbRow[]).map((row) => ({
+    userId: row.user_id,
+    merchantDomain: row.merchant_domain,
+    orderNumber: row.order_number,
+  }));
+  const existingPurchaseKeys = new Set(purchases.map(existingKey));
 
   const { data: jobData, error: jobError } = await db
     .from('email_scan_jobs')
@@ -359,9 +370,11 @@ export async function drainAlzaInternalFulfillmentRecoveryV1(
   if (mode === 'observe') return result;
 
   const proofKeys = new Set(proofs.map(proofKey));
-  for (const anchor of unresolvedAnchors) {
+  for (const anchor of recoveryAnchors) {
     const orderNumber = normalizeOrder(anchor.orderNumber);
     if (!orderNumber) continue;
+    const purchaseKey = `${anchor.userId}::alza.hu::${orderNumber}`;
+    if (existingPurchaseKeys.has(purchaseKey)) continue;
     const key = `${anchor.userId}::${anchor.emailConnectionId}::${orderNumber}`;
     if (proofKeys.has(key)) continue;
 
