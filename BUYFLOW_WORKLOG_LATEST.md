@@ -1,100 +1,123 @@
 # BuyFlow V3 — latest recovery worklog
 
-> Newest detailed entry. Read after `BUYFLOW_HANDOFF.md`. Previous latest entries remain in Git history and `BUYFLOW_WORKLOG.md`.
+> Newest detailed entry. Read after `BUYFLOW_HANDOFF.md`. Previous detailed entries remain in Git history and `BUYFLOW_WORKLOG.md`.
 
-## 2026-08-16 — Protocol / Merchant Library Foundation
+## 2026-08-16 — Protocol / Merchant Library research wave 1
 
 ### Goal
 
-Create a versioned, source-auditable knowledge layer in front of the existing deterministic classifier without rebuilding BuyFlow, enabling AI, or changing existing Purchase/lifecycle/resolution safety.
+After building the Protocol Library foundation, research the first commerce-engine wave from primary sources and begin merchant-specific knowledge, without enabling AI, replacing the current deterministic pipeline, or inventing unsupported email subjects.
 
-### PR #99 — `Add Protocol Library foundation`
+### Foundation reference
 
-Branch: `agent/protocol-library-foundation-v1`.
+PR #99 added the common versioned evidence/provenance/prohibition contract. Production registry remains empty; research profiles do not alter live recognition.
 
-Added runtime foundation under `apps/api/src/protocols/`:
-- `types.ts` — common protocol/evidence contract
-- `detect.ts` — source-specific evidence detector
-- `registry.ts` — deliberately empty Foundation V1 registry
-- `safety.ts` — provenance eligibility and authority precedence
-- `profile-validator.ts` — version/source/regex/confidence validation
-- `index.ts` — stable library exports
-- `protocol-library.test.ts` — safety regressions
+### PR #101 — WooCommerce research v1
 
-Added knowledge-base structure:
-- `/protocols/schema`
-- `/protocols/commerce`
-- `/protocols/merchants/hu`
-- `/protocols/carriers`
-- `/protocols/payments`
-- `/protocols/invoicing`
+Added:
+- `apps/api/src/protocols/profiles/woocommerce-research-v1.ts`
+- tests
+- `protocols/commerce/woocommerce/1.0.0-research.1/README.md`
 
-### Contract / safety
+Primary-source findings:
+- Processing -> ORDER_PROCESSING only
+- Failed order -> PAYMENT_FAILED
+- Cancelled -> CANCELLED
+- historical Customer Invoice class is Order details/payment request; explicit payment copy required for PAYMENT_ACTION_REQUIRED and never fiscal INVOICE by class name
+- full/partial refund is merchant refund evidence with DO_NOT_MARK_REFUNDED
+- fulfillment-created -> merchant SHIPPED evidence, never DELIVERED
+- Completed deliberately unmapped to SHIPPED/DELIVERED
+- customer note/account/reset-password are hard negatives
 
-Profiles can emit candidate evidence for all current BuyFlow lifecycle families, including order, payment, fulfillment, delivery, cancellation, invoice, return, refund and warranty.
+PR CI #491 green.
 
-Every result preserves:
-- protocol id/version/kind
-- event candidate
-- confidence
-- order/tracking/invoice/payment-reference identifiers
-- matched positive rules
-- matched negative rules
-- `blocked_by_negative_evidence`
-- explicit prohibitions
-- provenance levels
-- `production_eligible`
+### PR #102 — Shopify research v1
 
-Provenance levels:
-- observed real email
-- official documentation
-- verified template
-- community example
-- inferred
-- unknown
+Added source-backed Shopify catalog and tests.
 
-`inferred`/`unknown` alone can never become production-eligible. Production evidence threshold is 0.85, but eligibility never bypasses existing classifier/resolution/write gates.
+Key constraints:
+- notification subject and HTML are merchant-editable/localizable
+- no speculative raw subject regexes were added
+- `shopifyemail.com` is shared platform evidence only and cannot identify merchant/Purchase
+- Order confirmation, fulfillment/shipping, tracking, cancel/refund, pending-payment, pickup, return/exchange and local-delivery semantics are catalogued
+- Shipping confirmation -> SHIPMENT_CREATED, not carrier physical progress
+- Ready for pickup != Delivered
+- refund evidence carries DO_NOT_MARK_REFUNDED
+- Picked up is left OTHER until canonical taxonomy supports it
+- `confirmation_number` is not treated as guaranteed globally unique
 
-Formal evidence authority was added:
-- direct carrier > merchant wording for logistics
-- direct payment provider > merchant wording for payment
-- invoice provider/PDF > merchant invoice wording
+PR CI #493 green.
 
-This is precedence of evidence only; it never performs entity linking.
+### PR #103 — UNAS + Shoprenter research v1
 
-Protocol sender matching uses exact domain or true subdomain suffix, rejecting attacker lookalikes.
+Merged runtime `8f4e0aa343d5d8bcbe094333cbeda5c1c0cab955`.
+- PR CI #495 green
+- main CI #496 green
+- exact Render smoke #390 green
 
-Profile validation requires semantic versioning, source-backed rules, valid/length-bounded event and identifier regexes, and confidence in range.
+UNAS:
+- highly customizable; no executable raw parser in v1
+- recorded structural placeholders: order key/total/status, payment URL, tracking URL, package number, product block
+- merchant-defined status names cannot be globally translated to lifecycle
+- tracking/package identity does not prove physical carrier progress
+- failed/pending payment family remains unmapped until rendered evidence distinguishes state
 
-### Useful CI failures before merge
+Shoprenter:
+- documented shared fallback `order@myshoprenter.hu` -> platform OTHER only
+- subjects/text/HTML editable
+- order confirmation can later support ORDER_CREATED only with merchant + stable identity
+- status change remains merchant-specific
+- Shoprenter Go tracking link = identity only, not shipped/in-transit/delivered
+- payment description = method/instruction, not payment success
 
-First PR CI #485 failed TypeScript because an identifier-pattern helper lost its type through `Object.entries()`. Fixed with explicit typed arrays; no safety semantics changed.
+### PR #104 — eMAG HU merchant research v1
 
-Second PR CI #486 passed typecheck but one new protocol test failed: the sample order-ID regex was too broad and extracted part of `visszaigazol...` from the subject instead of `HU-12345`. The example rule was tightened to explicit `Rendelésszám:` plus a digit-bearing identifier. The detector was not loosened.
+First Hungarian merchant-specific research catalog.
 
-Final PR CI #487 was fully green: API typecheck/tests/build and mobile typecheck/build all passed.
+Merged runtime `3c648b87ff3c8335102af7b71e94cc05cefdedfd`.
+- PR CI #497 green
+- main CI #498 green
+- exact Render smoke #392 green
 
-### Merge / deploy
+Official-source safety findings:
+- eMAG Marketplace platform and actual seller are separate identities
+- Folyamatban is seller preparation, not shipment
+- AWB generation can move Marketplace order to Befejezett; this is at most SHIPMENT_CREATED, never physical shipment/delivery proof
+- one order can have multiple parcels/AWBs; keep multiple Shipment identities
+- easybox pickup notification -> READY_FOR_PICKUP, never DELIVERED
+- cancellation != refund
+- return request -> collection/receipt/inspection/approval -> refund are separate stages
+- merchant/platform refund cannot finalize settled REFUNDED without stronger payment evidence
+- online-card failure alone cannot create/guess a Purchase
+- invoice/warranty document availability is separate from exact PDF/email identity and active warranty case
 
-Merged runtime main:
-`70b90b4cc227a018ce4f56afdd2319e6f002f6eb`
+No stable first-party customer-email sender/subject/body set was found in the first pass, so no eMAG subject strings were invented and no raw parser was enabled.
 
-- main CI #488: green
-- exact Render Webhook Smoke #382: green for the exact runtime commit
+### Research wave 1 checkpoint
 
-Foundation V1 registers **zero production profiles**, so current BuyFlow recognition behavior remains unchanged and no new production email/Purchase/Shipment/Document data was written.
+Completed research coverage:
+1. WooCommerce
+2. Shopify
+3. UNAS
+4. Shoprenter
+5. eMAG HU
 
-### Next
+All remain `research` / unregistered for live lifecycle extraction. No production inbox scans or new data writes were caused by this research.
 
-Start primary-source WooCommerce research and create the first versioned commerce profile in `research`/`test` status. Do not promote it to production until positive and hard-negative fixtures pass and the permanent 100-email benchmark shows no safety regression.
+The user asked to review the first phase before moving to the next large group, so stop here for review.
 
-### Previous benchmark baseline
+### Benchmark requirement before promotion
 
-PR #97 permanent 100-email benchmark remains the safety baseline:
+Permanent PR #97 benchmark remains the guardrail:
 - 70 purchase/lifecycle fixtures + 30 noise
 - 30/30 noise excluded
 - 0 wrong order/tracking identities
 - 0 unsafe lifecycle promotions
-- new generic purchase-related recognition 9/70
+- unseen generic recognition 9/70 baseline
 
-The Protocol Library should improve coverage incrementally while preserving false Purchase=0 and wrong auto-link=0.
+Any future `research -> test/production` promotion must re-run this and preserve false Purchase=0 and wrong auto-link=0.
+
+### Candidate next work after approval
+
+- Merchant research: MediaMarkt -> GymBeam -> Notino, or
+- collect observed rendered Woo/Shopify/UNAS/Shoprenter/eMAG customer emails and begin safe executable `test` profiles.
