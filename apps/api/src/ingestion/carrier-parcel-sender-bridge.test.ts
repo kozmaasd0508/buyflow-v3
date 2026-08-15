@@ -8,22 +8,104 @@ import {
 
 function purchase(overrides: Partial<CarrierBridgePurchase> = {}): CarrierBridgePurchase {
   return {
-    purchaseId: 'purchase-1', userId: 'user-1', merchantName: 'gate.shop', merchantDomain: 'gate.shop', orderNumber: '20336215', ...overrides,
+    purchaseId: 'purchase-1',
+    userId: 'user-1',
+    merchantName: 'gate.shop',
+    merchantDomain: 'gate.shop',
+    orderNumber: '20336215',
+    totalAmount: null,
+    currency: null,
+    orderedAt: null,
+    confidence: null,
+    ...overrides,
   };
 }
 
 function merchantShipment(overrides: Partial<CarrierBridgeEvidence> = {}): CarrierBridgeEvidence {
   return {
-    sourceEmailId: 'merchant-email', userId: 'user-1', senderDomain: 'gate.shop', receivedAt: '2026-07-29T13:02:30.000Z',
-    eventType: 'shipment', orderNumber: '20336215', trackingNumber: null, carrier: 'FoxPost / Packeta', parcelSender: null, shipmentPhase: null, confidence: 0.78, ...overrides,
+    sourceEmailId: 'merchant-email',
+    userId: 'user-1',
+    senderDomain: 'gate.shop',
+    receivedAt: '2026-07-29T13:02:30.000Z',
+    eventType: 'shipment',
+    orderNumber: '20336215',
+    trackingNumber: null,
+    carrier: 'FoxPost / Packeta',
+    parcelSender: null,
+    shipmentPhase: null,
+    codAmount: null,
+    codCurrency: null,
+    confidence: 0.78,
+    ...overrides,
   };
 }
 
 function carrier(overrides: Partial<CarrierBridgeEvidence> = {}): CarrierBridgeEvidence {
   return {
-    sourceEmailId: 'carrier-email', userId: 'user-1', senderDomain: 'foxpost.hu', receivedAt: '2026-07-29T19:52:57.000Z',
-    eventType: 'shipment', orderNumber: null, trackingNumber: 'CLFOX178524111362058', carrier: 'FOXPOST', parcelSender: 'GATE.SHOP HU', shipmentPhase: 'in_transit', confidence: 0.9, ...overrides,
+    sourceEmailId: 'carrier-email',
+    userId: 'user-1',
+    senderDomain: 'foxpost.hu',
+    receivedAt: '2026-07-29T19:52:57.000Z',
+    eventType: 'shipment',
+    orderNumber: null,
+    trackingNumber: 'CLFOX178524111362058',
+    carrier: 'FOXPOST',
+    parcelSender: 'GATE.SHOP HU',
+    shipmentPhase: 'in_transit',
+    codAmount: null,
+    codCurrency: null,
+    confidence: 0.9,
+    ...overrides,
   };
+}
+
+function scitecPurchase(overrides: Partial<CarrierBridgePurchase> = {}): CarrierBridgePurchase {
+  return purchase({
+    purchaseId: 'scitec-purchase',
+    merchantName: 'Scitec',
+    merchantDomain: 'scitec.hu',
+    orderNumber: '1783-975-87-395',
+    totalAmount: 16780,
+    currency: 'HUF',
+    orderedAt: '2026-07-13T20:51:17.000Z',
+    confidence: 0.95,
+    ...overrides,
+  });
+}
+
+function scitecCarrierChain(): CarrierBridgeEvidence[] {
+  return [
+    carrier({
+      sourceEmailId: 'fox-pre-advice',
+      receivedAt: '2026-07-14T08:48:28.000Z',
+      trackingNumber: 'CLFOX178401889449819',
+      parcelSender: 'BioTechUSA Kft.',
+      shipmentPhase: 'shipment_created',
+      codAmount: 16780,
+      codCurrency: 'HUF',
+      confidence: 0.99,
+    }),
+    carrier({
+      sourceEmailId: 'fox-warehouse',
+      receivedAt: '2026-07-14T17:33:27.000Z',
+      trackingNumber: 'CLFOX178401889449819',
+      parcelSender: 'BioTechUSA Kft.',
+      shipmentPhase: 'in_transit',
+      codAmount: 16780,
+      codCurrency: 'HUF',
+      confidence: 0.99,
+    }),
+    carrier({
+      sourceEmailId: 'fox-pickup',
+      receivedAt: '2026-07-15T09:55:07.000Z',
+      trackingNumber: 'CLFOX178401889449819',
+      parcelSender: 'BioTechUSA Kft.',
+      shipmentPhase: 'ready_for_pickup',
+      codAmount: 16780,
+      codCurrency: 'HUF',
+      confidence: 0.99,
+    }),
+  ];
 }
 
 test('bridges carrier tracking to one purchase using parcel sender plus merchant shipment anchor', () => {
@@ -35,6 +117,7 @@ test('bridges carrier tracking to one purchase using parcel sender plus merchant
   assert.equal(decision.carrierSlug, 'foxpost');
   assert.equal(decision.shipmentStatus, 'in_transit');
   assert.equal(decision.merchantAnchorSourceId, 'merchant-email');
+  assert.equal(decision.primarySourceId, 'merchant-email');
   assert.deepEqual(new Set(decision.sourceEmailIds), new Set(['merchant-email', 'carrier-email']));
   assert.ok(decision.reasons.includes('carrier_parcel_sender_matches_merchant'));
 });
@@ -59,6 +142,52 @@ test('legal suffixes do not block a strong merchant match', () => {
     [merchantShipment({ senderDomain: 'biotechusa.hu', orderNumber: 'B-123', carrier: 'Foxpost' }), carrier({ parcelSender: 'BioTechUSA Kft.', trackingNumber: 'CLFOX123456789000' })],
   );
   assert.equal(decision?.decision, 'linkable');
+});
+
+test('verified Scitec legal-entity alias bridges an exact COD multi-event Foxpost chain', () => {
+  const [decision] = resolveCarrierParcelSenderBridges([scitecPurchase()], scitecCarrierChain());
+  assert.ok(decision);
+  assert.equal(decision.decision, 'linkable');
+  assert.equal(decision.purchaseId, 'scitec-purchase');
+  assert.equal(decision.trackingNumber, 'CLFOX178401889449819');
+  assert.equal(decision.shipmentStatus, 'ready_for_pickup');
+  assert.equal(decision.merchantAnchorSourceId, null);
+  assert.equal(decision.primarySourceId, 'fox-warehouse');
+  assert.ok(decision.reasons.includes('verified_brand_legal_entity_alias'));
+  assert.ok(decision.reasons.includes('exact_cod_matches_purchase_total'));
+  assert.ok(decision.reasons.includes('multi_event_carrier_chain'));
+});
+
+test('verified brand fallback rejects a wrong COD amount', () => {
+  const rows = scitecCarrierChain().map((row) => ({ ...row, codAmount: 16779 }));
+  const [decision] = resolveCarrierParcelSenderBridges([scitecPurchase()], rows);
+  assert.equal(decision?.decision, 'unmatched');
+});
+
+test('verified brand fallback rejects a single carrier event', () => {
+  const [decision] = resolveCarrierParcelSenderBridges([scitecPurchase()], [scitecCarrierChain()[2]!]);
+  assert.equal(decision?.decision, 'unmatched');
+});
+
+test('same amount and parcel sender cannot bridge an unverified merchant domain', () => {
+  const [decision] = resolveCarrierParcelSenderBridges(
+    [scitecPurchase({ merchantDomain: 'unrelated-shop.hu', merchantName: 'Unrelated Shop' })],
+    scitecCarrierChain(),
+  );
+  assert.equal(decision?.decision, 'unmatched');
+});
+
+test('multiple verified brand COD candidates go to review', () => {
+  const [decision] = resolveCarrierParcelSenderBridges(
+    [
+      scitecPurchase(),
+      scitecPurchase({ purchaseId: 'scitec-purchase-2', orderNumber: '1783-975-87-396' }),
+    ],
+    scitecCarrierChain(),
+  );
+  assert.equal(decision?.decision, 'review');
+  assert.equal(decision?.purchaseId, null);
+  assert.ok(decision?.reasons.includes('multiple_verified_brand_cod_purchase_candidates'));
 });
 
 test('carrier-only tracking never guesses a purchase', () => {
