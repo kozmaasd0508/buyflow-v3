@@ -19,7 +19,7 @@ test('parses Foxpost ready-for-pickup without calling it delivered', () => {
   assert.equal(result.extraction.parcel_sender, 'GATE.SHOP HU');
   assert.equal(result.extraction.cod_amount, 12535);
   assert.equal(result.extraction.cod_currency, 'HUF');
-  assert.equal(result.parserVersion, 'foxpost-lifecycle-v1');
+  assert.equal(result.parserVersion, 'foxpost-lifecycle-v1.1');
 });
 
 test('prefers labelled Foxpost tracking over Packeta identifier', () => {
@@ -36,16 +36,24 @@ test('parses pre-advice as shipment_created', () => {
   assert.equal(result?.shipmentPhase, 'shipment_created');
 });
 
-test('parses warehouse arrival as in_transit', () => {
+test('parses warehouse arrival with the live generic Csomagod azonosítószáma label', () => {
   const result = parseFoxpostLifecycleEmail({
     senderDomains: ['foxpost.hu'],
     subject: 'Csomagod már a raktárunkban van',
-    bodyText: `Csomagod, amelyet GATE.SHOP HU adott fel számodra, beérkezett raktárunkba. Csomagod FOXPOST azonosítószáma: CLFOX178524111362058`,
+    bodyText: `Kedves Kozma Gábor!
+Csomagod, amelyet BioTechUSA Kft. adott fel számodra, beérkezett raktárunkba, hamarosan megkapod a FOXPOST automatába.
+Csomagod azonosítószáma: CLFOX178401889449819
+Utánvételi összeg: 16780 Ft`,
   });
-  assert.equal(result?.shipmentPhase, 'in_transit');
-  assert.equal(result?.extraction.parcel_sender, 'GATE.SHOP HU');
+  assert.ok(result);
+  assert.equal(result.shipmentPhase, 'in_transit');
+  assert.equal(result.extraction.tracking_number, 'CLFOX178401889449819');
+  assert.equal(result.extraction.parcel_sender, 'BioTechUSA Kft.');
+  assert.equal(result.extraction.cod_amount, 16780);
+  assert.equal(result.extraction.cod_currency, 'HUF');
 });
 
-test('rejects lookalike sender domains', () => {
-  assert.equal(parseFoxpostLifecycleEmail({ senderDomains: ['foxpost.hu.attacker.example'], subject: 'Csomagod megérkezett', bodyText: readyBody }), null);
+test('rejects generic tracking labels from lookalike sender domains', () => {
+  const body = `Csomagod, amelyet BioTechUSA Kft. adott fel számodra, beérkezett raktárunkba. Csomagod azonosítószáma: CLFOX178401889449819`;
+  assert.equal(parseFoxpostLifecycleEmail({ senderDomains: ['foxpost.hu.attacker.example'], subject: 'Csomagod már a raktárunkban van', bodyText: body }), null);
 });
