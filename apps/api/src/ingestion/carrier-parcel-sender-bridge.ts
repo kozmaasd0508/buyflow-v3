@@ -5,8 +5,22 @@ import { normalizeCarrierSlug } from '../resolution/shipment-resolution.js';
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const LOOKBACK_DAYS = 45;
 const TRUSTED_VALIDATION = new Set(['validated', 'guardrailed']);
+const MIN_VERIFIED_PURCHASE_CONFIDENCE = 0.95;
 
 type BridgeShipmentStatus = 'in_transit' | 'ready_for_pickup';
+
+interface VerifiedBrandCarrierIdentity {
+  merchantDomain: string;
+  parcelSender: string;
+  carrierSlug: string;
+}
+
+// Keep this registry deliberately narrow. These aliases represent a verified
+// brand/legal-entity relationship, not fuzzy merchant matching. Scitec's
+// official legal pages identify BioTech USA Kft. as the operating entity.
+const VERIFIED_BRAND_CARRIER_IDENTITIES: VerifiedBrandCarrierIdentity[] = [
+  { merchantDomain: 'scitec.hu', parcelSender: 'biotechusa', carrierSlug: 'foxpost' },
+];
 
 export interface CarrierBridgePurchase {
   purchaseId: string;
@@ -14,6 +28,10 @@ export interface CarrierBridgePurchase {
   merchantName: string | null;
   merchantDomain: string | null;
   orderNumber: string | null;
+  totalAmount: number | null;
+  currency: string | null;
+  orderedAt: string | null;
+  confidence: number | null;
 }
 
 export interface CarrierBridgeEvidence {
@@ -27,6 +45,8 @@ export interface CarrierBridgeEvidence {
   carrier: string | null;
   parcelSender: string | null;
   shipmentPhase: string | null;
+  codAmount: number | null;
+  codCurrency: string | null;
   confidence: number;
 }
 
@@ -38,6 +58,7 @@ export interface CarrierBridgeDecision {
   decision: 'linkable' | 'review' | 'unmatched';
   sourceEmailIds: string[];
   merchantAnchorSourceId: string | null;
+  primarySourceId: string | null;
   confidence: number;
   reasons: string[];
 }
@@ -52,6 +73,10 @@ function normalizeOrder(value: string | null | undefined): string {
 
 function normalizeTracking(value: string | null | undefined): string {
   return (value ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function normalizeCurrency(value: string | null | undefined): string {
+  return (value ?? '').trim().toUpperCase();
 }
 
 function normalizeMerchantLabel(value: string | null | undefined): string {
@@ -86,16 +111,53 @@ function merchantLooksSame(parcelSender: string | null, purchase: CarrierBridgeP
   );
 }
 
+function verifiedBrandIdentityMatches(
+  parcelSender: string | null,
+  purchase: CarrierBridgePurchase,
+  carrierSlug: string,
+): boolean {
+  const domain = normalizeDomain(purchase.merchantDomain);
+  const sender = normalizeMerchantLabel(parcelSender);
+  if (!domain || !sender) return false;
+  return VERIFIED_BRAND_CARRIER_IDENTITIES.some((identity) =>
+    domain === identity.merchantDomain
+    && sender === identity.parcelSender
+    && carrierSlug === identity.carrierSlug,
+  );
+}
+
 function withinWindow(a: string, b: string): boolean {
   const left = Date.parse(a);
   const right = Date.parse(b);
   return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= WINDOW_MS;
 }
 
+function exactCodMatch(purchase: CarrierBridgePurchase, row: CarrierBridgeEvidence): boolean {
+  if (purchase.totalAmount === null || row.codAmount === null) return false;
+  const purchaseCurrency = normalizeCurrency(purchase.currency);
+  const codCurrency = normalizeCurrency(row.codCurrency);
+  return Boolean(
+    purchaseCurrency
+    && purchaseCurrency === codCurrency
+    && Math.abs(purchase.totalAmount - row.codAmount) < 0.001,
+  );
+}
+
 function shipmentStatusForCarrierGroup(group: CarrierBridgeEvidence[]): BridgeShipmentStatus {
   return group.some((row) => row.shipmentPhase === 'ready_for_pickup')
     ? 'ready_for_pickup'
     : 'in_transit';
+}
+
+function earliestPhysicalCarrierSource(group: CarrierBridgeEvidence[]): CarrierBridgeEvidence | null {
+  const physical = group
+    .filter((row) => row.eventType === 'delivery' || Boolean(row.shipmentPhase && row.shipmentPhase !== 'shipment_created'))
+    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  return physical[0] ?? null;
+}
+
+function uniqueSourceCount(group: CarrierBridgeEvidence[]): number {
+  return new Set(group.map((row) => row.sourceEmailId)).size;
 }
 
 export function resolveCarrierParcelSenderBridges(
@@ -124,7 +186,7 @@ export function resolveCarrierParcelSenderBridges(
   const groups = new Map<string, CarrierBridgeEvidence[]>();
   for (const row of evidenceRows) {
     const tracking = normalizeTracking(row.trackingNumber);
-    if (!tracking || !isCarrierSenderDomain(normalizeDomain(row.senderDomain)) || !row.parcelSender) continue;
+    if (!tracking || !isCarrierSenderDomain(normalizeDomain(row.senderDomain))) continue;
     const slug = normalizeCarrierSlug(row.carrier);
     if (!slug) continue;
     const key = `${row.userId}::${slug}::${tracking}`;
@@ -139,6 +201,8 @@ export function resolveCarrierParcelSenderBridges(
     const trackingNumber = normalizeTracking(first.trackingNumber);
     const carrierSlug = normalizeCarrierSlug(first.carrier)!;
     const shipmentStatus = shipmentStatusForCarrierGroup(group);
+    const confidence = group.reduce((max, row) => Math.max(max, row.confidence), 0);
+
     const candidateAnchors = merchantAnchors.filter(({ row, purchase }) => {
       if (row.userId !== first.userId) return false;
       if (!group.some((carrierRow) => withinWindow(carrierRow.receivedAt, row.receivedAt))) return false;
@@ -148,7 +212,6 @@ export function resolveCarrierParcelSenderBridges(
     });
 
     const purchaseIds = [...new Set(candidateAnchors.map(({ purchase }) => purchase.purchaseId))];
-    const confidence = group.reduce((max, row) => Math.max(max, row.confidence), 0);
     if (purchaseIds.length === 1) {
       const anchorsForPurchase = candidateAnchors.filter(({ purchase }) => purchase.purchaseId === purchaseIds[0]);
       anchorsForPurchase.sort((a, b) => b.row.confidence - a.row.confidence || a.row.receivedAt.localeCompare(b.row.receivedAt));
@@ -161,6 +224,7 @@ export function resolveCarrierParcelSenderBridges(
         decision: 'linkable',
         sourceEmailIds: [...new Set([anchor.row.sourceEmailId, ...group.map((row) => row.sourceEmailId)])],
         merchantAnchorSourceId: anchor.row.sourceEmailId,
+        primarySourceId: anchor.row.sourceEmailId,
         confidence: Math.min(confidence, anchor.row.confidence),
         reasons: [
           'carrier_parcel_sender_matches_merchant',
@@ -170,10 +234,85 @@ export function resolveCarrierParcelSenderBridges(
           ...(shipmentStatus === 'ready_for_pickup' ? ['explicit_ready_for_pickup_evidence'] : []),
         ],
       });
-    } else if (purchaseIds.length > 1) {
-      decisions.push({ trackingNumber, carrierSlug, shipmentStatus, purchaseId: null, decision: 'review', sourceEmailIds: group.map((row) => row.sourceEmailId), merchantAnchorSourceId: null, confidence, reasons: ['multiple_purchase_candidates'] });
+      continue;
+    }
+
+    if (purchaseIds.length > 1) {
+      decisions.push({
+        trackingNumber,
+        carrierSlug,
+        shipmentStatus,
+        purchaseId: null,
+        decision: 'review',
+        sourceEmailIds: group.map((row) => row.sourceEmailId),
+        merchantAnchorSourceId: null,
+        primarySourceId: null,
+        confidence,
+        reasons: ['multiple_purchase_candidates'],
+      });
+      continue;
+    }
+
+    const physicalPrimary = earliestPhysicalCarrierSource(group);
+    const verifiedCandidates = uniqueSourceCount(group) >= 2 && physicalPrimary
+      ? purchases.filter((purchase) => {
+          if (purchase.userId !== first.userId) return false;
+          if (!purchase.orderNumber || !purchase.orderedAt) return false;
+          if (purchase.confidence === null || purchase.confidence < MIN_VERIFIED_PURCHASE_CONFIDENCE) return false;
+          if (!group.some((row) => verifiedBrandIdentityMatches(row.parcelSender, purchase, carrierSlug))) return false;
+          if (!group.some((row) => exactCodMatch(purchase, row))) return false;
+          return group.some((row) => withinWindow(row.receivedAt, purchase.orderedAt!));
+        })
+      : [];
+    const verifiedPurchaseIds = [...new Set(verifiedCandidates.map((purchase) => purchase.purchaseId))];
+
+    if (verifiedPurchaseIds.length === 1 && physicalPrimary) {
+      const purchase = verifiedCandidates.find((row) => row.purchaseId === verifiedPurchaseIds[0])!;
+      decisions.push({
+        trackingNumber,
+        carrierSlug,
+        shipmentStatus,
+        purchaseId: purchase.purchaseId,
+        decision: 'linkable',
+        sourceEmailIds: [...new Set(group.map((row) => row.sourceEmailId))],
+        merchantAnchorSourceId: null,
+        primarySourceId: physicalPrimary.sourceEmailId,
+        confidence: Math.min(confidence, purchase.confidence ?? confidence),
+        reasons: [
+          'verified_brand_legal_entity_alias',
+          'exact_cod_matches_purchase_total',
+          'multi_event_carrier_chain',
+          'purchase_and_carrier_events_within_7_days',
+          'single_purchase_candidate',
+          ...(shipmentStatus === 'ready_for_pickup' ? ['explicit_ready_for_pickup_evidence'] : []),
+        ],
+      });
+    } else if (verifiedPurchaseIds.length > 1) {
+      decisions.push({
+        trackingNumber,
+        carrierSlug,
+        shipmentStatus,
+        purchaseId: null,
+        decision: 'review',
+        sourceEmailIds: group.map((row) => row.sourceEmailId),
+        merchantAnchorSourceId: null,
+        primarySourceId: null,
+        confidence,
+        reasons: ['multiple_verified_brand_cod_purchase_candidates'],
+      });
     } else {
-      decisions.push({ trackingNumber, carrierSlug, shipmentStatus, purchaseId: null, decision: 'unmatched', sourceEmailIds: group.map((row) => row.sourceEmailId), merchantAnchorSourceId: null, confidence, reasons: ['no_matching_merchant_shipment_anchor'] });
+      decisions.push({
+        trackingNumber,
+        carrierSlug,
+        shipmentStatus,
+        purchaseId: null,
+        decision: 'unmatched',
+        sourceEmailIds: group.map((row) => row.sourceEmailId),
+        merchantAnchorSourceId: null,
+        primarySourceId: null,
+        confidence,
+        reasons: ['no_matching_merchant_shipment_anchor'],
+      });
     }
   }
 
@@ -225,17 +364,36 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
     const eventType = result.event_type;
     if (!TRUSTED_VALIDATION.has(validation) || confidence === null || confidence < 0.7 || (eventType !== 'shipment' && eventType !== 'delivery')) continue;
     evidenceRows.push({
-      sourceEmailId: String(source.id), userId: String(source.user_id), senderDomain: fromDomain(source.from_address ?? null), receivedAt: String(source.received_at),
-      eventType, orderNumber: stringOrNull(result.order_number), trackingNumber: stringOrNull(result.tracking_number), carrier: stringOrNull(result.carrier), parcelSender: stringOrNull(result.parcel_sender), shipmentPhase: stringOrNull(result.shipment_phase), confidence,
+      sourceEmailId: String(source.id),
+      userId: String(source.user_id),
+      senderDomain: fromDomain(source.from_address ?? null),
+      receivedAt: String(source.received_at),
+      eventType,
+      orderNumber: stringOrNull(result.order_number),
+      trackingNumber: stringOrNull(result.tracking_number),
+      carrier: stringOrNull(result.carrier),
+      parcelSender: stringOrNull(result.parcel_sender),
+      shipmentPhase: stringOrNull(result.shipment_phase),
+      codAmount: numberOrNull(result.cod_amount),
+      codCurrency: stringOrNull(result.cod_currency),
+      confidence,
     });
   }
 
   const { data: purchaseRows, error: purchaseError } = await db.from('purchases')
-    .select('id,user_id,merchant_name,merchant_domain,order_number')
+    .select('id,user_id,merchant_name,merchant_domain,order_number,total_amount,currency,ordered_at,confidence')
     .eq('user_id', connection.user_id);
   if (purchaseError) throw new Error(`Carrier bridge purchase scan failed: ${purchaseError.message}`);
   const purchases: CarrierBridgePurchase[] = ((purchaseRows ?? []) as Array<Record<string, any>>).map((row) => ({
-    purchaseId: String(row.id), userId: String(row.user_id), merchantName: stringOrNull(row.merchant_name), merchantDomain: stringOrNull(row.merchant_domain), orderNumber: stringOrNull(row.order_number),
+    purchaseId: String(row.id),
+    userId: String(row.user_id),
+    merchantName: stringOrNull(row.merchant_name),
+    merchantDomain: stringOrNull(row.merchant_domain),
+    orderNumber: stringOrNull(row.order_number),
+    totalAmount: numberOrNull(row.total_amount),
+    currency: stringOrNull(row.currency),
+    orderedAt: stringOrNull(row.ordered_at),
+    confidence: numberOrNull(row.confidence),
   }));
 
   const decisions = resolveCarrierParcelSenderBridges(purchases, evidenceRows);
@@ -243,13 +401,21 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
   let review = 0;
   for (const decision of decisions) {
     if (decision.decision === 'review') { review += 1; continue; }
-    if (decision.decision !== 'linkable' || !decision.purchaseId || !decision.merchantAnchorSourceId) continue;
+    if (decision.decision !== 'linkable' || !decision.purchaseId || !decision.primarySourceId) continue;
     const sources = evidenceRows.filter((row) => decision.sourceEmailIds.includes(row.sourceEmailId));
-    const merchantAnchor = sources.find((row) => row.sourceEmailId === decision.merchantAnchorSourceId);
-    if (!merchantAnchor) continue;
+    const merchantAnchor = decision.merchantAnchorSourceId
+      ? sources.find((row) => row.sourceEmailId === decision.merchantAnchorSourceId) ?? null
+      : null;
+    const primarySource = sources.find((row) => row.sourceEmailId === decision.primarySourceId);
+    if (!primarySource) continue;
     const carrierRows = sources.filter((row) => isCarrierSenderDomain(normalizeDomain(row.senderDomain)) && normalizeTracking(row.trackingNumber) === decision.trackingNumber);
     if (carrierRows.length === 0) continue;
+    const physicalCarrierRows = carrierRows.filter((row) => row.eventType === 'delivery' || Boolean(row.shipmentPhase && row.shipmentPhase !== 'shipment_created'));
+    if (!merchantAnchor && physicalCarrierRows.length === 0) continue;
     const firstCarrierAt = [...carrierRows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]!.receivedAt;
+    const firstPhysicalCarrierAt = physicalCarrierRows.length > 0
+      ? [...physicalCarrierRows].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0]!.receivedAt
+      : firstCarrierAt;
     const lastEventAt = [...carrierRows].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]!.receivedAt;
 
     const { error: upsertError } = await db.rpc('controlled_upsert_shipment_with_sources', {
@@ -259,10 +425,10 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
       p_carrier_slug: decision.carrierSlug,
       p_tracking_number: decision.trackingNumber,
       p_status: decision.shipmentStatus,
-      p_shipped_at: merchantAnchor.receivedAt || firstCarrierAt,
+      p_shipped_at: merchantAnchor?.receivedAt ?? firstPhysicalCarrierAt,
       p_delivered_at: null,
       p_last_event_at: lastEventAt,
-      p_source_email_id: decision.merchantAnchorSourceId,
+      p_source_email_id: primarySource.sourceEmailId,
       p_confidence: decision.confidence,
       p_sources: sources.map((row) => ({ source_email_id: row.sourceEmailId, confidence: row.confidence })),
     });
