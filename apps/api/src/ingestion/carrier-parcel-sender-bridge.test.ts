@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  carrierBridgeShippedAt,
   resolveCarrierParcelSenderBridges,
   type CarrierBridgeEvidence,
   type CarrierBridgePurchase,
@@ -75,8 +76,6 @@ function scitecPurchase(overrides: Partial<CarrierBridgePurchase> = {}): Carrier
 
 function scitecCarrierChain(): CarrierBridgeEvidence[] {
   return [
-    // Mirrors the current historical deterministic pre-advice row: tracking is
-    // trustworthy, but parcel sender/COD/phase are not yet enriched.
     carrier({
       sourceEmailId: 'fox-pre-advice',
       receivedAt: '2026-07-14T08:48:29.000Z',
@@ -87,8 +86,6 @@ function scitecCarrierChain(): CarrierBridgeEvidence[] {
       codCurrency: null,
       confidence: 0.96,
     }),
-    // The warehouse email exists in the mailbox but may still be review-only
-    // and therefore lacks a trusted tracking identity; it must not be needed.
     carrier({
       sourceEmailId: 'fox-warehouse-review-shape',
       receivedAt: '2026-07-14T17:33:28.000Z',
@@ -99,8 +96,6 @@ function scitecCarrierChain(): CarrierBridgeEvidence[] {
       codCurrency: null,
       confidence: 0.99,
     }),
-    // Pickup-ready evidence provides the verified legal sender, exact COD and
-    // explicit physical lifecycle state.
     carrier({
       sourceEmailId: 'fox-pickup',
       receivedAt: '2026-07-15T09:55:07.000Z',
@@ -113,6 +108,35 @@ function scitecCarrierChain(): CarrierBridgeEvidence[] {
     }),
   ];
 }
+
+test('shipment_created merchant anchor never defines physical shipped_at', () => {
+  const packing = merchantShipment({
+    receivedAt: '2026-07-22T20:02:25.000Z',
+    shipmentPhase: 'shipment_created',
+    carrier: 'MPL',
+  });
+  const mplAccepted = carrier({
+    senderDomain: 'posta.hu',
+    receivedAt: '2026-07-23T14:44:56.000Z',
+    carrier: 'Magyar Posta Logisztika (MPL)',
+    trackingNumber: 'PB9S650307180',
+    parcelSender: 'Szidibox Karton Kft.',
+    shipmentPhase: 'shipped',
+  });
+  assert.equal(carrierBridgeShippedAt(packing, [mplAccepted]), '2026-07-23T14:44:56.000Z');
+});
+
+test('shipment_created merchant anchor without physical carrier evidence has no shipped_at', () => {
+  const packing = merchantShipment({ shipmentPhase: 'shipment_created' });
+  const preAdvice = carrier({ shipmentPhase: 'shipment_created' });
+  assert.equal(carrierBridgeShippedAt(packing, [preAdvice]), null);
+});
+
+test('legacy physical merchant shipment can still define an earlier shipped_at', () => {
+  const physicalMerchant = merchantShipment({ receivedAt: '2026-07-29T13:02:30.000Z', shipmentPhase: null });
+  const laterCarrier = carrier({ receivedAt: '2026-07-29T19:52:57.000Z', shipmentPhase: 'in_transit' });
+  assert.equal(carrierBridgeShippedAt(physicalMerchant, [laterCarrier]), '2026-07-29T13:02:30.000Z');
+});
 
 test('bridges carrier tracking to one purchase using parcel sender plus merchant shipment anchor', () => {
   const [decision] = resolveCarrierParcelSenderBridges([purchase()], [merchantShipment(), carrier()]);

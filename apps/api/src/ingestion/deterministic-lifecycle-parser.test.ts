@@ -30,6 +30,20 @@ test('parses MPL accepted parcel as shipped with sender, tracking and COD', () =
   assert.equal(result.extraction.cod_currency, 'HUF');
 });
 
+test('parses Nylas-style flattened MPL labels without relying on line breaks', () => {
+  const result = parseDeterministicLifecycleEmail({
+    senderDomains: ['posta.hu'],
+    senderEmails: ['kozponti.ertesites@posta.hu'],
+    subject: 'Csomagot adtak fel neked',
+    bodyText: 'Értesítünk, hogy csomagot adtak fel Neked. Csomag adatai Feladó: Szidibox Karton Kft. Csomagazonosító: PB9S650307180 Feladás dátuma: 2026.07.23. Kézbesítési cím: Szolnok Árufizetési összeg: 26 390 Ft',
+  });
+  assert.ok(result);
+  assert.equal(result.shipmentPhase, 'shipped');
+  assert.equal(result.extraction.parcel_sender, 'Szidibox Karton Kft.');
+  assert.equal(result.extraction.tracking_number, 'PB9S650307180');
+  assert.equal(result.extraction.cod_amount, 26390);
+});
+
 test('parses MPL courier-out and pickup-ready as distinct non-delivered phases', () => {
   const base = 'Feladó: Szidibox Karton Kft.\nCsomagazonosító: PB9S650307180\nÁrufizetési összeg: 26 390 Ft';
   const out = parseDeterministicLifecycleEmail({
