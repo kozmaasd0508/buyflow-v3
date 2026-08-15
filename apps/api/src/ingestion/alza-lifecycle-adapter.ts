@@ -36,6 +36,13 @@ function parseHuf(raw: string | undefined): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function isProcessingSignal(subject: string, body: string): boolean {
+  return (
+    /\bmar dolgozunk rajta\b/i.test(subject) &&
+    /\bmegrendelesed feldolgozasat megkezdtuk\b/i.test(body)
+  ) || /\bmegrendeles(?:ed)? feldolgozasat megkezdtuk\b/i.test(`${subject}\n${body}`);
+}
+
 function extraction(input: {
   orderNumber: string;
   paymentStatus?: EmailExtraction['payment_status'];
@@ -78,11 +85,7 @@ function parseStrictProcessingEvidence(input: {
   body: string;
   orderNumber: string;
 }): AlzaLifecycleParseResult | null {
-  const processing = (
-    /\bmar dolgozunk rajta\b/i.test(input.subject) &&
-    /\bmegrendelesed feldolgozasat megkezdtuk\b/i.test(input.body)
-  ) || /\bmegrendeles(?:ed)? feldolgozasat megkezdtuk\b/i.test(`${input.subject}\n${input.body}`);
-  if (!processing) return null;
+  if (!isProcessingSignal(input.subject, input.body)) return null;
 
   const explicitNoContract = /\bmeg nem jott letre szerzodes kozottunk\b/i.test(input.body)
     && /\ba szerzodes letrejotterol tovabbi e-mailben fogunk tajekoztatni\b/i.test(input.body);
@@ -198,5 +201,17 @@ export function parseAlzaLifecycleEmail(input: {
     };
   }
 
-  return parseStrictProcessingEvidence({ subject, body, orderNumber });
+  const strictProcessing = parseStrictProcessingEvidence({ subject, body, orderNumber });
+  if (strictProcessing) return strictProcessing;
+
+  if (isProcessingSignal(subject, body)) {
+    return {
+      extraction: extraction({ orderNumber }),
+      lifecycleEvent: 'order_processing',
+      parserVersion: PARSER_VERSION,
+      reasons: ['known_alza_sender', 'explicit_order_processing', 'explicit_order_number'],
+    };
+  }
+
+  return null;
 }
