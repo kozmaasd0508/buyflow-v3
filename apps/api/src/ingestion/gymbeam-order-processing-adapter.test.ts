@@ -53,6 +53,26 @@ test('parses trusted GymBeam order-processing summary without creating an order_
   assert.ok(result.reasons.includes('reconciled_order_total'));
 });
 
+test('parses the flattened table shape produced by compacted transactional HTML', () => {
+  const flattened = 'Köszönjük! Megkaptuk a rendelésedet. Feldolgozás alatt Elküldve Számla A 3010206178 számú rendelésed már készül! Rendelési összesítő: 1x Cink-kelát (biszglicinát) - GymBeam Kapszula: 90 kapsz. 1 690Ft 1x D3-vitamin 2000 IU - GymBeam Kapszula: 120 kapsz. 1 990Ft 3x Thor - GymBeam Grammsúly: 7 g, Ízesítés: zöldalma 1 590Ft 1x Csuklóbandázs - GymBeam 2 690Ft Szállítás: 1 190Ft Utánvét: 300Ft Szállítási mód: Kikézbesítés Express One futárral Fizetési mód: Utánvéttel Bruttó összeg: 9 450Ft Szállítási cím: Példa cím';
+  const result = parseGymBeamOrderProcessingEmail({
+    senderDomains: ['service.gymbeam.hu'],
+    subject: 'Gáborné, a rendelésed feldolgozás alatt van.',
+    bodyText: flattened,
+  });
+
+  assert.ok(result);
+  assert.equal(result.parserVersion, 'gymbeam-order-processing-v1.1');
+  assert.equal(result.extraction.order_number, '3010206178');
+  assert.equal(result.extraction.total, 9450);
+  assert.equal(result.extraction.subtotal, 7960);
+  assert.equal(result.extraction.products.length, 4);
+  assert.equal(result.extraction.products[2]?.name, 'Thor - GymBeam');
+  assert.equal(result.extraction.products[2]?.quantity, 3);
+  assert.equal(result.extraction.products[2]?.unit_price, 530);
+  assert.equal(result.extraction.products[3]?.name, 'Csuklóbandázs - GymBeam');
+});
+
 test('is wired into deterministic lifecycle parsing', () => {
   const result = parseDeterministicLifecycleEmail({
     senderDomains: ['service.gymbeam.hu'],
@@ -61,7 +81,7 @@ test('is wired into deterministic lifecycle parsing', () => {
   });
   assert.ok(result);
   assert.equal(result.lifecycleEvent, 'order_processing');
-  assert.equal(result.parserVersion, 'gymbeam-order-processing-v1');
+  assert.equal(result.parserVersion, 'gymbeam-order-processing-v1.1');
 });
 
 test('does not parse the same text from an untrusted sender', () => {
