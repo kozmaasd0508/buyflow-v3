@@ -1,7 +1,7 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 
-const PARSER_VERSION = 'generic-order-confirmation-v1.1';
+const PARSER_VERSION = 'generic-order-confirmation-v1.2';
 
 const SHARED_PLATFORM_SENDER_DOMAINS = [
   'shopifyemail.com',
@@ -130,6 +130,7 @@ const SUBJECT_PATTERNS = [
 const ORDER_PATTERNS = [
   /\border\s*(?:number|no\.?|id)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\border\s*#\s*[:#-]?\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+  /\b(?:rendeles|megrendeles)\s*:\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:bestellnummer|bestellnr\.?|auftragsnummer)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:numero de commande|commande n[°o]?|n[°o]? de commande)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
