@@ -15,9 +15,6 @@ interface VerifiedBrandCarrierIdentity {
   carrierSlug: string;
 }
 
-// Keep this registry deliberately narrow. These aliases represent a verified
-// brand/legal-entity relationship, not fuzzy merchant matching. Scitec's
-// official legal pages identify BioTech USA Kft. as the operating entity.
 const VERIFIED_BRAND_CARRIER_IDENTITIES: VerifiedBrandCarrierIdentity[] = [
   { merchantDomain: 'scitec.hu', parcelSender: 'biotechusa', carrierSlug: 'foxpost' },
 ];
@@ -161,9 +158,7 @@ export function carrierBridgeShippedAt(
   carrierRows: CarrierBridgeEvidence[],
 ): string | null {
   const firstPhysicalCarrierAt = earliestPhysicalCarrierSource(carrierRows)?.receivedAt ?? null;
-  if (merchantAnchor?.shipmentPhase === 'shipment_created') {
-    return firstPhysicalCarrierAt;
-  }
+  if (merchantAnchor?.shipmentPhase === 'shipment_created') return firstPhysicalCarrierAt;
   return merchantAnchor?.receivedAt ?? firstPhysicalCarrierAt;
 }
 
@@ -345,7 +340,7 @@ function numberOrNull(value: unknown): number | null {
 }
 
 function canonicalCarrier(slug: string): string {
-  const names: Record<string, string> = { 'express-one': 'Express One', foxpost: 'Foxpost', packeta: 'Packeta', dpd: 'DPD', gls: 'GLS' };
+  const names: Record<string, string> = { 'express-one': 'Express One', foxpost: 'Foxpost', packeta: 'Packeta', dpd: 'DPD', gls: 'GLS', mpl: 'MPL' };
   return names[slug] ?? slug;
 }
 
