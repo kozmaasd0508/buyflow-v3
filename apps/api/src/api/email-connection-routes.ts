@@ -26,6 +26,8 @@ interface NylasTokenResponse {
   provider?: string;
 }
 
+type ScanWindowDays = 7 | 30 | 90;
+
 async function requireUser(request: FastifyRequest, reply: FastifyReply) {
   const user = await resolveAuthenticatedApiUser(request.headers.authorization);
   if (!user) {
@@ -43,12 +45,17 @@ function publicBaseUrl(): string {
   return env.BUYFLOW_PUBLIC_BASE_URL.replace(/\/$/, '');
 }
 
-function scheduleScan(app: FastifyInstance, jobId: string) {
+function validScanWindow(value: unknown): value is ScanWindowDays {
+  return value === 7 || value === 30 || value === 90;
+}
+
+function scheduleScan(app: FastifyInstance, jobId: string, windowDays: ScanWindowDays) {
   setImmediate(() => {
     void processEmailScanJob(jobId, env.BUYFLOW_AUTOMATION_MODE).catch((error) => {
       app.log.error({
         errorType: error instanceof Error ? error.name : 'UnknownError',
-      }, 'Initial 7 day email scan failed and was scheduled for retry');
+        windowDays,
+      }, 'Email scan failed and was scheduled for retry');
     });
   });
 }
@@ -145,13 +152,14 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
     if (connectionIds.length > 0) {
       const { data: scans, error: scanError } = await db
         .from('email_scan_jobs')
-        .select('email_connection_id,window_days,status,processed_at,result')
+        .select('email_connection_id,window_days,status,processed_at,result,created_at')
         .eq('user_id', user.id)
         .eq('kind', 'initial')
-        .in('email_connection_id', connectionIds);
+        .in('email_connection_id', connectionIds)
+        .order('created_at', { ascending: false });
 
       if (scanError) {
-        request.log.error({ errorType: 'EmailScanStatusReadError' }, 'Failed to load initial email scan status');
+        request.log.error({ errorType: 'EmailScanStatusReadError' }, 'Failed to load email scan status');
         return reply.code(500).send({ error: 'email_connections_unavailable' });
       }
       scanRows = scans ?? [];
@@ -223,9 +231,22 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: { id: string } }>('/api/email-connections/:id/initial-scan', async (request, reply) => {
+  app.post<{
+    Params: { id: string };
+    Body: { windowDays?: number };
+  }>('/api/email-connections/:id/initial-scan', async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
+
+    const requestedWindow = request.body?.windowDays;
+    const windowDays: ScanWindowDays = requestedWindow === undefined
+      ? 7
+      : validScanWindow(requestedWindow)
+        ? requestedWindow
+        : 7;
+    if (requestedWindow !== undefined && !validScanWindow(requestedWindow)) {
+      return reply.code(400).send({ error: 'invalid_scan_window' });
+    }
 
     const db = getSupabaseAdmin() as any;
     const { data: connection, error } = await db
@@ -247,7 +268,7 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
       const jobId = await enqueueInitialEmailScan({
         userId: user.id,
         emailConnectionId: connection.id,
-        windowDays: 7,
+        windowDays,
       });
 
       const { data: job } = await db
@@ -256,15 +277,17 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
         .eq('id', jobId)
         .single();
 
-      if (job?.status !== 'processed') scheduleScan(app, jobId);
+      if (job?.status !== 'processed') scheduleScan(app, jobId, windowDays);
       return reply.code(job?.status === 'processed' ? 200 : 202).send({
+        jobId,
         status: job?.status ?? 'pending',
-        windowDays: 7,
+        windowDays,
       });
     } catch (scanError) {
       request.log.error({
         errorType: scanError instanceof Error ? scanError.name : 'UnknownError',
-      }, 'Failed to enqueue initial 7 day email scan');
+        windowDays,
+      }, 'Failed to enqueue email scan');
       return reply.code(503).send({ error: 'email_scan_unavailable' });
     }
   });
@@ -333,7 +356,7 @@ export async function registerEmailConnectionRoutes(app: FastifyInstance) {
         emailConnectionId: connection.id,
         windowDays: 7,
       });
-      scheduleScan(app, scanJobId);
+      scheduleScan(app, scanJobId, 7);
 
       return reply.redirect(successUrl);
     } catch (error) {
