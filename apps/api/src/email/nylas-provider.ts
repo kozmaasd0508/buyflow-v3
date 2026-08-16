@@ -3,6 +3,7 @@ import type { EmailProvider } from './provider.js';
 import type {
   EmailAddress,
   EmailAttachmentMetadata,
+  EmailHeader,
   NormalizedEmail,
   SearchMessagesInput,
   SearchMessagesPage,
@@ -22,6 +23,11 @@ type NylasAttachment = {
   contentId?: string;
 };
 
+type NylasHeader = {
+  name: string;
+  value: string;
+};
+
 export type NylasMessageLike = {
   id: string;
   date: number;
@@ -33,6 +39,7 @@ export type NylasMessageLike = {
   bcc?: NylasEmailName[];
   snippet?: string;
   body?: string;
+  headers?: NylasHeader[];
   folders?: string[];
   attachments?: NylasAttachment[];
 };
@@ -53,6 +60,9 @@ type NylasClientShape = {
     find(input: {
       identifier: string;
       messageId: string;
+      queryParams?: {
+        fields?: 'include_headers' | 'include_basic_headers' | 'standard';
+      };
     }): Promise<{
       data: NylasMessageLike;
     }>;
@@ -93,6 +103,16 @@ function normalizeAddresses(addresses?: NylasEmailName[]): EmailAddress[] {
   }));
 }
 
+function normalizeHeaders(headers?: NylasHeader[]): EmailHeader[] | undefined {
+  if (!headers) return undefined;
+  return headers
+    .filter((header) => header.name?.trim() && header.value !== undefined)
+    .map((header) => ({
+      name: header.name.trim(),
+      value: String(header.value),
+    }));
+}
+
 function normalizeAttachments(
   attachments?: NylasAttachment[],
 ): EmailAttachmentMetadata[] {
@@ -123,6 +143,7 @@ export function normalizeNylasMessage(
     receivedAt: new Date(message.date * 1000).toISOString(),
     snippet: message.snippet,
     bodyHtml: message.body,
+    ...(message.headers ? { headers: normalizeHeaders(message.headers) } : {}),
     folders: [...(message.folders ?? [])],
     attachments: normalizeAttachments(message.attachments),
   };
@@ -164,6 +185,9 @@ export class NylasEmailProvider implements EmailProvider {
     const response = await this.client.messages.find({
       identifier: this.grantId,
       messageId: providerMessageId,
+      queryParams: {
+        fields: 'include_headers',
+      },
     });
 
     return normalizeNylasMessage(response.data);
