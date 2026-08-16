@@ -35,7 +35,7 @@ export const UNAS_TEST_V1: ProtocolProfile = {
       title: 'Observed UNAS customer order confirmations (sanitized)',
       provenance: 'observed_real_email',
       observed_at: '2026-08-16',
-      notes: 'Multiple merchant-branded customer confirmations shared UNAS transport infrastructure and the same order-details structural block. No private customer data is stored in this profile.',
+      notes: 'A real merchant-branded confirmation exposed UNAS transport infrastructure, while multiple real merchant confirmations shared the same visible order-details structure. No private customer data is stored in this profile.',
     },
   ],
   events: [
