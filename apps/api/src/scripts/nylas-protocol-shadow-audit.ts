@@ -14,15 +14,21 @@ import type {
   ProtocolProhibition,
 } from '../protocols/types.js';
 
-const PAGE_SIZE = 100;
+// Nylas explicitly recommends limit <= 20 for large Gmail mailbox scans to
+// reduce provider 429s. Keep this deliberately small even if the API allows more.
+const PAGE_SIZE = 20;
 const MAX_MESSAGES = Math.min(
   Math.max(Number.parseInt(process.env.PROTOCOL_SHADOW_MAX_MESSAGES ?? '10000', 10) || 10_000, 1),
   10_000,
 );
+// Gmail messages.get is quota-expensive. Two workers with a 500 ms inter-fetch
+// pause stay well below the current per-user quota under normal latency.
 const FULL_MESSAGE_CONCURRENCY = Math.min(
-  Math.max(Number.parseInt(process.env.PROTOCOL_SHADOW_CONCURRENCY ?? '8', 10) || 8, 1),
-  16,
+  Math.max(Number.parseInt(process.env.PROTOCOL_SHADOW_CONCURRENCY ?? '2', 10) || 2, 1),
+  2,
 );
+const FULL_MESSAGE_MIN_INTERVAL_MS = 500;
+const MAX_RATE_LIMIT_RETRIES = 6;
 
 function domainOf(email: string): string {
   const normalized = email.trim().toLowerCase();
@@ -38,6 +44,50 @@ function sortedObject(map: Map<string, number>): Record<string, number> {
   return Object.fromEntries(
     [...map.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
   );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type ErrorLike = {
+  statusCode?: unknown;
+  headers?: unknown;
+};
+
+function statusCodeOf(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+  const value = (error as ErrorLike).statusCode;
+  return typeof value === 'number' ? value : null;
+}
+
+function retryAfterMsOf(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+  const headers = (error as ErrorLike).headers;
+  if (!headers || typeof headers !== 'object') return null;
+  const raw = (headers as Record<string, unknown>)['retry-after'];
+  const seconds = typeof raw === 'string' ? Number.parseFloat(raw) : Number.NaN;
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds * 1000) : null;
+}
+
+async function withRateLimitRetry<T>(
+  operation: () => Promise<T>,
+  onRetry: () => void,
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (statusCodeOf(error) !== 429 || attempt >= MAX_RATE_LIMIT_RETRIES) throw error;
+      const retryAfterMs = retryAfterMsOf(error);
+      const exponentialMs = Math.min(60_000, 5_000 * (2 ** attempt));
+      const jitterMs = Math.floor(Math.random() * 1_000);
+      onRetry();
+      attempt += 1;
+      await sleep(Math.max(retryAfterMs ?? 0, exponentialMs) + jitterMs);
+    }
+  }
 }
 
 function senderMayMatchProfile(message: NormalizedEmail, profile: ProtocolProfile): boolean {
@@ -112,6 +162,7 @@ async function main() {
   let senderCandidateMessages = 0;
   let fullMessageFetches = 0;
   let fullMessageFetchFailures = 0;
+  let rateLimitRetries = 0;
   let matchedMessages = 0;
   let matchedEvidenceRows = 0;
   let positiveLifecycleMessages = 0;
@@ -130,11 +181,14 @@ async function main() {
   let newestReceivedAt: string | null = null;
 
   do {
-    const page = await provider.searchMessages({
-      query: env.EMAIL_DISCOVERY_QUERY,
-      limit: PAGE_SIZE,
-      ...(cursor ? { cursor } : {}),
-    });
+    const page = await withRateLimitRetry(
+      () => provider.searchMessages({
+        query: env.EMAIL_DISCOVERY_QUERY,
+        limit: PAGE_SIZE,
+        ...(cursor ? { cursor } : {}),
+      }),
+      () => { rateLimitRetries += 1; },
+    );
     pages += 1;
 
     const pageCandidates: Array<{
@@ -175,7 +229,10 @@ async function main() {
       async ({ metadata, profiles: candidateProfiles }) => {
         fullMessageFetches += 1;
         try {
-          const fullMessage = await provider.getMessage(metadata.providerMessageId);
+          const fullMessage = await withRateLimitRetry(
+            () => provider.getMessage(metadata.providerMessageId),
+            () => { rateLimitRetries += 1; },
+          );
           const input = protocolDetectionInputFromEmail(fullMessage);
           return {
             metadata,
@@ -186,6 +243,8 @@ async function main() {
         } catch {
           fullMessageFetchFailures += 1;
           return null;
+        } finally {
+          await sleep(FULL_MESSAGE_MIN_INTERVAL_MS);
         }
       },
     );
@@ -255,6 +314,8 @@ async function main() {
       maxMessagesSafetyCap: MAX_MESSAGES,
       truncated,
       fullMessageConcurrency: FULL_MESSAGE_CONCURRENCY,
+      fullMessageMinIntervalMs: FULL_MESSAGE_MIN_INTERVAL_MS,
+      rateLimitRetries,
     },
     scan: {
       totalMessages: totalScanned,
