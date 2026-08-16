@@ -40,6 +40,9 @@ export type ProtocolProvenanceLevel =
 export type ProtocolEvidenceField =
   | 'sender_domain'
   | 'sender_address'
+  | 'transport_host'
+  | 'dkim_domain'
+  | 'return_path_domain'
   | 'subject'
   | 'body'
   | 'html'
@@ -134,6 +137,9 @@ export interface ProtocolEvidence {
 export interface ProtocolDetectionInput {
   senderDomains: string[];
   senderAddresses?: string[];
+  transportHosts?: string[];
+  dkimDomains?: string[];
+  returnPathDomains?: string[];
   subject?: string | null;
   bodyText?: string | null;
   bodyHtml?: string | null;
