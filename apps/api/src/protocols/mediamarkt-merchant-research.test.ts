@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { detectProtocolEvidence } from './detect.js';
-import { detectShadowProtocolEvidence } from './shadow.js';
+import { MEDIAMARKT_MERCHANT_RESEARCH_V1 } from './profiles/mediamarkt-merchant-research-v1.js';
 
-function rows(input: Parameters<typeof detectShadowProtocolEvidence>[0]) {
-  return detectShadowProtocolEvidence(input)
-    .filter((row) => row.protocol_id === 'merchant.hu.mediamarkt');
+function rows(input: Parameters<typeof detectProtocolEvidence>[0]) {
+  return detectProtocolEvidence(input, [MEDIAMARKT_MERCHANT_RESEARCH_V1]);
 }
 
 const AUTH = {
