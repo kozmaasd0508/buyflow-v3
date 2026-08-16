@@ -10,6 +10,7 @@ import { GYEREKJATEKBOLT_SHOPRENTER_TEST_V1 } from './profiles/gyerekjatekbolt-s
 import { HOMEAUTOMATICA_SHOPRENTER_TEST_V1 } from './profiles/homeautomatica-shoprenter-test-v1.js';
 import { MPL_CARRIER_TEST_V1 } from './profiles/mpl-carrier-test-v1.js';
 import { PACKETA_HUNGARY_CARRIER_TEST_V1 } from './profiles/packeta-hungary-carrier-test-v1.js';
+import { PAYPAL_PAYMENT_TEST_V1 } from './profiles/paypal-payment-test-v1.js';
 import { SHOPIFY_TEST_V1 } from './profiles/shopify-test-v1.js';
 import { SHOPRENTER_TEST_V1 } from './profiles/shoprenter-test-v1.js';
 import { SIMPLEPAY_PAYMENT_TEST_V1 } from './profiles/simplepay-payment-test-v1.js';
@@ -43,6 +44,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   SIMPLEPAY_PAYMENT_TEST_V1,
   BARION_PAYMENT_TEST_V1,
   STRIPE_PAYMENT_TEST_V1,
+  PAYPAL_PAYMENT_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
