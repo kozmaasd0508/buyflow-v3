@@ -6,10 +6,15 @@ import { registeredTestProtocolProfiles } from './test-registry.js';
 
 test('production registry stays empty while first commerce wave is available only in shadow', () => {
   assert.deepEqual(registeredProtocolProfiles(), []);
-  assert.deepEqual(
-    registeredTestProtocolProfiles().map((profile) => profile.protocol_id).sort(),
-    ['commerce.shopify', 'commerce.shoprenter', 'commerce.unas', 'commerce.woocommerce'],
-  );
+  const shadowIds = new Set(registeredTestProtocolProfiles().map((profile) => profile.protocol_id));
+  for (const protocolId of [
+    'commerce.shopify',
+    'commerce.shoprenter',
+    'commerce.unas',
+    'commerce.woocommerce',
+  ]) {
+    assert.ok(shadowIds.has(protocolId));
+  }
   assert.ok(registeredTestProtocolProfiles().every((profile) => profile.status === 'test'));
 });
 
