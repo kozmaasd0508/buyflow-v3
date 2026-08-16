@@ -1,5 +1,6 @@
 import type { ProtocolProfile } from './types.js';
 import { assertValidProtocolProfile } from './profile-validator.js';
+import { FORPROSHOP_SHOPRENTER_TEST_V1 } from './profiles/forproshop-shoprenter-test-v1.js';
 import { GYEREKJATEKBOLT_SHOPRENTER_TEST_V1 } from './profiles/gyerekjatekbolt-shoprenter-test-v1.js';
 import { HOMEAUTOMATICA_SHOPRENTER_TEST_V1 } from './profiles/homeautomatica-shoprenter-test-v1.js';
 import { SHOPIFY_TEST_V1 } from './profiles/shopify-test-v1.js';
@@ -23,6 +24,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   GYEREKJATEKBOLT_SHOPRENTER_TEST_V1,
   HOMEAUTOMATICA_SHOPRENTER_TEST_V1,
   WEBARENA_SHOPRENTER_TEST_V1,
+  FORPROSHOP_SHOPRENTER_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
