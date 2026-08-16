@@ -12,6 +12,7 @@ import { GLS_HUNGARY_CARRIER_TEST_V1 } from './profiles/gls-hungary-carrier-test
 import { GYEREKJATEKBOLT_SHOPRENTER_TEST_V1 } from './profiles/gyerekjatekbolt-shoprenter-test-v1.js';
 import { GYMBEAM_MERCHANT_TEST_V1 } from './profiles/gymbeam-merchant-test-v1.js';
 import { HOMEAUTOMATICA_SHOPRENTER_TEST_V1 } from './profiles/homeautomatica-shoprenter-test-v1.js';
+import { IPON_MERCHANT_TEST_V1 } from './profiles/ipon-merchant-test-v1.js';
 import { MPL_CARRIER_TEST_V1 } from './profiles/mpl-carrier-test-v1.js';
 import { NOTINO_MERCHANT_TEST_V1 } from './profiles/notino-merchant-test-v1.js';
 import { PACKETA_HUNGARY_CARRIER_TEST_V1 } from './profiles/packeta-hungary-carrier-test-v1.js';
@@ -51,6 +52,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   NOTINO_MERCHANT_TEST_V1,
   PCX_MERCHANT_TEST_V1,
   ALZA_MERCHANT_TEST_V1,
+  IPON_MERCHANT_TEST_V1,
   FOXPOST_CARRIER_TEST_V1,
   GLS_HUNGARY_CARRIER_TEST_V1,
   MPL_CARRIER_TEST_V1,
