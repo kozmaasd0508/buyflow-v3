@@ -36,7 +36,7 @@ export const EXPRESSONE_CARRIER_TEST_V1: ProtocolProfile = {
       title: 'Express One Hungary - Kiegészítő szolgáltatások / Címzett értesítések',
       url: 'https://expressone.hu/kiegeszito-szolgaltatasok',
       provenance: 'official_documentation',
-      notes: 'Express One documents automatic recipient pre-notifications and a delivery-morning notification with a narrowed two-hour delivery window, courier details and delivery-modification options.',
+      notes: 'Express One documents automatic recipient pre-notifications and a delivery-morning notification with a narrowed two-hour window, courier details and delivery-modification options.',
     },
     {
       id: 'expressone-official-tracking-notification-flow',
@@ -124,7 +124,7 @@ export const EXPRESSONE_CARRIER_TEST_V1: ProtocolProfile = {
         {
           id: 'expressone.created.sender-notified',
           field: 'body',
-          pattern: 'partner[uü]nk .* az [ÖO]n r[eé]sz[eé]re k[eé]zbes[ií]tend[oő].* k[uü]ldem[eé]ny felad[aá]s[aá]t jelezte fel[eé]nk',
+          pattern: 'partner[uü]nk\\s+az [ÖO]n r[eé]sz[eé]re k[eé]zbes[ií]tend[oő][\\s\\S]*k[uü]ldem[eé]ny felad[aá]s[aá]t jelezte fel[eé]nk',
           required: true,
           source_ids: ['expressone-observed-preadvice'],
         },
@@ -306,7 +306,7 @@ export const EXPRESSONE_CARRIER_TEST_V1: ProtocolProfile = {
         {
           id: 'expressone.delivered.explicit',
           field: 'body',
-          pattern: '[0-9]{20,30} sz[aá]mon feladott k[uü]ldem[eé]ny .* id[oő]pontban [aá]tad[aá]sra ker[uü]lt',
+          pattern: '[0-9]{20,30} sz[aá]mon feladott k[uü]ldem[eé]ny[\\s\\S]*id[oő]pontban [aá]tad[aá]sra ker[uü]lt',
           required: true,
           confidence_delta: 0.01,
           source_ids: ['expressone-observed-delivered'],
@@ -314,7 +314,7 @@ export const EXPRESSONE_CARRIER_TEST_V1: ProtocolProfile = {
         {
           id: 'expressone.delivered.pod',
           field: 'body',
-          pattern: '[aá]tv[eé]teli elismerv[eé]ny .* tracking\\.expressone\\.hu',
+          pattern: '[aá]tv[eé]teli elismerv[eé]ny[\\s\\S]*tracking\\.expressone\\.hu',
           required: true,
           source_ids: ['expressone-observed-delivered'],
         },
