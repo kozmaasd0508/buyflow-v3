@@ -1,5 +1,8 @@
 import type { ProtocolProfile } from './types.js';
 import { assertValidProtocolProfile } from './profile-validator.js';
+import { SHOPIFY_TEST_V1 } from './profiles/shopify-test-v1.js';
+import { SHOPRENTER_TEST_V1 } from './profiles/shoprenter-test-v1.js';
+import { UNAS_TEST_V1 } from './profiles/unas-test-v1.js';
 import { WOOCOMMERCE_TEST_V1 } from './profiles/woocommerce-test-v1.js';
 
 /**
@@ -11,6 +14,9 @@ import { WOOCOMMERCE_TEST_V1 } from './profiles/woocommerce-test-v1.js';
  */
 const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   WOOCOMMERCE_TEST_V1,
+  SHOPIFY_TEST_V1,
+  UNAS_TEST_V1,
+  SHOPRENTER_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
