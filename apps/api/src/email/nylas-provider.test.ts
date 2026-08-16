@@ -19,6 +19,13 @@ test('normalizes a Nylas message into the provider-neutral email contract', () =
     to: [{ email: 'buyer@example.com' }],
     snippet: 'Tracking number: ABC123',
     body: '<p>Tracking number: ABC123</p>',
+    headers: [
+      { name: 'Return-Path', value: '<bounce@example.com>' },
+      {
+        name: 'Authentication-Results',
+        value: 'mx.example; dkim=pass header.d=example.com',
+      },
+    ],
     attachments: [
       {
         id: 'att_1',
@@ -35,6 +42,13 @@ test('normalizes a Nylas message into the provider-neutral email contract', () =
   assert.equal(email.from[0]?.email, 'shop@example.com');
   assert.equal(email.attachments[0]?.filename, 'invoice.pdf');
   assert.equal(email.receivedAt, '2023-11-14T22:13:20.000Z');
+  assert.deepEqual(email.headers, [
+    { name: 'Return-Path', value: '<bounce@example.com>' },
+    {
+      name: 'Authentication-Results',
+      value: 'mx.example; dkim=pass header.d=example.com',
+    },
+  ]);
 });
 
 function gateEmail(id: string): NormalizedEmail {
