@@ -10,6 +10,7 @@ import { FOXPOST_CARRIER_TEST_V1 } from './profiles/foxpost-carrier-test-v1.js';
 import { GLS_HUNGARY_CARRIER_TEST_V1 } from './profiles/gls-hungary-carrier-test-v1.js';
 import { GYEREKJATEKBOLT_SHOPRENTER_TEST_V1 } from './profiles/gyerekjatekbolt-shoprenter-test-v1.js';
 import { HOMEAUTOMATICA_SHOPRENTER_TEST_V1 } from './profiles/homeautomatica-shoprenter-test-v1.js';
+import { MEDIAMARKT_MERCHANT_RESEARCH_V1 } from './profiles/mediamarkt-merchant-research-v1.js';
 import { MPL_CARRIER_TEST_V1 } from './profiles/mpl-carrier-test-v1.js';
 import { PACKETA_HUNGARY_CARRIER_TEST_V1 } from './profiles/packeta-hungary-carrier-test-v1.js';
 import { PAYPAL_PAYMENT_TEST_V1 } from './profiles/paypal-payment-test-v1.js';
@@ -43,6 +44,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   WEBARENA_SHOPRENTER_TEST_V1,
   FORPROSHOP_SHOPRENTER_TEST_V1,
   EMAG_MERCHANT_TEST_V1,
+  MEDIAMARKT_MERCHANT_RESEARCH_V1,
   FOXPOST_CARRIER_TEST_V1,
   GLS_HUNGARY_CARRIER_TEST_V1,
   MPL_CARRIER_TEST_V1,
