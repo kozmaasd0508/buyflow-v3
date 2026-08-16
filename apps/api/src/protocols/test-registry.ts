@@ -1,5 +1,6 @@
 import type { ProtocolProfile } from './types.js';
 import { assertValidProtocolProfile } from './profile-validator.js';
+import { ALZA_MERCHANT_TEST_V1 } from './profiles/alza-merchant-test-v1.js';
 import { BARION_PAYMENT_TEST_V1 } from './profiles/barion-payment-test-v1.js';
 import { BILLINGO_INVOICE_TEST_V1, BILLINGO_PROFORMA_TEST_V1 } from './profiles/billingo-invoicing-test-v1.js';
 import { DPD_HUNGARY_CARRIER_TEST_V1 } from './profiles/dpd-hungary-carrier-test-v1.js';
@@ -49,6 +50,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   GYMBEAM_MERCHANT_TEST_V1,
   NOTINO_MERCHANT_TEST_V1,
   PCX_MERCHANT_TEST_V1,
+  ALZA_MERCHANT_TEST_V1,
   FOXPOST_CARRIER_TEST_V1,
   GLS_HUNGARY_CARRIER_TEST_V1,
   MPL_CARRIER_TEST_V1,
