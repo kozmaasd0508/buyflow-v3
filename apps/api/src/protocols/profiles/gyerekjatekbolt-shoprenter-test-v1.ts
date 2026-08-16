@@ -19,9 +19,9 @@ export const GYEREKJATEKBOLT_SHOPRENTER_TEST_V1: ProtocolProfile = {
   sender_addresses: ['gyerekjatekbolt@gyerekjatekbolt.com'],
   identifier_patterns: {
     order_id: [
-      'A\\(z\\)\\s*#?([A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*)\\.?\\s*sz[aá]m[uú] rendel[eé]st',
-      'Rendel[eé]ssz[aá]m\\s*:\\s*#?([A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*)',
-      'a\\(z\\)\\s*#?([A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*)\\.?\\s*sz[aá]m[uú] rendel[eé]s [aá]llapota',
+      'A\\(z\\)\\s*#?([0-9]{4,})\\.?\\s*sz[aá]m[uú] rendel[eé]st',
+      'Rendel[eé]ssz[aá]m\\s*:\\s*#?([0-9]{4,})',
+      'a\\(z\\)\\s*#?([0-9]{4,})\\.?\\s*sz[aá]m[uú] rendel[eé]s [aá]llapota',
     ],
     tracking_id: [],
     invoice_id: [],
@@ -87,7 +87,7 @@ export const GYEREKJATEKBOLT_SHOPRENTER_TEST_V1: ProtocolProfile = {
         {
           id: 'gyj.payment.order-paid',
           field: 'body',
-          pattern: 'A\\(z\\)\\s*#?[A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*\\.?\\s*sz[aá]m[uú] rendel[eé]st sikeresen befizette',
+          pattern: 'A\\(z\\)\\s*#?[0-9]{4,}\\.?\\s*sz[aá]m[uú] rendel[eé]st sikeresen befizette',
           required: true,
           confidence_delta: 0.02,
           source_ids: ['gyerekjatekbolt-observed-payment-success'],
@@ -124,14 +124,14 @@ export const GYEREKJATEKBOLT_SHOPRENTER_TEST_V1: ProtocolProfile = {
         {
           id: 'gyj.shipped.status-subject',
           field: 'subject',
-          pattern: '^Gyerekjatekbolt\\.com\\s*[-–]\\s*a\\(z\\)\\s*[A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*\\.?\\s*sz[aá]m[uú] rendel[eé]s [aá]llapota megv[aá]ltozott$',
+          pattern: '^Gyerekjatekbolt\\.com\\s*[-–]\\s*a\\(z\\)\\s*[0-9]{4,}\\.?\\s*sz[aá]m[uú] rendel[eé]s [aá]llapota megv[aá]ltozott$',
           required: true,
           source_ids: ['gyerekjatekbolt-observed-courier-handoff'],
         },
         {
           id: 'gyj.shipped.order-identity',
           field: 'body',
-          pattern: 'Rendel[eé]ssz[aá]m\\s*:\\s*#?[A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*',
+          pattern: 'Rendel[eé]ssz[aá]m\\s*:\\s*#?[0-9]{4,}',
           required: true,
           source_ids: ['gyerekjatekbolt-observed-courier-handoff'],
         },
@@ -167,14 +167,14 @@ export const GYEREKJATEKBOLT_SHOPRENTER_TEST_V1: ProtocolProfile = {
         {
           id: 'gyj.delivered.status-subject',
           field: 'subject',
-          pattern: '^Gyerekjatekbolt\\.com\\s*[-–]\\s*a\\(z\\)\\s*[A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*\\.?\\s*sz[aá]m[uú] rendel[eé]s [aá]llapota megv[aá]ltozott$',
+          pattern: '^Gyerekjatekbolt\\.com\\s*[-–]\\s*a\\(z\\)\\s*[0-9]{4,}\\.?\\s*sz[aá]m[uú] rendel[eé]s [aá]llapota megv[aá]ltozott$',
           required: true,
           source_ids: ['gyerekjatekbolt-observed-delivered'],
         },
         {
           id: 'gyj.delivered.order-identity',
           field: 'body',
-          pattern: 'Rendel[eé]ssz[aá]m\\s*:\\s*#?[A-Za-z0-9._-]*\\d[A-Za-z0-9._-]*',
+          pattern: 'Rendel[eé]ssz[aá]m\\s*:\\s*#?[0-9]{4,}',
           required: true,
           source_ids: ['gyerekjatekbolt-observed-delivered'],
         },
@@ -192,6 +192,7 @@ export const GYEREKJATEKBOLT_SHOPRENTER_TEST_V1: ProtocolProfile = {
   ],
   notes: [
     'This profile is merchant-specific. Shoprenter status labels and templates are configurable and must never be generalized from this merchant to every Shoprenter store.',
+    'Observed Gyerekjatekbolt order identities are numeric; this test profile intentionally does not accept arbitrary punctuation-bearing order tokens.',
     'PAYMENT_SUCCESS requires explicit accepted transaction evidence; a status label alone is insufficient.',
     'SHIPPED requires explicit physical courier handoff, not merely the merchant-defined label Szállítás alatt.',
     'DELIVERED is merchant-side delivery evidence. Direct carrier delivery evidence remains higher authority under the Protocol Library authority matrix.',
