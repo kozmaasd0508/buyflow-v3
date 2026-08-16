@@ -1,5 +1,6 @@
 import type { ProtocolProfile } from './types.js';
 import { assertValidProtocolProfile } from './profile-validator.js';
+import { DPD_HUNGARY_CARRIER_TEST_V1 } from './profiles/dpd-hungary-carrier-test-v1.js';
 import { EXPRESSONE_CARRIER_TEST_V1 } from './profiles/expressone-carrier-test-v1.js';
 import { FORPROSHOP_SHOPRENTER_TEST_V1 } from './profiles/forproshop-shoprenter-test-v1.js';
 import { FOXPOST_CARRIER_TEST_V1 } from './profiles/foxpost-carrier-test-v1.js';
@@ -33,6 +34,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   GLS_HUNGARY_CARRIER_TEST_V1,
   MPL_CARRIER_TEST_V1,
   EXPRESSONE_CARRIER_TEST_V1,
+  DPD_HUNGARY_CARRIER_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
