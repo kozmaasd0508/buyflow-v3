@@ -35,22 +35,3 @@ jobs:
 
       - name: Mobile web build
         run: npm run build --workspace @buyflow/mobile
-
-      - name: Nylas protocol shadow audit (one-off PR validation)
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/nylas-protocol-shadow-audit-v1'
-        env:
-          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
-          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_SMOKE_GRANT_ID }}
-          NYLAS_API_URI: ${{ secrets.NYLAS_API_URI }}
-          EMAIL_DISCOVERY_QUERY: newer_than:730d -in:spam -in:trash
-          PROTOCOL_SHADOW_MAX_MESSAGES: '10000'
-          PROTOCOL_SHADOW_CONCURRENCY: '8'
-        run: |
-          if [ -z "$NYLAS_API_KEY" ] || [ -z "$NYLAS_SMOKE_GRANT_ID" ]; then
-            echo '{"mode":"read_only_protocol_shadow_audit","status":"skipped_missing_nylas_secrets"}'
-            exit 0
-          fi
-          if [ -z "$NYLAS_API_URI" ]; then
-            export NYLAS_API_URI='https://api.eu.nylas.com'
-          fi
-          npm run nylas:protocol-shadow-audit --workspace @buyflow/api
