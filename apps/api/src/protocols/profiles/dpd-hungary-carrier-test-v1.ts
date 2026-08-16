@@ -108,7 +108,7 @@ export const DPD_HUNGARY_CARRIER_TEST_V1: ProtocolProfile = {
         {
           id: 'dpd.created.subject',
           field: 'subject',
-          pattern: '^[ÉE]rtes[ií]t[eé]s [0-9]{14} k[uü]ldem[eé]ny (?:el[oő]k[eé]sz[ií]t[eé]s[eé]r[oő]l|felad[aá]s[aá]r[oő]l)$',
+          pattern: '^[ÉE]rtes[ií]t[eé]s [0-9]{14} k[uü]ldem[eé]ny (?:el[oő]k[eé]sz[ií]t[eé]s[eé]r[oóő]l|felad[aá]s[aá]r[oóő]l)$',
           required: true,
           source_ids: ['dpd-observed-preadvice'],
         },
@@ -156,7 +156,7 @@ export const DPD_HUNGARY_CARRIER_TEST_V1: ProtocolProfile = {
         {
           id: 'dpd.shipped.subject',
           field: 'subject',
-          pattern: '^[ÉE]rtes[ií]t[eé]s [0-9]{14} .+ k[uü]ldem[eé]ny felad[aá]s[aá]r[oő]l$',
+          pattern: '^[ÉE]rtes[ií]t[eé]s [0-9]{14} .+ k[uü]ldem[eé]ny felad[aá]s[aá]r[oóő]l$',
           required: true,
           source_ids: ['dpd-observed-shipped'],
         },
@@ -281,7 +281,7 @@ export const DPD_HUNGARY_CARRIER_TEST_V1: ProtocolProfile = {
         {
           id: 'dpd.return.subject',
           field: 'subject',
-          pattern: '^[ÉE]rtes[ií]t[eé]s [0-9]{14} k[uü]ldem[eé]ny elutas[ií]t[aá]s[aá]r[oő]l$',
+          pattern: '^[ÉE]rtes[ií]t[eé]s [0-9]{14} k[uü]ldem[eé]ny elutas[ií]t[aá]s[aá]r[oóő]l$',
           required: true,
           source_ids: ['dpd-observed-refused-return', 'dpd-official-refusal'],
         },
