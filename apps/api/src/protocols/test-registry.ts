@@ -15,6 +15,7 @@ import { MPL_CARRIER_TEST_V1 } from './profiles/mpl-carrier-test-v1.js';
 import { NOTINO_MERCHANT_TEST_V1 } from './profiles/notino-merchant-test-v1.js';
 import { PACKETA_HUNGARY_CARRIER_TEST_V1 } from './profiles/packeta-hungary-carrier-test-v1.js';
 import { PAYPAL_PAYMENT_TEST_V1 } from './profiles/paypal-payment-test-v1.js';
+import { PCX_MERCHANT_TEST_V1 } from './profiles/pcx-merchant-test-v1.js';
 import { SHOPIFY_TEST_V1 } from './profiles/shopify-test-v1.js';
 import { SHOPRENTER_TEST_V1 } from './profiles/shoprenter-test-v1.js';
 import { SIMPLEPAY_PAYMENT_TEST_V1 } from './profiles/simplepay-payment-test-v1.js';
@@ -47,6 +48,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   EMAG_MERCHANT_TEST_V1,
   GYMBEAM_MERCHANT_TEST_V1,
   NOTINO_MERCHANT_TEST_V1,
+  PCX_MERCHANT_TEST_V1,
   FOXPOST_CARRIER_TEST_V1,
   GLS_HUNGARY_CARRIER_TEST_V1,
   MPL_CARRIER_TEST_V1,
