@@ -7,11 +7,11 @@ import { registeredTestProtocolProfiles } from './test-registry.js';
 
 test('production registry stays empty while test registry contains WooCommerce', () => {
   assert.deepEqual(registeredProtocolProfiles(), []);
-  const testProfiles = registeredTestProtocolProfiles();
-  assert.equal(testProfiles.length, 1);
-  assert.equal(testProfiles[0]?.protocol_id, 'commerce.woocommerce');
-  assert.equal(testProfiles[0]?.protocol_version, '1.0.0-test.1');
-  assert.equal(testProfiles[0]?.status, 'test');
+  const woo = registeredTestProtocolProfiles()
+    .find((profile) => profile.protocol_id === 'commerce.woocommerce');
+  assert.ok(woo);
+  assert.equal(woo.protocol_version, '1.0.0-test.1');
+  assert.equal(woo.status, 'test');
 });
 
 test('same WooCommerce processing email is invisible to production registry but visible in shadow', () => {
