@@ -1,6 +1,7 @@
 import type { ProtocolProfile } from './types.js';
 import { assertValidProtocolProfile } from './profile-validator.js';
 import { BARION_PAYMENT_TEST_V1 } from './profiles/barion-payment-test-v1.js';
+import { BILLINGO_INVOICE_TEST_V1, BILLINGO_PROFORMA_TEST_V1 } from './profiles/billingo-invoicing-test-v1.js';
 import { DPD_HUNGARY_CARRIER_TEST_V1 } from './profiles/dpd-hungary-carrier-test-v1.js';
 import { EXPRESSONE_CARRIER_TEST_V1 } from './profiles/expressone-carrier-test-v1.js';
 import { FORPROSHOP_SHOPRENTER_TEST_V1 } from './profiles/forproshop-shoprenter-test-v1.js';
@@ -45,6 +46,8 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   BARION_PAYMENT_TEST_V1,
   STRIPE_PAYMENT_TEST_V1,
   PAYPAL_PAYMENT_TEST_V1,
+  BILLINGO_INVOICE_TEST_V1,
+  BILLINGO_PROFORMA_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
