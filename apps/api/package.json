@@ -10,6 +10,7 @@
     "test": "node --import tsx --test src/**/*.test.ts",
     "nylas:smoke": "tsx src/scripts/nylas-smoke.ts",
     "nylas:audit": "tsx src/scripts/nylas-audit.ts",
+    "nylas:protocol-shadow-audit": "tsx src/scripts/nylas-protocol-shadow-audit.ts",
     "nylas:markup-audit": "tsx src/scripts/nylas-markup-audit.ts",
     "openai:nano-smoke": "tsx src/scripts/openai-nano-smoke.ts",
     "pipeline:nano-extract-pending": "tsx src/scripts/nano-extract-pending.ts",

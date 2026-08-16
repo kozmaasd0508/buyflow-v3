@@ -5,6 +5,11 @@ export interface EmailAddress {
   name?: string;
 }
 
+export interface EmailHeader {
+  name: string;
+  value: string;
+}
+
 export interface EmailAttachmentMetadata {
   id: string;
   filename: string;
@@ -26,6 +31,7 @@ export interface NormalizedEmail {
   receivedAt: string;
   snippet?: string;
   bodyHtml?: string;
+  headers?: EmailHeader[];
   folders: string[];
   attachments: EmailAttachmentMetadata[];
 }
