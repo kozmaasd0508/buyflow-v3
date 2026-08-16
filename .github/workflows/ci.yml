@@ -63,4 +63,7 @@ jobs:
           echo "::add-mask::$GRANT_ID"
           export NYLAS_SMOKE_GRANT_ID="$GRANT_ID"
 
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then unset SUPABASE_SERVICE_ROLE_KEY; fi
+          if [ -z "${SUPABASE_SECRET_KEY:-}" ]; then unset SUPABASE_SECRET_KEY; fi
+
           npm run nylas:protocol-shadow-audit --workspace @buyflow/api
