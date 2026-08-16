@@ -1,0 +1,341 @@
+import type { ProtocolProfile } from '../types.js';
+
+/**
+ * Direct Express One Hungary recipient-notification profile derived from
+ * repeated sanitized real emails plus current Express One documentation.
+ *
+ * The profile deliberately separates recipient shipment notifications from
+ * sender-side eBox pickup-booking mail. Pre-advice is not physical possession;
+ * central-hub physical inbound is IN_TRANSIT; same-day courier allocation is
+ * OUT_FOR_DELIVERY; delay is a distinct event; DELIVERED requires explicit
+ * Express One wording that the identified shipment was handed over.
+ */
+export const EXPRESSONE_CARRIER_TEST_V1: ProtocolProfile = {
+  protocol_id: 'carrier.hu.expressone',
+  protocol_version: '1.0.0-test.1',
+  kind: 'carrier',
+  status: 'test',
+  display_name: 'Express One Hungary',
+  country: 'HU',
+  sender_domains: ['expressone.hu'],
+  sender_addresses: ['ertesites@expressone.hu'],
+  identifier_patterns: {
+    order_id: [],
+    tracking_id: [
+      'K[uü]ldem[eé]nysz[aá]m\\s*:\\s*([0-9]{20,30})',
+      'k[oö]vetkez[oő] k[uü]ldem[eé]nysz[aá]mon \\(fuvarlev[eé]lsz[aá]mon\\) tartjuk nyilv[aá]n\\s*:?\\s*([0-9]{20,30})',
+      'a\\s+([0-9]{20,30})\\s+k[uü]ldem[eé]nysz[aá]mon nyilv[aá]ntartott',
+      '([0-9]{20,30})\\s+sz[aá]mon feladott k[uü]ldem[eé]ny',
+    ],
+    invoice_id: [],
+    payment_reference: [],
+  },
+  sources: [
+    {
+      id: 'expressone-official-notifications',
+      title: 'Express One Hungary - Kiegészítő szolgáltatások / Címzett értesítések',
+      url: 'https://expressone.hu/kiegeszito-szolgaltatasok',
+      provenance: 'official_documentation',
+      notes: 'Express One documents automatic recipient pre-notifications and a delivery-morning notification with a narrowed two-hour window, courier details and delivery-modification options.',
+    },
+    {
+      id: 'expressone-official-tracking-notification-flow',
+      title: 'Express One Hungary - Csomagkövetés és értesítési rendszerek',
+      url: 'https://expressone.hu/blog/merre-jar-a-csomagom-csomagkovetes-es-ertesitesi-rendszerek-alkalmazasa',
+      provenance: 'official_documentation',
+      notes: 'Express One describes DLS pre-notification followed by OFD notifications after route planning and states that unsuccessful, damaged, returned and lost statuses are also recorded/notified in appropriate flows.',
+    },
+    {
+      id: 'expressone-official-faq-pickup-vs-recipient',
+      title: 'Express One Hungary - eBox FAQ',
+      url: 'https://expressone.hu/ebox/faq',
+      provenance: 'official_documentation',
+      notes: 'Express One separately documents sender-side pickup notifications and recipient-side delivery notifications, supporting the hard boundary between eBox pickup bookings and inbound purchase shipment lifecycle.',
+    },
+    {
+      id: 'expressone-observed-preadvice',
+      title: 'Observed Express One recipient pre-advice emails (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Repeated recipient emails used subject Előzetes értesítés csomag érkezéséről, supplied a shipment number, and explicitly stated that the parcel had not yet been handed to Express One.',
+    },
+    {
+      id: 'expressone-observed-hub-inbound',
+      title: 'Observed Express One central-warehouse processing emails (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Repeated recipient emails used subject Küldemény feldolgozása megkezdődött and explicitly stated processing had begun in the central warehouse and physical inbound had been completed.',
+    },
+    {
+      id: 'expressone-observed-out-for-delivery',
+      title: 'Observed Express One delivery-today emails (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Repeated recipient emails used subject Csomag kézbesítés ma – ETA és módosítás and explicitly stated that the courier had taken the shipment for same-day delivery, with a two-hour ETA and courier phone number.',
+    },
+    {
+      id: 'expressone-observed-delay',
+      title: 'Observed Express One delay / revised ETA emails (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Repeated recipient emails used a Késik a kézbesítés subject and explicitly stated the parcel was not delivered within the previous interval, recorded the delay and supplied a new expected delivery time.',
+    },
+    {
+      id: 'expressone-observed-delivered',
+      title: 'Observed Express One delivered-feedback emails (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Multiple recipient emails used subject Küldemény kézbesítve – kérdőív and explicitly stated that the identified shipment had been handed over at a concrete timestamp, with POD available through Express One tracking.',
+    },
+    {
+      id: 'expressone-observed-auth',
+      title: 'Observed Express One authenticated recipient mail infrastructure (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Raw MIME from recipient pre-advice, delivery-today and delivered messages verified ertesites@expressone.hu, DKIM pass for expressone.hu, SPF pass and DMARC pass. DIMA transport and Express One internal hosts were observed but are not used as the authoritative identity gate.',
+    },
+    {
+      id: 'expressone-observed-sender-pickup-negative',
+      title: 'Observed Express One sender-side pickup booking emails (sanitized)',
+      provenance: 'observed_real_email',
+      observed_at: '2026-08-16',
+      notes: 'Many no-reply@expressone.hu emails concerned árufelvétel bookings and courier pickup windows for the sender. These are intentionally excluded from the recipient purchase-shipment profile.',
+    },
+  ],
+  events: [
+    {
+      event: 'SHIPMENT_CREATED',
+      base_confidence: 0.99,
+      positive_rules: [
+        {
+          id: 'expressone.created.dkim',
+          field: 'dkim_domain',
+          pattern: '^expressone\\.hu$',
+          required: true,
+          source_ids: ['expressone-observed-auth'],
+        },
+        {
+          id: 'expressone.created.subject',
+          field: 'subject',
+          pattern: '^El[oő]zetes [eé]rtes[ií]t[eé]s csomag [eé]rkez[eé]s[eé]r[oő]l$',
+          required: true,
+          source_ids: ['expressone-observed-preadvice', 'expressone-official-notifications', 'expressone-official-tracking-notification-flow'],
+        },
+        {
+          id: 'expressone.created.sender-notified',
+          field: 'body',
+          pattern: 'partner[uü]nk\\s+az [ÖO]n r[eé]sz[eé]re k[eé]zbes[ií]tend[oő][\\s\\S]*k[uü]ldem[eé]ny felad[aá]s[aá]t jelezte fel[eé]nk',
+          required: true,
+          source_ids: ['expressone-observed-preadvice'],
+        },
+        {
+          id: 'expressone.created.not-handed-over',
+          field: 'body',
+          pattern: 'A k[uü]ldem[eé]ny [aá]tad[aá]sa fut[aá]rszolg[aá]latunk r[eé]sz[eé]re m[eé]g nem t[oö]rt[eé]nt meg',
+          required: true,
+          confidence_delta: 0.01,
+          source_ids: ['expressone-observed-preadvice'],
+        },
+        {
+          id: 'expressone.created.tracking',
+          field: 'body',
+          pattern: 'K[uü]ldem[eé]nysz[aá]m\\s*:\\s*[0-9]{20,30}',
+          required: true,
+          source_ids: ['expressone-observed-preadvice'],
+        },
+      ],
+      prohibitions: [
+        'DO_NOT_CREATE_PURCHASE',
+        'DO_NOT_SET_SHIPPED_AT',
+        'DO_NOT_MARK_IN_TRANSIT',
+        'DO_NOT_MARK_DELIVERED',
+      ],
+    },
+    {
+      event: 'IN_TRANSIT',
+      base_confidence: 0.99,
+      positive_rules: [
+        {
+          id: 'expressone.transit.dkim',
+          field: 'dkim_domain',
+          pattern: '^expressone\\.hu$',
+          required: true,
+          source_ids: ['expressone-observed-auth'],
+        },
+        {
+          id: 'expressone.transit.subject',
+          field: 'subject',
+          pattern: '^K[uü]ldem[eé]ny feldolgoz[aá]sa megkezd[oő]d[oö]tt$',
+          required: true,
+          source_ids: ['expressone-observed-hub-inbound'],
+        },
+        {
+          id: 'expressone.transit.physical-inbound',
+          field: 'body',
+          pattern: 'feldolgoz[aá]s[aá]t megkezdt[uü]k a k[oö]zponti rakt[aá]runkban \\(fizik[aá]lisan [eé]rkeztett[uü]k\\)',
+          required: true,
+          confidence_delta: 0.01,
+          source_ids: ['expressone-observed-hub-inbound'],
+        },
+        {
+          id: 'expressone.transit.tracking',
+          field: 'body',
+          pattern: 'k[oö]vetkez[oő] k[uü]ldem[eé]nysz[aá]mon \\(fuvarlev[eé]lsz[aá]mon\\) tartjuk nyilv[aá]n\\s*:?\\s*[0-9]{20,30}',
+          required: true,
+          source_ids: ['expressone-observed-hub-inbound'],
+        },
+      ],
+      prohibitions: [
+        'DO_NOT_CREATE_PURCHASE',
+        'DO_NOT_SET_SHIPPED_AT',
+        'DO_NOT_MARK_DELIVERED',
+      ],
+    },
+    {
+      event: 'OUT_FOR_DELIVERY',
+      base_confidence: 0.99,
+      positive_rules: [
+        {
+          id: 'expressone.out.dkim',
+          field: 'dkim_domain',
+          pattern: '^expressone\\.hu$',
+          required: true,
+          source_ids: ['expressone-observed-auth'],
+        },
+        {
+          id: 'expressone.out.subject',
+          field: 'subject',
+          pattern: '^Csomag k[eé]zbes[ií]t[eé]s ma [–-] ETA [eé]s m[oó]dos[ií]t[aá]s$',
+          required: true,
+          source_ids: ['expressone-observed-out-for-delivery', 'expressone-official-notifications', 'expressone-official-tracking-notification-flow'],
+        },
+        {
+          id: 'expressone.out.courier-possession',
+          field: 'body',
+          pattern: 'k[uü]ldem[eé]nyt fut[aá]runk a mai napon k[eé]zbes[ií]t[eé]sre [aá]tvette',
+          required: true,
+          confidence_delta: 0.01,
+          source_ids: ['expressone-observed-out-for-delivery'],
+        },
+        {
+          id: 'expressone.out.today',
+          field: 'body',
+          pattern: 'A k[uü]ldem[eé]nyt fut[aá]runk a mai napon el[oő]rel[aá]that[oó]an [0-9]{1,2}:[0-9]{2}-[0-9]{1,2}:[0-9]{2} [oó]ra k[oö]z[oö]tt',
+          required: true,
+          source_ids: ['expressone-observed-out-for-delivery', 'expressone-official-notifications'],
+        },
+        {
+          id: 'expressone.out.tracking',
+          field: 'body',
+          pattern: 'k[oö]vetkez[oő] k[uü]ldem[eé]nysz[aá]mon \\(fuvarlev[eé]lsz[aá]mon\\) tartjuk nyilv[aá]n\\s*:?\\s*[0-9]{20,30}',
+          required: true,
+          source_ids: ['expressone-observed-out-for-delivery'],
+        },
+      ],
+      prohibitions: [
+        'DO_NOT_CREATE_PURCHASE',
+        'DO_NOT_SET_SHIPPED_AT',
+        'DO_NOT_MARK_DELIVERED',
+      ],
+    },
+    {
+      event: 'DELAYED',
+      base_confidence: 0.99,
+      positive_rules: [
+        {
+          id: 'expressone.delay.dkim',
+          field: 'dkim_domain',
+          pattern: '^expressone\\.hu$',
+          required: true,
+          source_ids: ['expressone-observed-auth'],
+        },
+        {
+          id: 'expressone.delay.subject',
+          field: 'subject',
+          pattern: '^K[eé]sik a k[eé]zbes[ií]t[eé]s [–-] [uú]j ETA: .+$',
+          required: true,
+          source_ids: ['expressone-observed-delay'],
+        },
+        {
+          id: 'expressone.delay.not-delivered-in-window',
+          field: 'body',
+          pattern: 'k[uü]ldem[eé]ny a kor[aá]bban megadott .* id[oő]intervallumban nem ker[uü]lt k[eé]zbes[ií]t[eé]sre',
+          required: true,
+          source_ids: ['expressone-observed-delay'],
+        },
+        {
+          id: 'expressone.delay.recorded',
+          field: 'body',
+          pattern: 'a k[eé]s[eé]s m[eé]rt[eé]ke r[oö]gz[ií]t[eé]sre ker[uü]lt',
+          required: true,
+          confidence_delta: 0.01,
+          source_ids: ['expressone-observed-delay'],
+        },
+        {
+          id: 'expressone.delay.tracking',
+          field: 'body',
+          pattern: '[0-9]{20,30} k[uü]ldem[eé]nysz[aá]mon nyilv[aá]ntartott',
+          required: true,
+          source_ids: ['expressone-observed-delay'],
+        },
+      ],
+      prohibitions: [
+        'DO_NOT_CREATE_PURCHASE',
+        'DO_NOT_SET_SHIPPED_AT',
+        'DO_NOT_MARK_DELIVERED',
+      ],
+    },
+    {
+      event: 'DELIVERED',
+      base_confidence: 0.99,
+      positive_rules: [
+        {
+          id: 'expressone.delivered.dkim',
+          field: 'dkim_domain',
+          pattern: '^expressone\\.hu$',
+          required: true,
+          source_ids: ['expressone-observed-auth'],
+        },
+        {
+          id: 'expressone.delivered.subject',
+          field: 'subject',
+          pattern: '^K[uü]ldem[eé]ny k[eé]zbes[ií]tve [–-] k[eé]rd[oő][ií]v$',
+          required: true,
+          source_ids: ['expressone-observed-delivered'],
+        },
+        {
+          id: 'expressone.delivered.explicit',
+          field: 'body',
+          pattern: '[0-9]{20,30} sz[aá]mon feladott k[uü]ldem[eé]ny[\\s\\S]*id[oő]pontban [aá]tad[aá]sra ker[uü]lt',
+          required: true,
+          confidence_delta: 0.01,
+          source_ids: ['expressone-observed-delivered'],
+        },
+        {
+          id: 'expressone.delivered.pod',
+          field: 'body',
+          pattern: '[aá]tv[eé]teli elismerv[eé]ny[\\s\\S]*tracking\\.expressone\\.hu',
+          required: true,
+          source_ids: ['expressone-observed-delivered'],
+        },
+      ],
+      prohibitions: [
+        'DO_NOT_CREATE_PURCHASE',
+        'DO_NOT_SET_SHIPPED_AT',
+      ],
+    },
+  ],
+  notes: [
+    'Direct Express One recipient carrier evidence outranks merchant wording for physical parcel progress.',
+    'Előzetes értesítés csomag érkezéséről is SHIPMENT_CREATED only because the message explicitly says the sender merely notified Express One and the parcel has not yet been handed to the carrier.',
+    'Küldemény feldolgozása megkezdődött is IN_TRANSIT because Express One explicitly says central-warehouse physical inbound has completed.',
+    'Csomag kézbesítés ma – ETA és módosítás is OUT_FOR_DELIVERY because Express One says the courier took the parcel for same-day delivery and supplies the narrowed ETA.',
+    'Késik a kézbesítés is DELAYED, not DELIVERY_FAILED: the observed message says the previous ETA was missed and supplies a revised expected delivery time.',
+    'Küldemény kézbesítve – kérdőív becomes DELIVERED only when the body explicitly says the identified shipment was handed over and links to Express One delivery/POD information.',
+    'No DELIVERY_FAILED rule is included in test. No direct recipient failed-delivery email was found in the researched mailbox, so BuyFlow does not infer this state from documentation alone.',
+    'Sender-side no-reply@expressone.hu eBox/árufelvétel notifications are intentionally outside this profile. They describe the user acting as shipper and must not create or advance a purchase shipment.',
+    'slip@expressone.hu payment receipts, ertekesites@expressone.hu service announcements and info@expressone.hu newsletters are not recipient shipment lifecycle evidence.',
+    'Exact recipient notification address ertesites@expressone.hu plus expressone.hu DKIM is required. Lookalike domains, subject-only matches and shared Express One branding are insufficient.',
+    'The profile is test/shadow only and cannot create a Purchase or write live lifecycle state.',
+  ],
+};
