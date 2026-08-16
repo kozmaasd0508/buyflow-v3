@@ -5,6 +5,7 @@ import { BARION_PAYMENT_TEST_V1 } from './profiles/barion-payment-test-v1.js';
 import { BILLINGO_INVOICE_TEST_V1, BILLINGO_PROFORMA_TEST_V1 } from './profiles/billingo-invoicing-test-v1.js';
 import { DPD_HUNGARY_CARRIER_TEST_V1 } from './profiles/dpd-hungary-carrier-test-v1.js';
 import { EMAG_MERCHANT_TEST_V1 } from './profiles/emag-merchant-test-v1.js';
+import { EURONICS_MERCHANT_TEST_V1 } from './profiles/euronics-merchant-test-v1.js';
 import { EXPRESSONE_CARRIER_TEST_V1 } from './profiles/expressone-carrier-test-v1.js';
 import { FORPROSHOP_SHOPRENTER_TEST_V1 } from './profiles/forproshop-shoprenter-test-v1.js';
 import { FOXPOST_CARRIER_TEST_V1 } from './profiles/foxpost-carrier-test-v1.js';
@@ -53,6 +54,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   PCX_MERCHANT_TEST_V1,
   ALZA_MERCHANT_TEST_V1,
   IPON_MERCHANT_TEST_V1,
+  EURONICS_MERCHANT_TEST_V1,
   FOXPOST_CARRIER_TEST_V1,
   GLS_HUNGARY_CARRIER_TEST_V1,
   MPL_CARRIER_TEST_V1,
