@@ -35,7 +35,7 @@ export const SHOPRENTER_TEST_V1: ProtocolProfile = {
       title: 'Observed Shoprenter customer order confirmations (sanitized)',
       provenance: 'observed_real_email',
       observed_at: '2026-08-16',
-      notes: 'Observed merchant-branded confirmations used Shoprenter DKIM/return-path infrastructure and a stable order-confirmation structure. No private customer data is stored in this profile.',
+      notes: 'A real merchant-branded confirmation exposed Shoprenter DKIM/return-path infrastructure, while multiple real merchant confirmations shared the same visible order-confirmation structure. No private customer data is stored in this profile.',
     },
   ],
   events: [
