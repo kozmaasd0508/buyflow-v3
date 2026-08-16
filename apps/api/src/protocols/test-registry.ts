@@ -11,6 +11,7 @@ import { MPL_CARRIER_TEST_V1 } from './profiles/mpl-carrier-test-v1.js';
 import { PACKETA_HUNGARY_CARRIER_TEST_V1 } from './profiles/packeta-hungary-carrier-test-v1.js';
 import { SHOPIFY_TEST_V1 } from './profiles/shopify-test-v1.js';
 import { SHOPRENTER_TEST_V1 } from './profiles/shoprenter-test-v1.js';
+import { SIMPLEPAY_PAYMENT_TEST_V1 } from './profiles/simplepay-payment-test-v1.js';
 import { UNAS_TEST_V1 } from './profiles/unas-test-v1.js';
 import { WEBARENA_SHOPRENTER_TEST_V1 } from './profiles/webarena-shoprenter-test-v1.js';
 import { WOOCOMMERCE_TEST_V1 } from './profiles/woocommerce-test-v1.js';
@@ -37,6 +38,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   EXPRESSONE_CARRIER_TEST_V1,
   DPD_HUNGARY_CARRIER_TEST_V1,
   PACKETA_HUNGARY_CARRIER_TEST_V1,
+  SIMPLEPAY_PAYMENT_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
