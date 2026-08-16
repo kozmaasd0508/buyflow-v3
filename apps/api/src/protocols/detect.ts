@@ -44,6 +44,9 @@ function valuesForField(input: ProtocolDetectionInput, field: ProtocolEvidenceFi
   switch (field) {
     case 'sender_domain': return input.senderDomains;
     case 'sender_address': return input.senderAddresses ?? [];
+    case 'transport_host': return input.transportHosts ?? [];
+    case 'dkim_domain': return input.dkimDomains ?? [];
+    case 'return_path_domain': return input.returnPathDomains ?? [];
     case 'subject': return input.subject ? [input.subject] : [];
     case 'body': return input.bodyText ? [input.bodyText] : [];
     case 'html': return input.bodyHtml ? [input.bodyHtml] : [];
