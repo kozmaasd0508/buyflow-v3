@@ -8,6 +8,7 @@ import { GLS_HUNGARY_CARRIER_TEST_V1 } from './profiles/gls-hungary-carrier-test
 import { GYEREKJATEKBOLT_SHOPRENTER_TEST_V1 } from './profiles/gyerekjatekbolt-shoprenter-test-v1.js';
 import { HOMEAUTOMATICA_SHOPRENTER_TEST_V1 } from './profiles/homeautomatica-shoprenter-test-v1.js';
 import { MPL_CARRIER_TEST_V1 } from './profiles/mpl-carrier-test-v1.js';
+import { PACKETA_HUNGARY_CARRIER_TEST_V1 } from './profiles/packeta-hungary-carrier-test-v1.js';
 import { SHOPIFY_TEST_V1 } from './profiles/shopify-test-v1.js';
 import { SHOPRENTER_TEST_V1 } from './profiles/shoprenter-test-v1.js';
 import { UNAS_TEST_V1 } from './profiles/unas-test-v1.js';
@@ -35,6 +36,7 @@ const TEST_PROTOCOL_PROFILES: ProtocolProfile[] = [
   MPL_CARRIER_TEST_V1,
   EXPRESSONE_CARRIER_TEST_V1,
   DPD_HUNGARY_CARRIER_TEST_V1,
+  PACKETA_HUNGARY_CARRIER_TEST_V1,
 ];
 
 for (const profile of TEST_PROTOCOL_PROFILES) {
