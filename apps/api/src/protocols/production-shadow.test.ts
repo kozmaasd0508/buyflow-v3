@@ -19,11 +19,13 @@ const EXPECTED_GREEN_IDS = [
   'payment.hu.simplepay',
 ];
 
+const DPD_TRACKING = '16380100000001';
+
 function dpdPreadviceEmail(withDkim = true): NormalizedEmail {
   return {
     provider: 'nylas',
     providerMessageId: 'must-not-appear-in-shadow-log',
-    subject: 'Értesítés 12345678901234 küldemény előkészítéséről',
+    subject: `Értesítés ${DPD_TRACKING} küldemény előkészítéséről`,
     from: [{ email: 'noreply@dpd.hu', name: 'DPD' }],
     to: [{ email: 'private-customer@example.test' }],
     cc: [],
@@ -39,9 +41,9 @@ function dpdPreadviceEmail(withDkim = true): NormalizedEmail {
       ]
       : [],
     bodyHtml: [
-      '<p>Partnerünk az Ön részére csomag(ok)at készített össze.</p>',
-      '<p>Ez egy előértesítés, a csomag(ok) fizikailag még nem került(ek) átadásra részünkre.</p>',
-      '<p>Értesítés 12345678901234</p>',
+      '<p>Értesítjük, hogy a(z) Example Merchant partnerünk az Ön részére kézbesítendő csomago(ka)t készített össze, melye(ke)t a következő csomagszámon és adatokkal tartunk nyilván.</p>',
+      '<p>Tájékoztatjuk, hogy ez egy előértesítés, a csomag(ok) fizikailag még nem került(ek) átadásra részünkre, a további állapotváltozásról újabb értesítést fogunk küldeni.</p>',
+      `<p>Example Merchant ${DPD_TRACKING}</p>`,
       '<p>PRIVATE BODY MARKER</p>',
     ].join(''),
     attachments: [],
@@ -99,7 +101,7 @@ test('production shadow log is privacy-reduced and contains no raw email or iden
   assert.doesNotMatch(payload, /must-not-appear-in-shadow-log/);
   assert.doesNotMatch(payload, /private-customer@example\.test/);
   assert.doesNotMatch(payload, /PRIVATE BODY MARKER/);
-  assert.doesNotMatch(payload, /12345678901234/);
+  assert.doesNotMatch(payload, new RegExp(DPD_TRACKING));
   assert.doesNotMatch(payload, /noreply@dpd\.hu/);
 });
 
