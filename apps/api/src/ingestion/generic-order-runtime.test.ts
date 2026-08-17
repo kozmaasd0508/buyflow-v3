@@ -21,7 +21,7 @@ test('central deterministic parser falls through to generic order confirmation p
   });
 
   assert.ok(parsed);
-  assert.equal(parsed.parserVersion, 'generic-order-confirmation-v1.2');
+  assert.equal(parsed.parserVersion, 'generic-order-confirmation-v1.3');
   assert.equal(parsed.extraction.event_type, 'order_created');
   assert.equal(parsed.extraction.order_number, 'DEMO-2026-8871');
 });

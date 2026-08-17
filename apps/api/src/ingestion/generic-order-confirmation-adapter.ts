@@ -1,7 +1,7 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 
-const PARSER_VERSION = 'generic-order-confirmation-v1.2';
+const PARSER_VERSION = 'generic-order-confirmation-v1.3';
 const JATEKBOLT_PARSER_VERSION = 'jatekbolt-order-received-v1';
 
 const SHARED_PLATFORM_SENDER_DOMAINS = [
@@ -170,6 +170,22 @@ const SHIPPING_LABELS = [
   'mode de livraison',
   'metodo de envio',
 ];
+
+const EXPLICIT_NON_ACCEPTANCE_PATTERNS = [
+  /\b(?:ez az|ez a) e-?mail nem minosul (?:a )?megrendeles visszaigazolasanak\b/i,
+  /\b(?:ez az|ez a) (?:uzenet|ertesites) nem minosul (?:a )?megrendeles visszaigazolasanak\b/i,
+  /\b(?:csak|csupan) (?:a )?veteli ajanlat (?:be)?erkezeserol ertesit(?:unk|es)\b/i,
+  /\b(?:a )?(?:rendeles|megrendeles) (?:rogzitese|beerk(?:ezese|ezese)) nem jelenti (?:a )?(?:rendeles|megrendeles) elfogadasat\b/i,
+  /\bthis (?:e-?mail|email|message) does not constitute (?:an? )?(?:order confirmation|acceptance of (?:your )?order)\b/i,
+  /\bthis (?:e-?mail|email|message) is not (?:an? )?(?:order confirmation|acceptance of (?:your )?order)\b/i,
+  /\byour order has not yet been accepted\b/i,
+  /\bwe (?:have )?received your order,? but (?:it|your order) has not (?:yet )?been accepted\b/i,
+  /\b(?:only|merely) acknowledges? receipt of (?:your )?(?:purchase offer|order request)\b/i,
+];
+
+function hasExplicitNonAcceptanceDisclaimer(text: string): boolean {
+  return EXPLICIT_NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(text));
+}
 
 function extractOrderNumber(text: string): string | null {
   for (const pattern of ORDER_PATTERNS) {
@@ -393,6 +409,8 @@ export function parseGenericOrderConfirmationEmail(input: {
   if (jatekbolt) return jatekbolt;
 
   const context = `${subject}\n${body}`;
+  if (hasExplicitNonAcceptanceDisclaimer(context)) return null;
+
   const orderNumber = extractOrderNumber(context);
   if (!orderNumber) return null;
 
