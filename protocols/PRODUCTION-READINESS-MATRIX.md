@@ -124,11 +124,11 @@ These should still emit observations only. No automatic production write is impl
 
 | Profile | Readiness | Current safe scope / reason | Production gate |
 |---|---|---|---|
-| `invoicing.hu.billingo.invoice` | YELLOW | Direct authenticated invoice email; invoice existence never implies payment success | Run larger live-volume replay and verify invoice generations/document-link variants |
+| `invoicing.hu.billingo` | YELLOW | Direct authenticated invoice email; invoice existence never implies payment success | Run larger live-volume replay and verify invoice generations/document-link variants |
 | `invoicing.hu.billingo.proforma` | YELLOW | Valuable negative-only rule: díjbekérő/proforma remains `OTHER` even with invoice-like labels | Keep negative-only until more provider template variants are observed |
-| `invoicing.hu.szamlazzhu.invoice` | YELLOW | Direct provider invoice authority, dynamic merchant-specific sender supported | Raw custom header support is still limited; templates are merchant-customizable, so replay more variants |
-| `invoicing.hu.szamlazzhu.storno` | YELLOW | Negative-only: storno is not settled `REFUNDED` | Expand direct storno sample set and identifier behavior before production-shadow |
-| `invoicing.hu.szamlazzhu.payment-reminder` | YELLOW | Negative-only: reminder is not `PAYMENT_FAILED` or `PAYMENT_ACTION_REQUIRED` | Expand provider/merchant-customized reminder variants before production-shadow |
+| `invoicing.hu.szamlazz` | YELLOW | Direct provider invoice authority, dynamic merchant-specific sender supported | Raw custom header support is still limited; templates are merchant-customizable, so replay more variants |
+| `invoicing.hu.szamlazz.storno` | YELLOW | Negative-only: storno is not settled `REFUNDED` | Expand direct storno sample set and identifier behavior before production-shadow |
+| `invoicing.hu.szamlazz.payment-reminder` | YELLOW | Negative-only: reminder is not `PAYMENT_FAILED` or `PAYMENT_ACTION_REQUIRED` | Expand provider/merchant-customized reminder variants before production-shadow |
 
 ## Global blockers before any production write
 
