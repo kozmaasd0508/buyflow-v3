@@ -51,12 +51,14 @@ The conflict concentration was highly localized:
 
 Manual review confirmed the dominant pattern is the physical-handoff boundary: pre-advice / parcel-created wording must remain `SHIPMENT_CREATED` when the message still describes future carrier possession. That is intentionally safer than promoting it to physical shipment progress.
 
+The **46 GLS conflicts are now closed** as one repeated, non-dangerous comparator mismatch. Direct Gmail review reproduced exactly 46 standard GLS parcel-information messages with the same pre-advice fingerprint: the partner had prepared the parcel while delivery was still described as a future expectation. The GLS protocol shadow and GLS-specific deterministic parser both keep these at `SHIPMENT_CREATED`; only the standalone generic carrier comparator promoted them because of its broad `Kézbesítés várható` pattern. See `protocols/carriers/hu/gls/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
+
 ## Executive rollout summary
 
 | Readiness | Count | Meaning |
 |---|---:|---|
-| GREEN | 5 | Candidate for production-shadow instrumentation only |
-| YELLOW | 22 | Continue shadow / gather or resolve specific evidence |
+| GREEN | 6 | Candidate for production-shadow instrumentation only |
+| YELLOW | 21 | Continue shadow / gather or resolve specific evidence |
 | RED | 6 | Research or negative-only for positive lifecycle automation |
 | **Total** | **33** | 31 test + 2 research-only profiles |
 
@@ -65,8 +67,9 @@ Recommended first production-shadow wave:
 1. `carrier.hu.dpd`
 2. `carrier.hu.foxpost`
 3. `carrier.hu.expressone`
-4. `merchant.hu.gymbeam`
-5. `payment.hu.simplepay`
+4. `carrier.hu.gls`
+5. `merchant.hu.gymbeam`
+6. `payment.hu.simplepay`
 
 These should still emit observations only. No automatic production write is implied by this ranking.
 
@@ -105,7 +108,7 @@ These should still emit observations only. No automatic production write is impl
 | Profile | Readiness | Live-audit signal | Current safe scope / reason | Production gate |
 |---|---|---:|---|---|
 | `carrier.hu.foxpost` | **GREEN** | 84 total; 34 compatible, 50 shadow-only, **0 conflict** | Direct pre-advice, warehouse possession and locker/pickup-ready states with tracking identity | Production-shadow candidate; continue to reject generic delivered inference |
-| `carrier.hu.gls` | YELLOW | 109 total; 57 compatible, 6 shadow-only, **46 conflicts** | Current shadow correctly keeps parcel-information/pre-advice at `SHIPMENT_CREATED`; OFD and locker-ready are distinct | Convert the 46 legacy differences into a documented reviewed conflict set before production-shadow |
+| `carrier.hu.gls` | **GREEN** | 109 total; 57 compatible, 6 shadow-only, **46 reviewed conflicts** | Direct pre-advice, delivery-today and locker-ready boundaries are explicit; all 46 conflicts were the same legacy generic future-delivery overreach on parcel-information mail | Production-shadow candidate; keep pre-advice frozen at `SHIPMENT_CREATED` and reopen the gate for any conflict outside the reviewed fingerprint |
 | `carrier.hu.mpl` | YELLOW | 142 total; 2 exact, 139 shadow-only, 1 conflict | Broad direct lifecycle including pre-advice, OFD, failed attempt, pickup-ready and explicit delivery proof | Manually close the remaining conflict and verify legacy/current template generations as one reviewed set |
 | `carrier.hu.expressone` | **GREEN** | 15 total; 9 exact, 4 shadow-only, 2 conflicts | Direct full chain clearly separates pre-advice, physical hub possession, OFD, delay and delivered timestamp | The 2 differences are pre-advice/physical-progress boundary reviews; keep that conservative boundary frozen in production-shadow |
 | `carrier.hu.dpd` | **GREEN** | 71 total; 47 compatible, 24 shadow-only, **0 conflict** | Direct pre-advice, physical dispatch, OFD, delivery and refusal-return boundaries are explicit | Production-shadow candidate; keep payment receipt and myDPD/account messages hard-negative |
@@ -147,7 +150,7 @@ These are library-wide, not profile-specific:
 
 ### Gate A — close YELLOW conflicts
 
-- GLS: review/tag all 46 legacy overlap differences by semantic boundary.
+- GLS: **closed 2026-08-17** — all 46 differences were reviewed as the same safe pre-advice/comparator boundary; see `protocols/carriers/hu/gls/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - Alza: review/tag all 7 overlap differences, especially initial order receipt vs acceptance and payment-action semantics.
 - MPL: close the single conflict.
 - Express One: retain the conservative pre-advice boundary and document the two differences as reviewed/non-dangerous.
