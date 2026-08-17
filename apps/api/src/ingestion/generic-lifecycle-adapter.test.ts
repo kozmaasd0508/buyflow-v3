@@ -106,6 +106,24 @@ test('does not treat Oazis procurement future pickup notification as ready for p
   assert.equal(parsed, null);
 });
 
+test('does not treat Oazis order-recorded pickup prerequisite as ready for pickup', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['oaziscomputer.hu'],
+    subject: '[#215048] Megrendelés rögzítve',
+    bodyText: [
+      'A #215048 számú megrendelésed sikeresen rögzítettük.',
+      'Ez egy automatikus rendelés összesítő, mely nem minősül rendelés visszaigazolásnak.',
+      'Rendelés azonosító',
+      '#215048',
+      'Átvétel módja',
+      'GLS futárszolgálat',
+      'Ha személyes átvételt választottál, a problémamentes kiszolgálás érdekében csak akkor indulj el a megrendelésedért, miután kaptál értesítést, hogy a rendelésed átvehető.',
+    ].join('\n'),
+  });
+
+  assert.equal(parsed, null);
+});
+
 test('does not treat Klarstein processing FAQ future handoff as shipped', () => {
   const parsed = parseGenericLifecycleEmail({
     senderDomains: ['xqueue.berlin-brands-group.com'],
