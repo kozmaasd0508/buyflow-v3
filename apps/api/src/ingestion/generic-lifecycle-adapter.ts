@@ -183,10 +183,28 @@ const EXPLICIT_SHIPPED_PATTERNS = [
   /\bwe (?:have )?shipped (?:your )?(?:order|package)\b/i,
 ] as const;
 
-const IN_TRANSIT_PATTERNS = [
-  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese|csomagod) (?:mar )?uton van\b/i,
-  /\b(?:your )?(?:order|package) is on (?:its|the) way\b/i,
-  /\b(?:your )?(?:order|package) is in transit\b/i,
+const PACKAGE_IN_TRANSIT_PATTERNS = [
+  /\b(?:csomagod|csomagja) (?:mar )?uton van\b/i,
+  /\b(?:your )?package is on (?:its|the) way\b/i,
+  /\b(?:your )?package is in transit\b/i,
+] as const;
+
+const ORDER_IN_TRANSIT_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese) (?:mar )?uton van\b/i,
+  /\b(?:your )?order is on (?:its|the) way\b/i,
+  /\b(?:your )?order is in transit\b/i,
+] as const;
+
+const PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS = [
+  /\bcsomag(?:od|ja|odat|jat|ok|ot)?\b/i,
+  /\bfutar(?:nak|szolgalat(?:nak)?)?\b/i,
+  /\bkuldemeny(?:ed|e|szam|azonosito|\s+azonositoja)?\b/i,
+  /\bnyomkovet/i,
+  /\btracking\b/i,
+  /\bparcel\b/i,
+  /\bshipment\b/i,
+  /\bcourier\b/i,
+  /\bcarrier\b/i,
 ] as const;
 
 const INVOICE_SIGNAL_PATTERNS = [
@@ -254,7 +272,13 @@ export function parseGenericLifecycleEmail(input: {
   } else if (hasAny(context, EXPLICIT_SHIPPED_PATTERNS)) {
     shipmentPhase = 'shipped';
     reason = 'explicit_physical_shipment_signal';
-  } else if (hasAny(context, IN_TRANSIT_PATTERNS)) {
+  } else if (
+    hasAny(context, PACKAGE_IN_TRANSIT_PATTERNS)
+    || (
+      hasAny(context, ORDER_IN_TRANSIT_PATTERNS)
+      && hasAny(context, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
+    )
+  ) {
     shipmentPhase = 'in_transit';
     reason = 'explicit_in_transit_signal';
   }
