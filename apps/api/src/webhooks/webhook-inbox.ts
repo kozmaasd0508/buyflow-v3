@@ -6,6 +6,7 @@ import { guardNylasMessageWhenAiDisabled } from '../ingestion/deterministic-ai-o
 import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
 import { preprocessDeterministicLifecycleNylasMessage } from '../ingestion/deterministic-lifecycle-parser.js';
 import { reconcileDeterministicLifecycleStatesForGrant } from '../ingestion/deterministic-lifecycle-state.js';
+import { preprocessGenericLifecycleNylasMessage } from '../ingestion/generic-lifecycle-preprocessor.js';
 import { preprocessLimoneOrderNylasMessage } from '../ingestion/limone-order-adapter.js';
 import {
   processNylasMessage,
@@ -184,7 +185,23 @@ export async function processWebhookInboxEvent(
       commerceMatched = commercePreprocess.matched;
     }
 
-    const deterministicMatched = lifecyclePreprocess.matched || limoneMatched || commerceMatched;
+    // Generic lifecycle is deliberately last. Known merchant/carrier parsers and
+    // the generic new-order lane keep priority. This fallback may only attach the
+    // source to an already-existing Purchase through a hard identity; it never
+    // creates a Purchase or mutates Purchase/Shipment/Document state.
+    let genericLifecycleMatched = false;
+    if (!lifecyclePreprocess.matched && !limoneMatched && !commerceMatched) {
+      const genericLifecyclePreprocess = await preprocessGenericLifecycleNylasMessage({
+        grantId: event.grant_id,
+        messageId: event.provider_message_id,
+      });
+      genericLifecycleMatched = genericLifecyclePreprocess.matched;
+    }
+
+    const deterministicMatched = lifecyclePreprocess.matched
+      || limoneMatched
+      || commerceMatched
+      || genericLifecycleMatched;
     const aiOffGuard = !deterministicMatched
       ? await guardNylasMessageWhenAiDisabled({
         grantId: event.grant_id,

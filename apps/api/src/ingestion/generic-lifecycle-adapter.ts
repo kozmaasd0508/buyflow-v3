@@ -1,0 +1,255 @@
+import type { EmailExtraction } from '../ai/openai-email-extractor.js';
+import { isCarrierSenderDomain } from '../email/sender-role.js';
+import {
+  isPublicMailboxSenderDomain,
+  isSharedPlatformSenderDomain,
+  stripQuotedHistoryForGenericOrder,
+} from './generic-order-confirmation-adapter.js';
+
+export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1';
+
+export type GenericLifecycleEvent = 'shipment' | 'delivery' | 'invoice_or_receipt';
+export type GenericLifecycleShipmentPhase =
+  | 'shipped'
+  | 'in_transit'
+  | 'out_for_delivery'
+  | 'ready_for_pickup'
+  | 'delivered';
+
+export interface GenericLifecycleParseResult {
+  extraction: EmailExtraction;
+  parserVersion: string;
+  reasons: string[];
+  shipmentPhase?: GenericLifecycleShipmentPhase;
+  senderDomain: string;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r/g, '');
+}
+
+function normalizeDomain(value: string): string {
+  return value.trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+}
+
+function merchantFromDomain(domain: string): string {
+  const labels = normalizeDomain(domain).split('.').filter(Boolean);
+  const root = labels.length >= 2 ? labels[labels.length - 2]! : (labels[0] ?? domain);
+  return root
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.length <= 3 ? part.toUpperCase() : `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+    .join(' ') || domain;
+}
+
+function safeSenderDomain(domains: string[]): string | null {
+  const normalized = [...new Set(domains.map(normalizeDomain).filter(Boolean))];
+  if (normalized.length !== 1) return null;
+  const domain = normalized[0]!;
+  if (
+    isCarrierSenderDomain(domain)
+    || isSharedPlatformSenderDomain(domain)
+    || isPublicMailboxSenderDomain(domain)
+  ) return null;
+  return domain;
+}
+
+const ORDER_PATTERNS = [
+  /\border\s*(?:number|no\.?|id)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+  /\border\s*#\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+  /\b(?:rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+  /\b(?:a\s+)?(?:rendeles|megrendeles)\s*#\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+  /#([a-z0-9][a-z0-9._/-]{3,39})\s+szamu\s+(?:rendeleshez|megrendeleshez)\b/i,
+  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet)\b/i,
+  /^([a-z]{1,8}\d{4,20})\s*-\s*(?:rendelesed|megrendelesed)\b/im,
+  /\b(?:bestellnummer|bestellnr\.?|auftragsnummer)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+  /\b(?:numero de commande|commande n[°o]?|numero de pedido|pedido n[°o]?)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
+] as const;
+
+const TRACKING_PATTERNS = [
+  /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|azonosito)|csomag(?:szam|azonosito)|kuldemeny(?:szam|azonosito)|parcel(?:\s*(?:number|no\.?|id))|shipment(?:\s*(?:number|no\.?|id)))\s*[:#-]?\s*([a-z0-9][a-z0-9-]{7,39})\b/i,
+] as const;
+
+const INVOICE_PATTERNS = [
+  /\b(?:szamla(?:szam|\s+sorszama)?|invoice\s*(?:number|no\.?))\s*[:#-]?\s*([a-z0-9][a-z0-9./_-]{3,39})\b/i,
+  /^\s*szamla\s+([a-z0-9][a-z0-9./_-]{3,39})(?:\s|-|$)/im,
+  /\binvoice\s+([a-z0-9][a-z0-9./_-]{3,39})(?:\s|$)/i,
+] as const;
+
+function extractFirst(text: string, patterns: readonly RegExp[]): string | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const value = match?.[1]?.trim().replace(/[.,;:)]+$/, '');
+    if (value && /\d/.test(value)) return value;
+  }
+  return null;
+}
+
+function baseExtraction(input: {
+  eventType: GenericLifecycleEvent;
+  merchant: string;
+  orderNumber?: string | null;
+  trackingNumber?: string | null;
+  invoiceNumber?: string | null;
+  confidence: number;
+}): EmailExtraction {
+  return {
+    event_type: input.eventType,
+    merchant: input.merchant,
+    merchant_legal_name: null,
+    order_number: input.orderNumber ?? null,
+    subtotal: null,
+    shipping_amount: null,
+    discount_amount: null,
+    total: null,
+    currency: null,
+    payment_status: null,
+    payment_method: null,
+    paid_amount: null,
+    paid_currency: null,
+    shipping_method: null,
+    tracking_number: input.trackingNumber ?? null,
+    carrier: null,
+    parcel_sender: null,
+    cod_amount: null,
+    cod_currency: null,
+    invoice_number: input.invoiceNumber ?? null,
+    products: [],
+    confidence: input.confidence,
+  };
+}
+
+function hasAny(text: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+const DELIVERED_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|csomagod) (?:sikeresen )?kezbesitve\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) (?:sikeresen )?kezbesitett(?:uk|ek)\b/i,
+  /\b(?:your )?(?:order|package) (?:has been |was )?delivered\b/i,
+  /\bdelivered successfully\b/i,
+] as const;
+
+const READY_FOR_PICKUP_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|csomagod) (?:mar )?atveheto\b/i,
+  /\batveheto (?:az|a) (?:uzletben|atvevohelyen|automataban|csomagautomataban|ponton)\b/i,
+  /\b(?:your )?(?:order|package) is ready for (?:collection|pickup)\b/i,
+  /\bready for (?:collection|pickup)\b/i,
+] as const;
+
+const OUT_FOR_DELIVERY_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|csomagod) (?:mar )?(?:a )?kezbesitonel van\b/i,
+  /\b(?:ma|a mai napon) kezbesit(?:juk|ik) (?:a )?(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat)\b/i,
+  /\b(?:your )?(?:order|package) is out for delivery\b/i,
+  /\bout for delivery\b/i,
+] as const;
+
+const EXPLICIT_SHIPPED_PATTERNS = [
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat|rendelt csomagot) [^\n.]{0,80}\b(?:feladtuk|elkuld(?:tuk|tek))\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak|szallitonak)\b/i,
+  /\b(?:your )?(?:order|package) (?:has been |was )?shipped\b/i,
+  /\bwe (?:have )?shipped (?:your )?(?:order|package)\b/i,
+] as const;
+
+const IN_TRANSIT_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese|csomagod) (?:mar )?uton van\b/i,
+  /\b(?:your )?(?:order|package) is on (?:its|the) way\b/i,
+  /\b(?:your )?(?:order|package) is in transit\b/i,
+] as const;
+
+const INVOICE_SIGNAL_PATTERNS = [
+  /\b(?:rendelesedhez|megrendelesedhez|rendeleshez|megrendeleshez) tartozo szamla\b/i,
+  /\bszamlad (?:elkeszult|kiallitottuk)\b/i,
+  /\belektronikus szamla(?:d)? [^\n.]{0,80}\b(?:kiallitva|kiallitottuk|kerult kiallit(?:asra|va))\b/i,
+  /\binvoice (?:for|for your) (?:order|purchase)\b/i,
+  /\byour invoice (?:is ready|has been issued)\b/i,
+] as const;
+
+export function parseGenericLifecycleEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): GenericLifecycleParseResult | null {
+  const senderDomain = safeSenderDomain(input.senderDomains);
+  if (!senderDomain) return null;
+
+  const subject = normalizeText(input.subject ?? '');
+  const freshBody = stripQuotedHistoryForGenericOrder(normalizeText(input.bodyText ?? ''));
+  const context = `${subject}\n${freshBody}`.trim();
+  if (!context) return null;
+
+  const orderNumber = extractFirst(context, ORDER_PATTERNS);
+  const trackingNumber = extractFirst(context, TRACKING_PATTERNS)?.toUpperCase() ?? null;
+  const invoiceNumber = extractFirst(context, INVOICE_PATTERNS);
+  const merchant = merchantFromDomain(senderDomain);
+
+  if (orderNumber && hasAny(context, INVOICE_SIGNAL_PATTERNS)) {
+    return {
+      extraction: baseExtraction({
+        eventType: 'invoice_or_receipt',
+        merchant,
+        orderNumber,
+        invoiceNumber,
+        confidence: invoiceNumber ? 0.95 : 0.93,
+      }),
+      parserVersion: GENERIC_LIFECYCLE_PARSER_VERSION,
+      senderDomain,
+      reasons: [
+        'merchant_owned_sender_domain',
+        'explicit_order_identity',
+        'explicit_invoice_for_order_signal',
+        ...(invoiceNumber ? ['explicit_invoice_identity'] : []),
+      ],
+    };
+  }
+
+  if (!orderNumber && !trackingNumber) return null;
+
+  let shipmentPhase: GenericLifecycleShipmentPhase | null = null;
+  let reason = '';
+  let eventType: GenericLifecycleEvent = 'shipment';
+
+  if (hasAny(context, DELIVERED_PATTERNS)) {
+    shipmentPhase = 'delivered';
+    eventType = 'delivery';
+    reason = 'explicit_delivery_signal';
+  } else if (hasAny(context, READY_FOR_PICKUP_PATTERNS)) {
+    shipmentPhase = 'ready_for_pickup';
+    reason = 'explicit_ready_for_pickup_signal';
+  } else if (hasAny(context, OUT_FOR_DELIVERY_PATTERNS)) {
+    shipmentPhase = 'out_for_delivery';
+    reason = 'explicit_out_for_delivery_signal';
+  } else if (hasAny(context, EXPLICIT_SHIPPED_PATTERNS)) {
+    shipmentPhase = 'shipped';
+    reason = 'explicit_physical_shipment_signal';
+  } else if (hasAny(context, IN_TRANSIT_PATTERNS)) {
+    shipmentPhase = 'in_transit';
+    reason = 'explicit_in_transit_signal';
+  }
+
+  if (!shipmentPhase) return null;
+
+  return {
+    extraction: baseExtraction({
+      eventType,
+      merchant,
+      orderNumber,
+      trackingNumber,
+      confidence: orderNumber && trackingNumber ? 0.96 : 0.93,
+    }),
+    parserVersion: GENERIC_LIFECYCLE_PARSER_VERSION,
+    shipmentPhase,
+    senderDomain,
+    reasons: [
+      'merchant_owned_sender_domain',
+      reason,
+      ...(orderNumber ? ['explicit_order_identity'] : []),
+      ...(trackingNumber ? ['explicit_tracking_identity'] : []),
+      'generic_lifecycle_link_only',
+    ],
+  };
+}

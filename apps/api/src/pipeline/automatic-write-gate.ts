@@ -5,6 +5,7 @@ import type { ShipmentResolutionCandidate } from '../resolution/shipment-resolut
 const TRUSTED_VALIDATION_STATUSES = new Set(['validated', 'guardrailed']);
 const SHADOW_ONLY_PARSER_VERSION_PATTERNS = [
   /^generic-order-confirmation-v\d+(?:\.\d+)*$/,
+  /^generic-lifecycle-v\d+(?:\.\d+)*$/,
 ] as const;
 
 type WritablePurchaseCandidate = PurchaseResolutionCandidate & {

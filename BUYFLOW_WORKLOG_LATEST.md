@@ -2,92 +2,163 @@
 
 > Newest detailed entry. Read after `BUYFLOW_HANDOFF.md`. Previous detailed entries remain in Git history and `BUYFLOW_WORKLOG.md`.
 
-## 2026-08-17 — Unknown Merchant generic order v1.4 safety hardening
+## 2026-08-17 — Generic Lifecycle V1 hard-anchor linking
 
 ### Goal
 
-Make the generic/unknown-merchant order-confirmation layer safer using the exact false-positive classes found by the live v1.3 mailbox audit, without enabling automatic Purchase writes or changing the intentionally empty production protocol registry.
+Allow later lifecycle emails from previously unknown merchants to attach useful evidence to an **already-existing Purchase**, while preserving the core invariant that lifecycle-only mail can never create a Purchase and generic evidence cannot automatically mutate lifecycle state.
 
-### Starting point
+Main before this release candidate:
+`723f7ed523cb8a4cd2de82676c4cac0e992d0e2e`
 
-Main before this release: `9bb89dcfa35b56b63a9ba4867110a51b62a4803e`.
+Release candidate:
+PR #149 — `agent/generic-lifecycle-link-v1`
 
-The v1.3 read-only two-year audit had reviewed 9,437 messages and found:
-- 12 raw generic candidates
-- 9 unprofiled candidates
-- 7 unprofiled sender families
-- 2 strong unprofiled candidates
+### Architecture
 
-Manual review identified four unsafe/duplicate observations:
-- two structurally rich automatic acknowledgements that explicitly denied contract formation/merchant acceptance,
-- one ABOUT YOU order acknowledgement with positive confirmation wording but explicit purchase-offer non-acceptance,
-- one later Vitál-Kolor merchant reply that quoted the full historical order confirmation and therefore re-triggered generic `ORDER_CREATED`.
+`generic-lifecycle-v1` runs only after:
+1. deterministic lifecycle parsers,
+2. Limone,
+3. deterministic commerce / generic new-order recognition.
 
-### PR #147 — v1.4 implementation
+It therefore cannot override known merchant/carrier semantics.
 
-Branch: `agent/generic-order-v14-safety-hardening`.
+Supported V1 observations:
+- explicitly shipped
+- in transit
+- out for delivery
+- ready for pickup
+- delivered
+- invoice tied to an explicit order identity
 
-`generic-order-confirmation-v1.4` adds:
+Sender boundary:
+- one merchant-owned sender domain required
+- known carrier domains rejected
+- shared platform senders rejected
+- public mailbox domains rejected
+- quoted reply/forward history stripped from generic lifecycle evidence
 
-1. **Explicit contract/offer non-acceptance guard**
-   - blocks narrow Hungarian and English wording that says the acknowledgement does not form a contract, does not accept the order/purchase offer, or merely confirms receipt;
-   - positive confirmation wording elsewhere does not override explicit non-acceptance;
-   - known merchant-specific adapters remain separate; reviewed JatekBolt semantics still run before the generic hard-negative lane.
+### Hard-link resolver
 
-2. **Quoted-history guard**
-   - generic new-order evidence uses only fresh message content above recognized reply/forward history;
-   - handles `On ... wrote:`, Hungarian `... ezt írta:`, Original Message/Eredeti üzenet, forwarded separators, Outlook From/To/Subject blocks and `>` quoting;
-   - full email content remains available to other merchant/lifecycle parsers;
-   - a true fresh order above an older quoted thread remains parseable.
+Automatic source attachment is permitted only when one of these resolves to exactly one existing Purchase:
+- exact order number + exact merchant domain
+- exact tracking number already belonging to an existing Shipment/Purchase
 
-Regression coverage was added for Tok-shop-, Mulan-, ABOUT YOU-style disclaimers and Gmail/Outlook/forward quote shapes.
+No domain+time fallback is allowed.
 
-First PR CI exposed only one stale test expectation still naming v1.3; no semantic failure. After fixing it, permanent PR CI #609 passed:
-- **680/680 API tests**
+Resolver outcomes:
+- one exact order+domain match => `linked_order_domain`
+- one exact tracking match => `linked_tracking`
+- multiple matches => `ambiguous`
+- order and tracking disagree => `conflict`
+- no hard anchor => `unmatched`
+
+Ambiguous, conflicting and unmatched observations remain REVIEW.
+
+### Independent safety barriers
+
+Generic lifecycle V1 does not authorize state automation.
+
+1. Source validation is forced to `review`; Purchase creation eligibility is false.
+2. Safe links use `purchase_sources.relation_type = generic_lifecycle`; the existing trusted shipment/delivery DB trigger ignores this relation type.
+3. The automatic write gate permanently rejects parser versions matching `generic-lifecycle-v...`, even if future code accidentally marks them validated or guardrailed.
+
+Metadata explicitly records:
+- `link_only = true`
+- `would_create_purchase = false`
+- `would_mutate_purchase_state = false`
+
+No schema migration was needed.
+
+### Real Sinsay edge case
+
+Supabase contained an existing Sinsay Purchase:
+- domain `sinsay.com`
+- order `15710474710`
+
+The mailbox contained a later real Sinsay shipment email:
+`Visszaigazolás arról, hogy a 15710474710 rendelést elküldték.`
+
+The first parser version missed the Hungarian word order where the identifier precedes `rendelést`. The parser was hardened to recognize this explicit form and formal wording such as `megrendelését elküldtük`, without introducing a weak fallback.
+
+After this change the permanent PR CI passed:
+- **703/703 API tests PASS**
 - API typecheck/build PASS
 - mobile typecheck/build PASS
 
-### PR #148 — one-off live v1.4 audit
+### Temporary PR #150 — live read-only audit
 
-Temporary draft audit PR #148 was based on the exact v1.4 release candidate and ran the rolling two-year Nylas audit read-only. It was intentionally closed **without merge** after evidence capture.
+PR #150 was a draft **DO NOT MERGE** audit branch and was closed without merge after evidence capture.
 
-Scope:
+The audit:
+- scanned the rolling two-year Nylas mailbox
+- loaded existing Purchases/Shipments with SELECT only
+- did not call the write linker
+- logged aggregate metrics + HMAC sender-domain fingerprints only
+
+Final scope:
 - **9,438 messages**
 - 472 pages
 - not truncated
-- 0 database writes
-- 0 production-registry use
-- 0 automatic Purchase writes
+- 9,437 messages already had list-body content
+- 1 full-message fetch
 - 0 full-message fetch failures
 - 0 rate-limit retries
+- 19 existing Purchases loaded
+- 16 existing Shipments loaded
 
-Before v1.4 -> after v1.4:
-- raw generic: **12 -> 8**
-- unprofiled: **9 -> 5**
-- distinct unprofiled families: **7 -> 4**
-- strong unprofiled: **2 -> 0**
-- repeated unprofiled families: **2 -> 1**
+Final funnel:
+- raw generic lifecycle matches: **43**
+- preempted by existing deterministic parsers: **7**
+- true fallback generic lifecycle candidates: **36**
+- exact order+domain linkable: **1**
+- exact tracking linkable: **0**
+- ambiguous: **0**
+- conflicts: **0**
+- unmatched/review: **35**
+- distinct fallback sender fingerprints: **14**
 
-Privacy-safe deterministic fingerprints proved exact retention/removal:
-- Manna: 2 -> 2 retained
-- Scitec: 1 -> 1 retained
-- Zákány: 1 -> 1 retained
-- Vitál-Kolor: 2 -> 1; original retained, quoted `Re:` duplicate removed
-- ABOUT YOU reviewed non-acceptance fingerprint removed
-- both reviewed unsafe strong fingerprints removed
+Fallback event mix:
+- shipment: **29**
+- invoice/receipt: **7**
 
-This is the desired precision improvement: all four reviewed unsafe/duplicate observations disappeared while all five reviewed legitimate order-received/recorded observations survived.
+Shipment phases:
+- in transit: **16**
+- explicitly shipped: **12**
+- ready for pickup: **1**
+- invoice/no shipment phase: **7**
 
-The audit run also passed **680/680 tests** and all API/mobile builds.
+The audit also passed **703/703 tests** and all API/mobile builds.
 
-### Safety state
+This is the desired V1 safety profile: a reviewed real hard anchor becomes linkable, but no ambiguous/conflicting match is guessed and the other 35 observations remain REVIEW.
 
-- generic parser identities remain shadow/review-only at the write gate;
-- `would_write=false` for generic production-shadow diagnostics;
-- no production protocol profile was activated;
-- no Purchase/Shipment/Payment/Invoice/Return/Refund/Warranty write was added;
-- temporary audit PR #148 was closed without merge.
+### Audit safety
 
-### Next action after release
+During PR #150:
+- 0 `source_emails` writes
+- 0 `purchase_sources` writes
+- 0 Purchase writes
+- 0 Shipment writes
+- 0 Document writes
+- 0 production-registry use
+- no raw email/subject/message/sender/order/tracking/invoice values in CI output
 
-Merge PR #147 only after its final documentation-triggered CI is green, then require exact main-push CI and exact Render Webhook Smoke for the merge SHA. After release, keep generic order detection shadow-only and expand unseen merchant/template/language coverage before designing generic lifecycle matching to an already-known Purchase.
+PR #150 was closed **without merge**.
+
+### Documentation
+
+Detailed design and evidence:
+`protocols/GENERIC-LIFECYCLE-LINK-V1-2026-08-17.md`
+
+### Next release gate
+
+Before merging PR #149:
+1. final documentation-triggered PR CI must be green on the exact head;
+2. PR diff must contain no audit workflow/script, migration, or production protocol activation;
+3. merge only the permanent parser/linker/runtime/tests/docs;
+4. require exact main CI and exact Render Webhook Smoke for the merge SHA;
+5. verify the production protocol registry remains empty.
+
+### After release
+
+Keep generic lifecycle state mutation disabled. The next evidence task is to review/cluster the remaining unmatched sender families and measure generic lifecycle shadow diagnostics before proposing any stronger automatic lifecycle update capability.
