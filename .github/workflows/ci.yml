@@ -65,3 +65,4 @@ jobs:
           if [ -z "${SUPABASE_SECRET_KEY:-}" ]; then unset SUPABASE_SECRET_KEY; fi
 
           npx tsx apps/api/src/scripts/nylas-payment-shadow-link-audit-v2.ts
+          npx tsx apps/api/src/scripts/nylas-barion-rule-diagnostic-audit.ts
