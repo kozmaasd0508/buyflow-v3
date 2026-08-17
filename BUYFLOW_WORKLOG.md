@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-17 — Unknown Merchant generic order v1.4
+
+- PR #147 hardens `generic-order-confirmation-v1.4` from the real v1.3 mailbox findings: explicit contract/order-offer non-acceptance now blocks generic order creation, and recognized reply/forward quoted history cannot create a second `ORDER_CREATED` candidate.
+- Quote stripping is scoped only to generic new-order evidence; full email remains available to merchant/lifecycle parsers. Reviewed JatekBolt merchant-specific order-received semantics remain separate.
+- Permanent PR CI #609 passed **680/680 API tests**, API typecheck/build and mobile typecheck/build.
+- Temporary read-only PR #148 reran the full rolling two-year Nylas audit over **9,438 messages**, then was closed **without merge**.
+- Live before -> after: raw generic 12 -> 8; unprofiled 9 -> 5; distinct unprofiled families 7 -> 4; strong unprofiled 2 -> 0.
+- Exact privacy-safe fingerprint comparison: Manna 2 -> 2, Scitec 1 -> 1, Zákány 1 -> 1, Vitál-Kolor 2 -> 1 (quoted reply removed, original retained); reviewed ABOUT YOU and both unsafe strong non-acceptance families disappeared.
+- No DB writes, production registry use, automatic Purchase writes or protocol activation. Generic unknown-merchant order evidence remains REVIEW/shadow-only with `would_write=false`.
+- Release gate: final PR #147 CI -> merge -> exact main CI -> exact Render smoke.
+
 ## 2026-08-15 — Gyerekjatekbolt failure/cancel + Szidibox/MPL recovery
 
 - Reviewed the remaining second-Gmail REVIEW/unlinked backlog and prioritized real commerce clusters over obvious subscription/promo/noise.
