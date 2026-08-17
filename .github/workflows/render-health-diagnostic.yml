@@ -1,5 +1,6 @@
 name: Render Webhook Health Diagnostic
 
+# One-off branch trigger on 2026-08-17 to diagnose stalled Render deployment after main CI #615.
 on:
   push:
     paths:
