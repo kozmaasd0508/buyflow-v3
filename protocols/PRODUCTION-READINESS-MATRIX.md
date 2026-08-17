@@ -55,12 +55,14 @@ The **46 GLS conflicts are now closed** as one repeated, non-dangerous comparato
 
 The **7 Alza conflicts are now closed** as a multi-event versus single-result comparator difference. Direct recipient emails show final AlzaBox/DPD messages can independently prove a logistics event and a final `INVOICE` event in the same message. The protocol shadow keeps those facts separate, while the legacy deterministic commerce parser returns one primary commerce result. See `protocols/merchants/hu/alza/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 
+The **single MPL conflict is now closed** as a physical-handoff boundary difference in the current `Csomagot adtak fel neked` template. The protocol keeps the posting notice at `SHIPMENT_CREATED`; the legacy MPL parser promoted the same template to `SHIPPED`. Direct Gmail wording says a later notification will announce courier departure or pickup-point arrival, so the conservative protocol result is retained. See `protocols/carriers/hu/mpl/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
+
 ## Executive rollout summary
 
 | Readiness | Count | Meaning |
 |---|---:|---|
-| GREEN | 7 | Candidate for production-shadow instrumentation only |
-| YELLOW | 20 | Continue shadow / gather or resolve specific evidence |
+| GREEN | 8 | Candidate for production-shadow instrumentation only |
+| YELLOW | 19 | Continue shadow / gather or resolve specific evidence |
 | RED | 6 | Research or negative-only for positive lifecycle automation |
 | **Total** | **33** | 31 test + 2 research-only profiles |
 
@@ -70,9 +72,10 @@ Recommended first production-shadow wave:
 2. `carrier.hu.foxpost`
 3. `carrier.hu.expressone`
 4. `carrier.hu.gls`
-5. `merchant.hu.gymbeam`
-6. `merchant.hu.alza`
-7. `payment.hu.simplepay`
+5. `carrier.hu.mpl`
+6. `merchant.hu.gymbeam`
+7. `merchant.hu.alza`
+8. `payment.hu.simplepay`
 
 These should still emit observations only. No automatic production write is implied by this ranking.
 
@@ -112,7 +115,7 @@ These should still emit observations only. No automatic production write is impl
 |---|---|---:|---|---|
 | `carrier.hu.foxpost` | **GREEN** | 84 total; 34 compatible, 50 shadow-only, **0 conflict** | Direct pre-advice, warehouse possession and locker/pickup-ready states with tracking identity | Production-shadow candidate; continue to reject generic delivered inference |
 | `carrier.hu.gls` | **GREEN** | 109 total; 57 compatible, 6 shadow-only, **46 reviewed conflicts** | Direct pre-advice, delivery-today and locker-ready boundaries are explicit; all 46 conflicts were the same legacy generic future-delivery overreach on parcel-information mail | Production-shadow candidate; keep pre-advice frozen at `SHIPMENT_CREATED` and reopen the gate for any conflict outside the reviewed fingerprint |
-| `carrier.hu.mpl` | YELLOW | 142 total; 2 exact, 139 shadow-only, 1 conflict | Broad direct lifecycle including pre-advice, OFD, failed attempt, pickup-ready and explicit delivery proof | Manually close the remaining conflict and verify legacy/current template generations as one reviewed set |
+| `carrier.hu.mpl` | **GREEN** | 142 total; 2 exact, 139 shadow-only, **1 reviewed conflict** | Broad direct lifecycle with legacy/current posting notices, courier allocation, failed attempt, pickup-ready and explicit delivery proof; the only conflict was legacy promotion of the current posting notice to `SHIPPED` | Production-shadow candidate; keep both posting-notice generations at `SHIPMENT_CREATED` and preserve all later MPL states as separate direct evidence |
 | `carrier.hu.expressone` | **GREEN** | 15 total; 9 exact, 4 shadow-only, 2 conflicts | Direct full chain clearly separates pre-advice, physical hub possession, OFD, delay and delivered timestamp | The 2 differences are pre-advice/physical-progress boundary reviews; keep that conservative boundary frozen in production-shadow |
 | `carrier.hu.dpd` | **GREEN** | 71 total; 47 compatible, 24 shadow-only, **0 conflict** | Direct pre-advice, physical dispatch, OFD, delivery and refusal-return boundaries are explicit | Production-shadow candidate; keep payment receipt and myDPD/account messages hard-negative |
 | `carrier.hu.packeta` | YELLOW | 21 shadow-only, 0 conflict | Direct handoff and pickup-ready evidence exists | 2026 FoxPost legal-successor transition makes channel identity transitional; collect more current-generation live mail |
@@ -155,7 +158,7 @@ These are library-wide, not profile-specific:
 
 - GLS: **closed 2026-08-17** — all 46 differences were reviewed as the same safe pre-advice/comparator boundary; see `protocols/carriers/hu/gls/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - Alza: **closed 2026-08-17** — the 7 differences were reviewed as multi-event finalization evidence versus the legacy single-result comparator; see `protocols/merchants/hu/alza/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
-- MPL: close the single conflict.
+- MPL: **closed 2026-08-17** — the only difference was the current posting notice, retained conservatively as `SHIPMENT_CREATED`; see `protocols/carriers/hu/mpl/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - Express One: retain the conservative pre-advice boundary and document the two differences as reviewed/non-dangerous.
 
 ### Gate B — production-shadow instrumentation
