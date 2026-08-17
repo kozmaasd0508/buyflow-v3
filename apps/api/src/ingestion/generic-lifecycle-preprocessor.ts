@@ -127,7 +127,9 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     subject: email.subject,
     bodyText,
   }));
-  const validatedResult = validatedObservations[0]!;
+  // Keep the compatibility result separate from the nested observation list.
+  // Otherwise the first nested observation would reference its own parent.
+  const validatedResult: Record<string, unknown> = { ...validatedObservations[0]! };
   validatedResult.generic_lifecycle_observations = validatedObservations;
   validatedResult.generic_lifecycle_observation_count = observations.length;
   validatedResult.generic_lifecycle_multi_observation = observations.length > 1;
