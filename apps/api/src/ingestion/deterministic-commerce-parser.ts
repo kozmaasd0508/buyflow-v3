@@ -18,6 +18,7 @@ import { parseZalandoCommerceEmail } from './zalando-commerce-adapter.js';
 const PARSER_VERSION = 'deterministic-commerce-v2';
 const AI_OFF_FALLBACK_PARSER_VERSION = 'deterministic-ai-off-fallback-v1';
 const DETERMINISTIC_BODY_MAX_CHARS = 80_000;
+const GENERIC_ORDER_PARSER_VERSION_PATTERN = /^generic-order-confirmation-v\d+(?:\.\d+)*$/;
 
 interface CarrierRule {
   name: string;
@@ -508,6 +509,18 @@ export async function preprocessDeterministicNylasMessage(input: {
     subject: email.subject,
     bodyText,
   });
+  const genericShadowOnly = GENERIC_ORDER_PARSER_VERSION_PATTERN.test(parsed.parserVersion);
+  if (genericShadowOnly) {
+    validated.validation_status = 'review';
+    validated.eligible_for_purchase_creation = false;
+    validated.reasons = [
+      ...new Set([
+        ...validated.reasons,
+        'generic_order_confirmation_shadow_only',
+      ]),
+    ];
+  }
+
   const now = new Date().toISOString();
   const structuredResult = {
     schema_version: 2,
@@ -516,11 +529,16 @@ export async function preprocessDeterministicNylasMessage(input: {
     extraction_source: 'deterministic',
     parser_version: parsed.parserVersion,
     parser_reasons: parsed.reasons,
+    ...(genericShadowOnly ? { shadow_only: true, would_write: false } : {}),
   };
   const validatedResult = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
   validatedResult.extraction_source = 'deterministic';
   validatedResult.parser_version = parsed.parserVersion;
   validatedResult.parser_reasons = parsed.reasons;
+  if (genericShadowOnly) {
+    validatedResult.shadow_only = true;
+    validatedResult.would_write = false;
+  }
   if (parsed.shipmentPhase) {
     validatedResult.shipment_phase = parsed.shipmentPhase;
   }
