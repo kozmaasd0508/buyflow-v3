@@ -4,8 +4,8 @@
 
 **Last updated:** 2026-08-17 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Main before the v1.4 release:** `9bb89dcfa35b56b63a9ba4867110a51b62a4803e`  
-**Current release candidate:** PR #147 — Generic order acceptance + quoted-history hardening  
+**Current main before Generic Lifecycle V1 release:** `723f7ed523cb8a4cd2de82676c4cac0e992d0e2e`  
+**Current release candidate:** PR #149 — Generic lifecycle hard-anchor linking  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -26,14 +26,14 @@ BuyFlow turns purchase, payment, shipment, invoice, warranty and return/refund e
 - recognition: deterministic-first; ambiguity => REVIEW
 - AI is intentionally disabled in the production recognition path
 - protocol knowledge lives separately from production activation
-- release path: branch -> PR -> PR CI -> merge -> main CI -> exact Render smoke
+- release path: branch -> PR -> PR CI -> live read-only audit when needed -> merge -> main CI -> exact Render smoke
 
 ## NON-NEGOTIABLE SAFETY
 
 1. Purchase creation and lifecycle updates are separate decisions.
 2. Lifecycle-only mail cannot create a Purchase.
 3. Multiple plausible candidates => REVIEW; never guess.
-4. Matching precedence remains exact order identity > tracking identity > conservative merchant/domain/time fallback.
+4. General matching precedence is exact order identity > tracking identity > conservative merchant/domain/time fallback, but **Generic Lifecycle V1 does not allow domain+time fallback at all**.
 5. Public/shared mailbox/platform sender cannot establish merchant identity alone.
 6. Packing, label creation, pre-advice and `SHIPMENT_CREATED` do not prove physical shipment.
 7. `OUT_FOR_DELIVERY` / arriving today is not `DELIVERED`.
@@ -44,8 +44,9 @@ BuyFlow turns purchase, payment, shipment, invoice, warranty and return/refund e
 12. Return request/approval is not settled RETURN; refund wording/request is not settled `REFUNDED` without stronger evidence.
 13. Protocol evidence never bypasses classifier, resolution or write gates.
 14. Unknown systems continue through conservative generic classification.
-15. Unknown-merchant generic order evidence is currently shadow/review-only and cannot automatically create a Purchase.
-16. Supabase DDL uses migrations; no unsafe historical writes.
+15. Unknown-merchant generic order evidence remains shadow/review-only and cannot automatically create a Purchase.
+16. Generic lifecycle evidence may attach only to an already-known Purchase through a hard anchor and cannot mutate Purchase/Shipment/Document state in V1.
+17. Supabase DDL uses migrations; no unsafe historical writes.
 
 ## PROTOCOL LIBRARY / PRODUCTION STATE
 
@@ -57,7 +58,7 @@ Protocol Library foundation is under `apps/api/src/protocols/` with research kno
 
 ### Gate B — live read-only production shadow
 
-Gate B is complete and observes exactly eight reviewed GREEN profiles against live Nylas `message.created` traffic:
+Gate B observes exactly eight reviewed GREEN profiles against live Nylas `message.created` traffic:
 - DPD
 - FOXPOST
 - Express One
@@ -67,7 +68,7 @@ Gate B is complete and observes exactly eight reviewed GREEN profiles against li
 - Alza
 - SimplePay
 
-Gate B diagnostics are privacy-reduced and always `would_write:false`. Observer failures are isolated from normal ingestion. This does not authorize Purchase/shipment/payment/invoice/return/refund/warranty writes.
+Gate B diagnostics are privacy-reduced and always `would_write:false`. Observer failures are isolated from normal ingestion.
 
 ## GENERIC / UNKNOWN MERCHANT ORDER ENGINE
 
@@ -76,61 +77,93 @@ BuyFlow does **not** require a merchant profile for every webshop. Recognition h
 2. known commerce platform/engine evidence,
 3. generic unknown-merchant recognition.
 
-The generic lane recognizes a merchant-owned order-confirmation structure using multiple independent signals such as stable order identity, explicit confirmation intent, total/currency, payment/shipping method, product rows and order-details sections.
+`generic-order-confirmation-v1.4` recognizes a merchant-owned order-confirmation structure using multiple independent signals while blocking explicit contract/non-acceptance acknowledgements and quoted historical orders.
 
-Hard negatives include payment-only, invoice-only, courier-only, shipment-only, cart/marketing, quote/pro-forma, return/refund-only, account/security and unsupported lifecycle-only messages.
+Generic parser identities matching `generic-order-confirmation-v...` are permanently excluded from trusted automatic evidence. New generic order observations are REVIEW/shadow and cannot directly create a Purchase.
 
-Generic parser identities matching `generic-order-confirmation-v...` are permanently excluded from trusted automatic evidence. New generic observations are forced to REVIEW/shadow and cannot directly create a Purchase.
+### v1.4 live proof
 
-## GENERIC v1.4 — PR #147
+One-off read-only PR #148 scanned 9,438 messages and was closed without merge:
+- raw generic candidates: 12 -> 8
+- unprofiled candidates: 9 -> 5
+- distinct unprofiled families: 7 -> 4
+- strong unprofiled candidates: 2 -> 0
+- 680/680 tests passed on that release
 
-`generic-order-confirmation-v1.4` adds two safety layers learned from real mailbox evidence:
+Current main `723f7ed...` is the merged v1.4 release and its exact Render Webhook Smoke eventually passed after Render deployment delay.
 
-### 1. Contract / offer non-acceptance guard
+## GENERIC LIFECYCLE V1 — PR #149
 
-Rich automatic acknowledgements are rejected from generic order creation when they explicitly say the message does not form a contract, does not accept the purchase offer/order, or merely confirms receipt. Positive wording elsewhere in the same email does not override an explicit non-acceptance statement.
+`generic-lifecycle-v1` is a last-resort lifecycle lane for an unknown merchant after all known deterministic lifecycle/merchant/order parsers have declined the message.
 
-Known merchant-specific semantics remain separate; the exact reviewed JatekBolt order-received adapter still runs before the generic hard-negative lane.
+Supported observations:
+- explicitly shipped
+- in transit
+- out for delivery
+- ready for pickup
+- delivered
+- invoice tied to an explicit order identity
 
-### 2. Quoted-history guard
+### Hard-link rules
 
-Only the generic new-order parser receives a fresh-content view. Recognized historical reply/forward forms (`On ... wrote:`, Hungarian `... ezt írta:`, Original Message/Eredeti üzenet, forwarded headers, Outlook From/To/Subject blocks and `>` quoted lines) cannot create a second order candidate.
+V1 may attach the source to an **existing Purchase only** through:
+1. exact normalized order number + exact merchant domain, resolving to exactly one Purchase; or
+2. unique exact existing tracking number already tied to one Purchase.
 
-The original full email remains available to merchant/lifecycle parsers. A genuine new order above an older quoted thread still parses.
+No domain+time fallback is allowed.
 
-## LIVE v1.4 MAILBOX PROOF
+Outcomes:
+- multiple hard-anchor matches => REVIEW / `ambiguous`
+- order and tracking anchors disagree => REVIEW / `conflict`
+- no hard anchor => REVIEW / `unmatched`
 
-A one-off read-only two-year Nylas audit was run against the v1.4 release candidate in temporary PR #148, which was closed **without merge**.
+### Three independent write barriers
 
-Scope:
-- **9,438 messages**
-- 472 pages
-- not truncated
+Even after a safe source link:
+1. generic lifecycle source remains `validation_status = review` and `eligible_for_purchase_creation = false`;
+2. the relation is `purchase_sources.relation_type = generic_lifecycle`, which the trusted shipment/delivery state trigger ignores;
+3. `automatic-write-gate.ts` permanently rejects parser versions matching `generic-lifecycle-v...`, even if future code accidentally marks them validated/guardrailed.
+
+Therefore V1 can attach source evidence but cannot create a Purchase or mutate Purchase/Shipment/Document state.
+
+### Real Sinsay grammar proof
+
+Production data contains a Sinsay Purchase with order `15710474710`. A later real Sinsay email states that the `15710474710 rendelést elküldték`. This exposed a Hungarian word-order gap where the identifier precedes `rendelést`; the parser was hardened for that explicit form without adding a weak fallback.
+
+### Live mailbox proof — temporary PR #150
+
+PR #150 was read-only and closed **without merge** after evidence capture.
+
+Final scope:
+- **9,438 messages** / 472 pages / not truncated
+- 19 existing Purchases and 16 existing Shipments loaded read-only
 - 0 database writes
 - 0 production-registry use
-- 0 automatic Purchase writes
-- 0 full-message fetch failures
 
-Before v1.4 -> after v1.4:
-- raw generic candidates: **12 -> 8**
-- unprofiled candidates: **9 -> 5**
-- distinct unprofiled sender families: **7 -> 4**
-- strong unprofiled candidates: **2 -> 0**
+Final funnel:
+- raw generic lifecycle matches: **43**
+- preempted by existing deterministic parsers: **7**
+- true generic lifecycle fallbacks: **36**
+- exact order+domain hard links: **1**
+- exact tracking hard links: **0**
+- ambiguous: **0**
+- conflicts: **0**
+- unmatched / REVIEW: **35**
+- distinct fallback sender fingerprints: **14**
 
-Manual/fingerprint verification:
-- Manna: 2 -> 2, retained
-- Scitec: 1 -> 1, retained
-- Zákány: 1 -> 1, retained
-- Vitál-Kolor: 2 -> 1; original retained, quoted reply duplicate removed
-- reviewed ABOUT YOU non-acceptance candidate removed
-- both reviewed unsafe strong Tok-shop/Mulan-style candidates removed
+Fallback mix:
+- shipment: 29
+- invoice/receipt: 7
+- in transit: 16
+- explicitly shipped: 12
+- ready for pickup: 1
 
-The result exactly matched the intended safety correction: four unsafe/duplicate candidates disappeared and the five legitimate order-received/recorded observations survived.
-
-Verification on the same code:
-- **680/680 API tests PASS**
+Verification on the same final code:
+- **703/703 API tests PASS**
 - API typecheck/build PASS
 - mobile typecheck/build PASS
+
+Detailed design/evidence: `protocols/GENERIC-LIFECYCLE-LINK-V1-2026-08-17.md`.
 
 ## RESEARCH COVERAGE
 
@@ -140,12 +173,14 @@ Research or test status is not production authorization. The production protocol
 
 ## CURRENT NEXT ARCHITECTURE GAP
 
-After PR #147 is merged and exact main CI/Render smoke are green:
+After PR #149 is merged and exact main CI/Render smoke are green:
 
-1. keep generic unknown-merchant order detection in shadow/review-only mode;
-2. expand blind coverage with more unseen merchant/language/template families;
-3. then build generic **lifecycle matching to an already-known Purchase** without allowing lifecycle-only mail to anchor a new Purchase;
-4. only consider an automatic generic Purchase-write gate after a separate deliberate live false-positive study and explicit production authorization.
+1. keep generic unknown-merchant order creation shadow/review-only;
+2. keep generic lifecycle **state mutation disabled**;
+3. manually review/cluster the remaining generic lifecycle unmatched sender families to separate useful templates from review noise;
+4. expand unseen language/template coverage only with hard anchors;
+5. add/measure generic lifecycle shadow diagnostics before considering any state-mutation proposal;
+6. any automatic generic Purchase write or generic lifecycle state mutation requires a separate live false-positive study and explicit production authorization.
 
 ## QUALITY TARGET
 
