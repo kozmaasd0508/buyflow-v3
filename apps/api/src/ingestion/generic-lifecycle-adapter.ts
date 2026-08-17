@@ -160,14 +160,18 @@ function hasAny(text: string, patterns: readonly RegExp[]): boolean {
  * the state is true now. Real reviewed examples include:
  * - "ertesitunk, amint rendelesed atveheto"
  * - "e-mailben kuldjuk, mikor a rendeleset atadtuk a futarszolgalatnak"
+ * - "miutan kaptal ertesitest, hogy a rendelesed atveheto"
  *
- * Keep this narrow: remove only the sentence carrying the future reporting
- * construction. Order/tracking identities are still extracted from the full
- * fresh message, and an independent current-state sentence remains usable.
+ * Keep this narrow: remove only the sentence carrying the future reporting or
+ * prerequisite construction. Order/tracking identities are still extracted
+ * from the full fresh message, and an independent current-state sentence
+ * remains usable.
  */
 const FUTURE_CONDITIONAL_LIFECYCLE_STATEMENT_PATTERNS = [
   /\b(?:tovabbi\s+e-?mailben\s+)?ertesit(?:unk|juk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
   /\b(?:e-?mailben\s+)?(?:kuldjuk|kuldeni\s+fogjuk|kuldunk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
+  /\bmiutan\b[^.!?\n]{0,120}\b(?:kaptal|kapott|kapsz|kapja|kap)\b[^.!?\n]{0,120}\bertesitest\b[^.!?\n]{0,160}\batveheto\b/i,
+  /\bcsak\s+akkor\b[^.!?\n]{0,220}\bmiutan\b[^.!?\n]{0,220}\bertesitest\b[^.!?\n]{0,160}\batveheto\b/i,
   /\bwe(?:'ll|\s+will)\s+(?:notify|email|send)[^.!?\n]{0,180}\b(?:when|once|as\s+soon\s+as)\b/i,
   /\byou(?:'ll|\s+will)\s+(?:be\s+notified|receive)[^.!?\n]{0,180}\b(?:when|once|as\s+soon\s+as)\b/i,
 ] as const;
