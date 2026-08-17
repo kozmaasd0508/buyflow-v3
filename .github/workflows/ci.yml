@@ -65,4 +65,11 @@ jobs:
           if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then unset SUPABASE_SERVICE_ROLE_KEY; fi
           if [ -z "${SUPABASE_SECRET_KEY:-}" ]; then unset SUPABASE_SECRET_KEY; fi
 
+          # Audit-only transport hardening: keep candidate logic unchanged while
+          # allowing the existing exponential retry to survive transient Nylas 502/503/504 responses.
+          perl -0pi -e 's/statusCodeOf\(error\) !== 429/![429, 502, 503, 504].includes(statusCodeOf(error) ?? 0)/' \
+            apps/api/src/scripts/nylas-generic-commerce-audit.ts
+          grep -F '![429, 502, 503, 504].includes(statusCodeOf(error) ?? 0)' \
+            apps/api/src/scripts/nylas-generic-commerce-audit.ts >/dev/null
+
           npm run nylas:generic-commerce-audit --workspace @buyflow/api
