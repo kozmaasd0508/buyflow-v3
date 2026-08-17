@@ -6,7 +6,7 @@ import {
   stripQuotedHistoryForGenericOrder,
 } from './generic-order-confirmation-adapter.js';
 
-export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.2';
+export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.3';
 
 export type GenericLifecycleEvent = 'shipment' | 'delivery' | 'invoice_or_receipt';
 export type GenericLifecycleShipmentPhase =
@@ -242,31 +242,101 @@ const INVOICE_SIGNAL_PATTERNS = [
   /\b(?:rendelesedhez|megrendelesedhez|rendeleshez|megrendeleshez) tartozo szamla\b/i,
   /\bszamlad (?:elkeszult|kiallitottuk)\b/i,
   /\belektronikus szamla(?:d)? [^\n.]{0,80}\b(?:kiallitva|kiallitottuk|kerult kiallit(?:asra|va))\b/i,
+  /\buj elektronikus szamlad erkezett\b/i,
+  /\b(?:csatolva|mellekletben|mellekletekent) [^\n.]{0,120}\b(?:elkeszult )?szamla(?:t|dat|jat)\b/i,
+  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese) szamla(?:ja|jat|dat)\b/i,
   /\binvoice (?:for|for your) (?:order|purchase)\b/i,
   /\byour invoice (?:is ready|has been issued)\b/i,
 ] as const;
 
-export function parseGenericLifecycleEmail(input: {
+function shipmentObservation(input: {
+  merchant: string;
+  orderNumber: string | null;
+  trackingNumber: string | null;
+  senderDomain: string;
+  evidenceContext: string;
+}): GenericLifecycleParseResult | null {
+  let shipmentPhase: GenericLifecycleShipmentPhase | null = null;
+  let reason = '';
+  let eventType: GenericLifecycleEvent = 'shipment';
+
+  if (hasAny(input.evidenceContext, DELIVERED_PATTERNS)) {
+    shipmentPhase = 'delivered';
+    eventType = 'delivery';
+    reason = 'explicit_delivery_signal';
+  } else if (hasAny(input.evidenceContext, READY_FOR_PICKUP_PATTERNS)) {
+    shipmentPhase = 'ready_for_pickup';
+    reason = 'explicit_ready_for_pickup_signal';
+  } else if (hasAny(input.evidenceContext, OUT_FOR_DELIVERY_PATTERNS)) {
+    shipmentPhase = 'out_for_delivery';
+    reason = 'explicit_out_for_delivery_signal';
+  } else if (hasAny(input.evidenceContext, EXPLICIT_SHIPPED_PATTERNS)) {
+    shipmentPhase = 'shipped';
+    reason = 'explicit_physical_shipment_signal';
+  } else if (
+    hasAny(input.evidenceContext, PACKAGE_IN_TRANSIT_PATTERNS)
+    || (
+      hasAny(input.evidenceContext, ORDER_IN_TRANSIT_PATTERNS)
+      && hasAny(input.evidenceContext, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
+    )
+  ) {
+    shipmentPhase = 'in_transit';
+    reason = 'explicit_in_transit_signal';
+  }
+
+  if (!shipmentPhase) return null;
+
+  return {
+    extraction: baseExtraction({
+      eventType,
+      merchant: input.merchant,
+      orderNumber: input.orderNumber,
+      trackingNumber: input.trackingNumber,
+      confidence: input.orderNumber && input.trackingNumber ? 0.96 : 0.93,
+    }),
+    parserVersion: GENERIC_LIFECYCLE_PARSER_VERSION,
+    shipmentPhase,
+    senderDomain: input.senderDomain,
+    reasons: [
+      'merchant_owned_sender_domain',
+      reason,
+      ...(input.orderNumber ? ['explicit_order_identity'] : []),
+      ...(input.trackingNumber ? ['explicit_tracking_identity'] : []),
+      'generic_lifecycle_link_only',
+    ],
+  };
+}
+
+/**
+ * One transactional message may independently prove more than one lifecycle
+ * fact. v1.3 keeps one source-email row but exposes separate shadow/review
+ * observations, for example SHIPPED + INVOICE. It never merges those facts
+ * into a stronger automatic decision.
+ */
+export function parseGenericLifecycleObservations(input: {
   senderDomains: string[];
   subject?: string | null;
   bodyText?: string | null;
-}): GenericLifecycleParseResult | null {
+}): GenericLifecycleParseResult[] {
   const senderDomain = safeSenderDomain(input.senderDomains);
-  if (!senderDomain) return null;
+  if (!senderDomain) return [];
 
   const subject = normalizeText(input.subject ?? '');
   const freshBody = stripQuotedHistoryForGenericOrder(normalizeText(input.bodyText ?? ''));
   const context = `${subject}\n${freshBody}`.trim();
-  if (!context) return null;
+  if (!context) return [];
 
   const orderNumber = extractFirst(context, ORDER_PATTERNS);
   const trackingNumber = extractFirst(context, TRACKING_PATTERNS)?.toUpperCase() ?? null;
   const invoiceNumber = extractFirst(context, INVOICE_PATTERNS);
   const merchant = merchantFromDomain(senderDomain);
   const evidenceContext = currentLifecycleEvidenceText(subject, freshBody);
+  const observations: GenericLifecycleParseResult[] = [];
 
+  // Preserve v1.2 compatibility: invoice remains the primary observation when
+  // a message explicitly carries both invoice and shipment evidence.
   if (orderNumber && hasAny(evidenceContext, INVOICE_SIGNAL_PATTERNS)) {
-    return {
+    observations.push({
       extraction: baseExtraction({
         eventType: 'invoice_or_receipt',
         merchant,
@@ -281,59 +351,34 @@ export function parseGenericLifecycleEmail(input: {
         'explicit_order_identity',
         'explicit_invoice_for_order_signal',
         ...(invoiceNumber ? ['explicit_invoice_identity'] : []),
+        'generic_lifecycle_link_only',
       ],
-    };
+    });
   }
 
-  if (!orderNumber && !trackingNumber) return null;
-
-  let shipmentPhase: GenericLifecycleShipmentPhase | null = null;
-  let reason = '';
-  let eventType: GenericLifecycleEvent = 'shipment';
-
-  if (hasAny(evidenceContext, DELIVERED_PATTERNS)) {
-    shipmentPhase = 'delivered';
-    eventType = 'delivery';
-    reason = 'explicit_delivery_signal';
-  } else if (hasAny(evidenceContext, READY_FOR_PICKUP_PATTERNS)) {
-    shipmentPhase = 'ready_for_pickup';
-    reason = 'explicit_ready_for_pickup_signal';
-  } else if (hasAny(evidenceContext, OUT_FOR_DELIVERY_PATTERNS)) {
-    shipmentPhase = 'out_for_delivery';
-    reason = 'explicit_out_for_delivery_signal';
-  } else if (hasAny(evidenceContext, EXPLICIT_SHIPPED_PATTERNS)) {
-    shipmentPhase = 'shipped';
-    reason = 'explicit_physical_shipment_signal';
-  } else if (
-    hasAny(evidenceContext, PACKAGE_IN_TRANSIT_PATTERNS)
-    || (
-      hasAny(evidenceContext, ORDER_IN_TRANSIT_PATTERNS)
-      && hasAny(evidenceContext, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
-    )
-  ) {
-    shipmentPhase = 'in_transit';
-    reason = 'explicit_in_transit_signal';
-  }
-
-  if (!shipmentPhase) return null;
-
-  return {
-    extraction: baseExtraction({
-      eventType,
+  if (orderNumber || trackingNumber) {
+    const shipment = shipmentObservation({
       merchant,
       orderNumber,
       trackingNumber,
-      confidence: orderNumber && trackingNumber ? 0.96 : 0.93,
-    }),
-    parserVersion: GENERIC_LIFECYCLE_PARSER_VERSION,
-    shipmentPhase,
-    senderDomain,
-    reasons: [
-      'merchant_owned_sender_domain',
-      reason,
-      ...(orderNumber ? ['explicit_order_identity'] : []),
-      ...(trackingNumber ? ['explicit_tracking_identity'] : []),
-      'generic_lifecycle_link_only',
-    ],
-  };
+      senderDomain,
+      evidenceContext,
+    });
+    if (shipment) observations.push(shipment);
+  }
+
+  return observations;
+}
+
+/**
+ * Backward-compatible single-observation API. Existing callers continue to
+ * receive the same primary event ordering as v1.2 while new callers can use
+ * parseGenericLifecycleObservations() for the full shadow evidence set.
+ */
+export function parseGenericLifecycleEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): GenericLifecycleParseResult | null {
+  return parseGenericLifecycleObservations(input)[0] ?? null;
 }
