@@ -1,12 +1,12 @@
 # BuyFlow V3 — persistent handoff
 
-> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile this snapshot with current GitHub/Supabase/Render state before changing runtime code.
+> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile with current GitHub/Supabase/Render state before changing runtime code.
 
 **Last updated:** 2026-08-17 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Current released main before v1.2:** `3a2b4ce07c0a065109cea2d54b146673be12d5b9`  
-**Current release candidate:** PR #153 — Generic Lifecycle v1.2 future/prerequisite guard  
-**Final temporary audit:** PR #155 — closed without merge  
+**Current released main:** `73fe594d281df31307547585f6204f34d92a4039` — Generic Lifecycle v1.2  
+**Current release candidate:** PR #156 — Generic Lifecycle v1.3 multi-observation shadow  
+**Final temporary audit:** PR #157 — closed without merge  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
 
@@ -44,11 +44,12 @@ BuyFlow turns purchase, payment, shipment, invoice, warranty and return/refund e
 13. Return request/approval is not settled RETURN; refund wording/request is not settled `REFUNDED` without stronger evidence.
 14. Generic order and generic lifecycle parser families are permanently shadow/review-only at the automatic write gate.
 15. Generic lifecycle may attach only to an already-known Purchase through a hard anchor and cannot mutate Purchase/Shipment/Document state.
-16. Production protocol activation is explicit; research/test status alone is never production authorization.
+16. Multiple semantic observations from one email never grant stronger write authority; they remain independent REVIEW facts on one source email.
+17. Production protocol activation is explicit; research/test status alone is never production authorization.
 
 ## PRODUCTION PROTOCOL STATE
 
-`apps/api/src/protocols/registry.ts` is intentionally empty:
+`apps/api/src/protocols/registry.ts` remains intentionally empty:
 
 ```ts
 const PROTOCOL_PROFILES: ProtocolProfile[] = [];
@@ -70,149 +71,159 @@ Gate B is privacy-reduced and `would_write:false`.
 
 `generic-order-confirmation-v1.4` is the current unknown-merchant order fallback.
 
-It blocks:
-- explicit non-acceptance / no-contract acknowledgements
-- historical quoted orders in replies/forwards
-
-Generic order evidence remains REVIEW/shadow-only and cannot directly create a Purchase.
+It blocks explicit no-contract/non-acceptance acknowledgements and quoted historical order content. Generic order evidence remains REVIEW/shadow-only and cannot directly create a Purchase.
 
 ## GENERIC LIFECYCLE RELEASE HISTORY
 
 ### V1 — PR #149
 
-Merged as:
-`8c2737fe075f86671d70204563a2cfb612700fad`
+Merged as `8c2737fe075f86671d70204563a2cfb612700fad`.
 
-Added last-resort unknown-merchant lifecycle recognition plus hard-anchor linking to existing Purchases.
+Added last-resort unknown-merchant lifecycle recognition plus exact hard-anchor linking to existing Purchases.
 
-V1 live audit:
-- 9,438 messages
-- 36 true fallback candidates
-- 1 hard link
-- 35 REVIEW
-- 14 families
-- 0 ambiguity / 0 conflict
+Live audit: 9,438 messages, 36 fallbacks, 1 hard link, 35 REVIEW, 0 ambiguity/conflict.
 
 ### v1.1 — PR #151
 
-Merged as:
-`3a2b4ce07c0a065109cea2d54b146673be12d5b9`
+Merged as `3a2b4ce07c0a065109cea2d54b146673be12d5b9`.
 
-Added sender-authority and physical-context hardening:
-- `chameleoon.sk`, `szamlazz.hu`, `billingo.hu`, `myshoprenter.hu` blocked as generic merchant identity
-- `xlsfutar.hu` classified as carrier infrastructure
-- known merchant senders blocked from generic lifecycle fallback
-- bare order-level `úton van` requires physical context
-- real Bódi VIP digital-ticket false shipment blocked
+Added sender-authority/physical-context hardening: provider/relay exclusions, XLS Futár carrier role, known-merchant fallback blocking, physical context requirement for bare order-level `úton van`, and digital-ticket false-shipment protection.
 
-v1.1 release passed:
-- 710/710 tests
-- exact main CI
-- exact Render smoke #529
+Live audit: 9,442 messages, 22 fallbacks, 1 hard link, 21 REVIEW, 0 ambiguity/conflict.
 
-v1.1 live audit:
-- 9,442 messages
-- 22 fallback candidates
+### v1.2 — PR #153
+
+Merged as `73fe594d281df31307547585f6204f34d92a4039`.
+
+Prevented future/prerequisite fulfillment language from becoming a current lifecycle state.
+
+Real regressions:
+- Oázis future pickup wording => not READY_FOR_PICKUP
+- Oázis pickup prerequisite instruction => not READY_FOR_PICKUP
+- Klarstein future courier-handoff FAQ => not SHIPPED
+
+Release:
+- **714/714 tests PASS**
+- main CI #645 SUCCESS
+- Render Webhook Smoke #540 SUCCESS
+
+Final live audit:
+- 9,449 messages
+- 20 fallback source emails
 - 1 hard link
-- 21 REVIEW
-- 11 families
-- 0 ambiguity / 0 conflict
+- 19 legitimate REVIEW
+- 0 ambiguity/conflict
+- 14 shipment + 6 invoice observations
+- 0 READY_FOR_PICKUP false positives
 
-## GENERIC LIFECYCLE v1.2 — PR #153 RELEASE CANDIDATE
+## GENERIC LIFECYCLE v1.3 — PR #156 RELEASE CANDIDATE
 
 Parser fingerprint:
-`generic-lifecycle-v1.2`
+`generic-lifecycle-v1.3`
 
-Goal: prevent future, conditional and prerequisite explanatory language from becoming a current lifecycle state.
+Goal: preserve multiple independent semantic facts from one transactional email while keeping one source-email record and zero added write authority.
 
-Reviewed real regressions:
-- Oázis procurement: `értesítünk, amint rendelésed átvehető` => not READY_FOR_PICKUP
-- Oázis order-recorded guidance: `csak akkor indulj el ... miután kaptál értesítést, hogy a rendelésed átvehető` => not READY_FOR_PICKUP
-- Klarstein processing/FAQ: `számlát ... küldjük, mikor a rendelését átadtuk a futárszolgálatnak` => not SHIPPED
+New parser API:
+`parseGenericLifecycleObservations()`
 
-Implementation keeps identity extraction on the full fresh message but evaluates lifecycle/invoice signals on a narrow current-evidence view with recognized future/prerequisite statements removed.
+Compatibility API remains:
+`parseGenericLifecycleEmail()`
 
-A positive regression proves that a real current courier handoff remains SHIPPED even if the same email separately explains a future pickup notification.
+One source email can now contain separate REVIEW observations such as:
+- `invoice_or_receipt`
+- `shipment:shipped`
+
+Top-level compatibility keeps invoice first for combined invoice+shipment mail.
+
+Persistence fields:
+- `generic_lifecycle_observations`
+- `generic_lifecycle_observation_count`
+- `generic_lifecycle_multi_observation`
+
+Every nested observation remains REVIEW/link-only and explicitly declares no Purchase/Shipment/Document write authority.
+
+### Real reviewed combined patterns
+
+Regression coverage comes from real mailbox patterns:
+- Irodamarket — order identity + DPD handoff + tracking + attached invoice
+- R-V Webshop — electronic invoice + exact order + courier handoff
+- eDuna — formal Hungarian `számú rendelését` + courier handoff + attached invoice
+
+Additional narrow Hungarian grammar support was added for forms such as:
+- `14107 számú rendelésed`
+- `89445 számú rendelését`
+- explicit `rendelésed átadtuk ... futárszolgálatnak`
+
+### Persistence safety
+
+A circular JSON-reference risk was found before merge and fixed. `buildGenericLifecycleValidatedEnvelope()` now creates a separate top-level compatibility envelope instead of reusing the first nested observation object.
+
+Dedicated tests prove multi/single observation envelopes are JSON serializable.
 
 ### Permanent code verification
 
 Exact runtime head before documentation:
-`8b38b023f6656d25b11804ea09cb5c98a474e101`
+`0b949bd5a0a9e1cd61740ac6cad8b4d0e1a24874`
 
-- **714/714 API tests PASS**
+CI #655:
+- **723/723 API tests PASS**
+- 0 fail
 - API typecheck/build PASS
 - mobile typecheck/build PASS
 
-### Final live proof — temporary PR #155
+### Final live proof — PR #157
 
-PR #155 was created from the exact green v1.2 runtime head and closed **without merge**.
+PR #157 was closed **without merge**.
 
-Scope:
-- **9,449 messages**
-- 473 pages
-- not truncated
-- 19 existing Purchases + 16 Shipments loaded read-only
-- 0 database writes
-- 0 production-registry use
-
-Result:
-- raw/fallback generic lifecycle: **20**
+Exact audit CI #657:
+- **9,450 messages** / 473 pages / not truncated
+- source emails: **24**
+- semantic observations: **25**
+- source emails with 1 observation: **23**
+- source emails with 2 observations: **1**
+- live multi-observation sources: **1**
 - exact order+domain hard links: **1**
 - tracking hard links: **0**
-- unmatched / REVIEW: **19**
-- distinct fallback families: **9**
-- ambiguous: **0**
+- ambiguity: **0**
 - conflicts: **0**
-- shipment observations: **14**
-- invoice/receipt: **6**
-- shipped: **8**
-- in transit: **6**
-- READY_FOR_PICKUP fallback: **0**
+- unmatched / REVIEW source emails: **23**
+- shipment observations: **18**
+- invoice/receipt observations: **7**
+- shipped: **13**
+- in transit: **5**
+- READY_FOR_PICKUP: **0**
+- database writes: **0**
 
-Acceptance proof:
-- no 2025-10-14 Oázis future/prerequisite pickup row remains
-- no 2025-11-26 Klarstein future shipment row remains
-- previously proven exact Sinsay hard link remains **1**
+The one live multi-observation source had the shape `invoice_or_receipt + shipment:shipped`, contained both order and tracking hard identities, and aligns with the manually reviewed real Irodamarket email.
+
+The prior exact Sinsay hard link survived. Oázis/Klarstein future-state false positives did not reappear.
 
 Detailed evidence:
-`protocols/GENERIC-LIFECYCLE-V12-FUTURE-GUARD-2026-08-17.md`
+`protocols/GENERIC-LIFECYCLE-V13-MULTI-OBSERVATION-2026-08-17.md`
 
-## IMPORTANT INTERPRETATION OF THE REMAINING 19 REVIEW OBSERVATIONS
+## CURRENT RELEASE GATE FOR PR #156
 
-The 19 remaining REVIEW observations are not a failure metric to force toward zero. Manual mapping showed they are legitimate purchase-lifecycle evidence for real merchants but lack a safe existing Purchase anchor.
-
-Known remaining legitimate classes include Sinsay, fizz marketplace invoices, Rossmann and several singleton merchant shipment families.
-
-Do not filter legitimate unanchored lifecycle mail merely to reduce the REVIEW count.
-
-## CURRENT RELEASE GATE FOR PR #153
-
-Before declaring v1.2 released:
-1. documentation-triggered CI must pass on the exact final PR head;
-2. PR scope must contain only permanent runtime/tests/docs — no audit script/workflow, migration or production registry change;
-3. merge with the exact expected head SHA;
-4. verify exact main CI on the merge SHA with 714/714 tests;
+Before declaring v1.3 released:
+1. final documentation-triggered CI must pass on the exact latest PR head;
+2. PR scope must contain only permanent runtime/tests/docs — no audit script/workflow, migration or registry activation;
+3. merge only with exact expected head SHA;
+4. verify exact main CI on merge SHA with 723/723 tests;
 5. verify production protocol registry remains empty;
 6. verify exact Render Webhook Smoke on the same merge SHA.
 
-## NEXT HIGH-VALUE TASK AFTER v1.2 RELEASE
+## NEXT HIGH-VALUE TASK AFTER v1.3 RELEASE
 
-Do **not** keep shaving legitimate REVIEW count.
+Stop doing generic REVIEW-count cleanup unless new evidence exposes an actual safety bug.
 
-Next architecture task: **Generic Lifecycle multi-observation shadow V1**.
+Next domain: **payment evidence + safe purchase linking**.
 
-Real emails can independently contain both:
-- shipment/logistics evidence, and
-- invoice/document evidence
+Research/implementation should distinguish:
+- PAYMENT_SUCCESS
+- PAYMENT_FAILED
+- PAYMENT_ACTION_REQUIRED
+- refund-related evidence
 
-in the same message (examples observed in real mailbox include Irodamarket, Under Armour, R-V Webshop and eDuna-style combined communications).
-
-Next design should:
-- emit separate shadow/REVIEW observations from one email
-- keep exact hard-link rules unchanged
-- keep Purchase creation disabled
-- keep Purchase/Shipment/Document state mutation disabled
-- require a new read-only live audit before merge
+Payment-only email must never create a Purchase. Payment provider identity must not become merchant identity, and provider references must not be guessed as global BuyFlow order IDs.
 
 ## QUALITY TARGET
 
