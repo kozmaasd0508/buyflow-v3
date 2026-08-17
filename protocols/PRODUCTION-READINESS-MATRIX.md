@@ -57,6 +57,8 @@ The **7 Alza conflicts are now closed** as a multi-event versus single-result co
 
 The **single MPL conflict is now closed** as a physical-handoff boundary difference in the current `Csomagot adtak fel neked` template. The protocol keeps the posting notice at `SHIPMENT_CREATED`; the legacy MPL parser promoted the same template to `SHIPPED`. Direct Gmail wording says a later notification will announce courier departure or pickup-point arrival, so the conservative protocol result is retained. See `protocols/carriers/hu/mpl/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 
+The **2 Express One conflicts are now closed** as the same pre-advice/physical-possession boundary. Direct Gmail review reproduced exactly two current `Előzetes értesítés csomag érkezéséről` messages. They explicitly state that courier handoff has not yet happened, while later explanatory text contains `kézbesítés várható`; the generic comparator over-promotes that future wording to `OUT_FOR_DELIVERY`. The protocol correctly retains `SHIPMENT_CREATED`. See `protocols/carriers/hu/expressone/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
+
 ## Executive rollout summary
 
 | Readiness | Count | Meaning |
@@ -116,7 +118,7 @@ These should still emit observations only. No automatic production write is impl
 | `carrier.hu.foxpost` | **GREEN** | 84 total; 34 compatible, 50 shadow-only, **0 conflict** | Direct pre-advice, warehouse possession and locker/pickup-ready states with tracking identity | Production-shadow candidate; continue to reject generic delivered inference |
 | `carrier.hu.gls` | **GREEN** | 109 total; 57 compatible, 6 shadow-only, **46 reviewed conflicts** | Direct pre-advice, delivery-today and locker-ready boundaries are explicit; all 46 conflicts were the same legacy generic future-delivery overreach on parcel-information mail | Production-shadow candidate; keep pre-advice frozen at `SHIPMENT_CREATED` and reopen the gate for any conflict outside the reviewed fingerprint |
 | `carrier.hu.mpl` | **GREEN** | 142 total; 2 exact, 139 shadow-only, **1 reviewed conflict** | Broad direct lifecycle with legacy/current posting notices, courier allocation, failed attempt, pickup-ready and explicit delivery proof; the only conflict was legacy promotion of the current posting notice to `SHIPPED` | Production-shadow candidate; keep both posting-notice generations at `SHIPMENT_CREATED` and preserve all later MPL states as separate direct evidence |
-| `carrier.hu.expressone` | **GREEN** | 15 total; 9 exact, 4 shadow-only, 2 conflicts | Direct full chain clearly separates pre-advice, physical hub possession, OFD, delay and delivered timestamp | The 2 differences are pre-advice/physical-progress boundary reviews; keep that conservative boundary frozen in production-shadow |
+| `carrier.hu.expressone` | **GREEN** | 15 total; 9 exact, 4 shadow-only, **2 reviewed conflicts** | Direct full chain clearly separates pre-advice, physical hub possession, OFD, delay and delivered timestamp; both conflicts were generic-parser promotion of current pre-advice due future `kézbesítés várható` wording | Production-shadow candidate; explicit `még nem történt meg` handoff denial keeps pre-advice at `SHIPMENT_CREATED`, and any conflict outside that fingerprint re-opens the gate |
 | `carrier.hu.dpd` | **GREEN** | 71 total; 47 compatible, 24 shadow-only, **0 conflict** | Direct pre-advice, physical dispatch, OFD, delivery and refusal-return boundaries are explicit | Production-shadow candidate; keep payment receipt and myDPD/account messages hard-negative |
 | `carrier.hu.packeta` | YELLOW | 21 shadow-only, 0 conflict | Direct handoff and pickup-ready evidence exists | 2026 FoxPost legal-successor transition makes channel identity transitional; collect more current-generation live mail |
 
@@ -154,16 +156,16 @@ These are library-wide, not profile-specific:
 
 ## Next actions
 
-### Gate A — close YELLOW conflicts
+### Gate A — conflict review complete
 
 - GLS: **closed 2026-08-17** — all 46 differences were reviewed as the same safe pre-advice/comparator boundary; see `protocols/carriers/hu/gls/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - Alza: **closed 2026-08-17** — the 7 differences were reviewed as multi-event finalization evidence versus the legacy single-result comparator; see `protocols/merchants/hu/alza/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - MPL: **closed 2026-08-17** — the only difference was the current posting notice, retained conservatively as `SHIPMENT_CREATED`; see `protocols/carriers/hu/mpl/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
-- Express One: retain the conservative pre-advice boundary and document the two differences as reviewed/non-dangerous.
+- Express One: **closed 2026-08-17** — both differences were current pre-advice mail where future delivery wording caused generic comparator over-promotion despite explicit no-handoff evidence; see `protocols/carriers/hu/expressone/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 
 ### Gate B — production-shadow instrumentation
 
-After Gate A, add a separate, explicitly reviewed **read-only production-shadow** path for GREEN profiles only. It may record counters/diagnostics, but must not mutate Purchase, shipment, payment, invoice, return, refund or warranty state.
+With Gate A closed, the next separate change can add an explicitly reviewed **read-only production-shadow** path for GREEN profiles only. It may record counters/diagnostics, but must not mutate Purchase, shipment, payment, invoice, return, refund or warranty state.
 
 ### Gate C — recall expansion
 
