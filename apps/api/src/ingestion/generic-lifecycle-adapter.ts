@@ -6,7 +6,7 @@ import {
   stripQuotedHistoryForGenericOrder,
 } from './generic-order-confirmation-adapter.js';
 
-export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1';
+export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.1';
 
 export type GenericLifecycleEvent = 'shipment' | 'delivery' | 'invoice_or_receipt';
 export type GenericLifecycleShipmentPhase =
@@ -36,6 +36,32 @@ function normalizeDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
 }
 
+function domainMatches(domain: string, expected: string): boolean {
+  const normalized = normalizeDomain(domain);
+  const target = normalizeDomain(expected);
+  return normalized === target || normalized.endsWith(`.${target}`);
+}
+
+/**
+ * Shared transactional infrastructure can carry a merchant-branded lifecycle
+ * email without being the merchant itself. It is useful evidence for a
+ * dedicated provider/platform adapter, but it must never become generic
+ * merchant identity.
+ *
+ * Keep this list evidence-driven. Every entry below is backed by either an
+ * observed real recipient email or existing BuyFlow provider/platform research.
+ */
+const NON_MERCHANT_INFRASTRUCTURE_DOMAINS = [
+  'chameleoon.sk',
+  'szamlazz.hu',
+  'billingo.hu',
+  'myshoprenter.hu',
+] as const;
+
+function isNonMerchantInfrastructureSenderDomain(domain: string): boolean {
+  return NON_MERCHANT_INFRASTRUCTURE_DOMAINS.some((provider) => domainMatches(domain, provider));
+}
+
 function merchantFromDomain(domain: string): string {
   const labels = normalizeDomain(domain).split('.').filter(Boolean);
   const root = labels.length >= 2 ? labels[labels.length - 2]! : (labels[0] ?? domain);
@@ -54,6 +80,7 @@ function safeSenderDomain(domains: string[]): string | null {
     isCarrierSenderDomain(domain)
     || isSharedPlatformSenderDomain(domain)
     || isPublicMailboxSenderDomain(domain)
+    || isNonMerchantInfrastructureSenderDomain(domain)
   ) return null;
   return domain;
 }
