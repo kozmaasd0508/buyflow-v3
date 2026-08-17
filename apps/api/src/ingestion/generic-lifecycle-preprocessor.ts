@@ -5,7 +5,8 @@ import { validateEmailExtraction } from '../validation/email-extraction-validato
 import { canReplaceAiOffFallbackWithDeterministic } from './deterministic-commerce-parser.js';
 import {
   GENERIC_LIFECYCLE_PARSER_VERSION,
-  parseGenericLifecycleEmail,
+  parseGenericLifecycleObservations,
+  type GenericLifecycleParseResult,
 } from './generic-lifecycle-adapter.js';
 import {
   linkGenericLifecycleSource,
@@ -13,6 +14,7 @@ import {
 } from './generic-lifecycle-linker.js';
 
 const BODY_MAX_CHARS = 80_000;
+const GENERIC_LIFECYCLE_VERSION_PATTERN = /^generic-lifecycle-v\d+(?:\.\d+)*$/;
 
 export interface GenericLifecyclePreprocessResult {
   matched: boolean;
@@ -20,6 +22,7 @@ export interface GenericLifecyclePreprocessResult {
   parserVersion?: string;
   linkDecision?: GenericLifecycleLinkDecision;
   linkedPurchaseId?: string;
+  observationCount?: number;
 }
 
 function senderDomains(from: Array<{ email: string }>): string[] {
@@ -27,6 +30,67 @@ function senderDomains(from: Array<{ email: string }>): string[] {
     .map((address) => address.email.trim().toLowerCase())
     .map((address) => address.slice(address.lastIndexOf('@') + 1))
     .filter((domain) => Boolean(domain) && !domain.includes('@')))];
+}
+
+function reviewValidation(input: {
+  parsed: GenericLifecycleParseResult;
+  domains: string[];
+  subject?: string | null;
+  bodyText: string;
+}): Record<string, unknown> {
+  const validated = validateEmailExtraction({
+    extraction: input.parsed.extraction,
+    senderDomains: input.domains,
+    subject: input.subject,
+    bodyText: input.bodyText,
+  });
+  validated.validation_status = 'review';
+  validated.eligible_for_purchase_creation = false;
+  validated.reasons = [
+    ...new Set([
+      ...validated.reasons,
+      'generic_lifecycle_link_only',
+      'generic_lifecycle_no_purchase_creation',
+      'generic_lifecycle_no_state_mutation',
+    ]),
+  ];
+
+  const result = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
+  result.extraction_source = 'deterministic';
+  result.parser_version = input.parsed.parserVersion;
+  result.parser_reasons = input.parsed.reasons;
+  result.link_only = true;
+  result.would_create_purchase = false;
+  result.would_mutate_purchase_state = false;
+  result.would_mutate_shipment_state = false;
+  result.would_create_document = false;
+  if (input.parsed.shipmentPhase) result.shipment_phase = input.parsed.shipmentPhase;
+  return result;
+}
+
+function observationPayload(parsed: GenericLifecycleParseResult): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    ...parsed.extraction,
+    ...(parsed.shipmentPhase ? { shipment_phase: parsed.shipmentPhase } : {}),
+    parser_version: parsed.parserVersion,
+    parser_reasons: parsed.reasons,
+    validation_status: 'review',
+    link_only: true,
+    would_create_purchase: false,
+    would_mutate_purchase_state: false,
+    would_mutate_shipment_state: false,
+    would_create_document: false,
+  };
+}
+
+function canReplacePriorGenericLifecycle(existing: {
+  parserVersion: unknown;
+  validationStatus: unknown;
+}): boolean {
+  return typeof existing.parserVersion === 'string'
+    && GENERIC_LIFECYCLE_VERSION_PATTERN.test(existing.parserVersion)
+    && existing.validationStatus === 'review';
 }
 
 export async function preprocessGenericLifecycleNylasMessage(input: {
@@ -49,31 +113,25 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
   const bodyText = email.bodyHtml
     ? htmlToCompactText(email.bodyHtml, BODY_MAX_CHARS)
     : (email.snippet ?? '').trim().slice(0, BODY_MAX_CHARS);
-  const parsed = parseGenericLifecycleEmail({
+  const observations = parseGenericLifecycleObservations({
     senderDomains: domains,
     subject: email.subject,
     bodyText,
   });
-  if (!parsed) return { matched: false };
+  if (observations.length === 0) return { matched: false };
 
-  const validated = validateEmailExtraction({
-    extraction: parsed.extraction,
-    senderDomains: domains,
+  const parsed = observations[0]!;
+  const validatedObservations = observations.map((observation) => reviewValidation({
+    parsed: observation,
+    domains,
     subject: email.subject,
     bodyText,
-  });
-  validated.validation_status = 'review';
-  validated.eligible_for_purchase_creation = false;
-  validated.reasons = [
-    ...new Set([
-      ...validated.reasons,
-      'generic_lifecycle_link_only',
-      'generic_lifecycle_no_purchase_creation',
-      'generic_lifecycle_no_state_mutation',
-    ]),
-  ];
+  }));
+  const validatedResult = validatedObservations[0]!;
+  validatedResult.generic_lifecycle_observations = validatedObservations;
+  validatedResult.generic_lifecycle_observation_count = observations.length;
+  validatedResult.generic_lifecycle_multi_observation = observations.length > 1;
 
-  const now = new Date().toISOString();
   const structuredResult = {
     schema_version: 2,
     ...parsed.extraction,
@@ -84,16 +142,14 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     link_only: true,
     would_create_purchase: false,
     would_mutate_purchase_state: false,
+    would_mutate_shipment_state: false,
+    would_create_document: false,
+    generic_lifecycle_observations: observations.map(observationPayload),
+    generic_lifecycle_observation_count: observations.length,
+    generic_lifecycle_multi_observation: observations.length > 1,
   };
-  const validatedResult = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
-  validatedResult.extraction_source = 'deterministic';
-  validatedResult.parser_version = parsed.parserVersion;
-  validatedResult.parser_reasons = parsed.reasons;
-  validatedResult.link_only = true;
-  validatedResult.would_create_purchase = false;
-  validatedResult.would_mutate_purchase_state = false;
-  if (parsed.shipmentPhase) validatedResult.shipment_phase = parsed.shipmentPhase;
 
+  const now = new Date().toISOString();
   const { data: existing, error: existingError } = await db.from('source_emails')
     .select('id,validated_result,validation_status,processing_status')
     .eq('email_connection_id', connection.id)
@@ -111,14 +167,26 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
         processingStatus: existing.processing_status,
       })
     : false;
+  const replacePriorGeneric = existing
+    ? canReplacePriorGenericLifecycle({
+        parserVersion: existingParser,
+        validationStatus: existing.validation_status,
+      })
+    : false;
 
   let sourceEmailId: string;
-  if (existing && existingParser !== GENERIC_LIFECYCLE_PARSER_VERSION && !replaceFallback) {
+  if (
+    existing
+    && existingParser !== GENERIC_LIFECYCLE_PARSER_VERSION
+    && !replaceFallback
+    && !replacePriorGeneric
+  ) {
     return {
       matched: true,
       sourceEmailId: existing.id as string,
       parserVersion: parsed.parserVersion,
       linkDecision: 'unmatched',
+      observationCount: observations.length,
     };
   }
 
@@ -158,13 +226,21 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     sourceEmailId = inserted.id as string;
   }
 
+  const orderNumber = observations
+    .map((observation) => observation.extraction.order_number)
+    .find((value): value is string => typeof value === 'string' && value.length > 0) ?? null;
+  const trackingNumber = observations
+    .map((observation) => observation.extraction.tracking_number)
+    .find((value): value is string => typeof value === 'string' && value.length > 0) ?? null;
+  const confidence = Math.max(...observations.map((observation) => observation.extraction.confidence));
+
   const link = await linkGenericLifecycleSource({
     userId: connection.user_id as string,
     sourceEmailId,
     senderDomain: parsed.senderDomain,
-    orderNumber: parsed.extraction.order_number,
-    trackingNumber: parsed.extraction.tracking_number,
-    confidence: parsed.extraction.confidence,
+    orderNumber,
+    trackingNumber,
+    confidence,
   });
 
   const linked = link.decision === 'linked_order_domain'
@@ -173,6 +249,12 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
   validatedResult.generic_lifecycle_link_decision = link.decision;
   validatedResult.generic_lifecycle_link_reason = link.reason;
   if (link.purchaseId) validatedResult.linked_purchase_id = link.purchaseId;
+
+  for (const observation of validatedObservations) {
+    observation.generic_lifecycle_link_decision = link.decision;
+    observation.generic_lifecycle_link_reason = link.reason;
+    if (link.purchaseId) observation.linked_purchase_id = link.purchaseId;
+  }
 
   const { error: finalUpdateError } = await db.from('source_emails').update({
     validated_result: validatedResult,
@@ -186,6 +268,7 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     sourceEmailId,
     parserVersion: parsed.parserVersion,
     linkDecision: link.decision,
+    observationCount: observations.length,
     ...(link.purchaseId ? { linkedPurchaseId: link.purchaseId } : {}),
   };
 }
