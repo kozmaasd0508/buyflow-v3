@@ -42,15 +42,6 @@ function domainMatches(domain: string, expected: string): boolean {
   return normalized === target || normalized.endsWith(`.${target}`);
 }
 
-/**
- * Shared transactional infrastructure can carry a merchant-branded lifecycle
- * email without being the merchant itself. It is useful evidence for a
- * dedicated provider/platform adapter, but it must never become generic
- * merchant identity.
- *
- * Keep this list evidence-driven. Every entry below is backed by either an
- * observed real recipient email or existing BuyFlow provider/platform research.
- */
 const NON_MERCHANT_INFRASTRUCTURE_DOMAINS = [
   'chameleoon.sk',
   'szamlazz.hu',
@@ -92,7 +83,7 @@ const ORDER_PATTERNS = [
   /\b(?:rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:a\s+)?(?:rendeles|megrendeles)\s*#\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /#([a-z0-9][a-z0-9._/-]{3,39})\s+szamu\s+(?:rendeleshez|megrendeleshez)\b/i,
-  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet)\b/i,
+  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet|rendeleset|megrendeleset)\b/i,
   /^([a-z]{1,8}\d{4,20})\s*-\s*(?:rendelesed|megrendelesed)\b/im,
   /\b(?:bestellnummer|bestellnr\.?|auftragsnummer)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:numero de commande|commande n[°o]?|numero de pedido|pedido n[°o]?)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
@@ -155,18 +146,6 @@ function hasAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-/**
- * Lifecycle words inside explanatory/future instructions are not evidence that
- * the state is true now. Real reviewed examples include:
- * - "ertesitunk, amint rendelesed atveheto"
- * - "e-mailben kuldjuk, mikor a rendeleset atadtuk a futarszolgalatnak"
- * - "miutan kaptal ertesitest, hogy a rendelesed atveheto"
- *
- * Keep this narrow: remove only the sentence carrying the future reporting or
- * prerequisite construction. Order/tracking identities are still extracted
- * from the full fresh message, and an independent current-state sentence
- * remains usable.
- */
 const FUTURE_CONDITIONAL_LIFECYCLE_STATEMENT_PATTERNS = [
   /\b(?:tovabbi\s+e-?mailben\s+)?ertesit(?:unk|juk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
   /\b(?:e-?mailben\s+)?(?:kuldjuk|kuldeni\s+fogjuk|kuldunk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
@@ -243,6 +222,8 @@ const INVOICE_SIGNAL_PATTERNS = [
   /\bszamlad (?:elkeszult|kiallitottuk)\b/i,
   /\belektronikus szamla(?:d)? [^\n.]{0,80}\b(?:kiallitva|kiallitottuk|kerult kiallit(?:asra|va))\b/i,
   /\buj elektronikus szamlad erkezett\b/i,
+  /\bmellekeltuk (?:a )?szamlad\b/i,
+  /\bmellekletekent kuldjuk [^\n.]{0,100}\b(?:rendelesed|megrendelesed|rendelese|megrendelese) szamlajat\b/i,
   /\b(?:csatolva|mellekletben|mellekletekent) [^\n.]{0,120}\b(?:elkeszult )?szamla(?:t|dat|jat)\b/i,
   /\b(?:rendelesed|megrendelesed|rendelese|megrendelese) szamla(?:ja|jat|dat)\b/i,
   /\binvoice (?:for|for your) (?:order|purchase)\b/i,
@@ -307,12 +288,6 @@ function shipmentObservation(input: {
   };
 }
 
-/**
- * One transactional message may independently prove more than one lifecycle
- * fact. v1.3 keeps one source-email row but exposes separate shadow/review
- * observations, for example SHIPPED + INVOICE. It never merges those facts
- * into a stronger automatic decision.
- */
 export function parseGenericLifecycleObservations(input: {
   senderDomains: string[];
   subject?: string | null;
@@ -333,8 +308,6 @@ export function parseGenericLifecycleObservations(input: {
   const evidenceContext = currentLifecycleEvidenceText(subject, freshBody);
   const observations: GenericLifecycleParseResult[] = [];
 
-  // Preserve v1.2 compatibility: invoice remains the primary observation when
-  // a message explicitly carries both invoice and shipment evidence.
   if (orderNumber && hasAny(evidenceContext, INVOICE_SIGNAL_PATTERNS)) {
     observations.push({
       extraction: baseExtraction({
@@ -370,11 +343,6 @@ export function parseGenericLifecycleObservations(input: {
   return observations;
 }
 
-/**
- * Backward-compatible single-observation API. Existing callers continue to
- * receive the same primary event ordering as v1.2 while new callers can use
- * parseGenericLifecycleObservations() for the full shadow evidence set.
- */
 export function parseGenericLifecycleEmail(input: {
   senderDomains: string[];
   subject?: string | null;
