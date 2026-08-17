@@ -29,7 +29,7 @@ test('parses a Hungarian Rendelés: #... confirmation without merchant-specific 
   });
 
   assert.ok(result);
-  assert.equal(result.parserVersion, 'generic-order-confirmation-v1.3');
+  assert.equal(result.parserVersion, 'generic-order-confirmation-v1.4');
   assert.equal(result.extraction.event_type, 'order_created');
   assert.equal(result.extraction.order_number, '1783-975-87-395');
   assert.equal(result.extraction.total, 16780);
