@@ -46,7 +46,6 @@ jobs:
           NYLAS_API_URI: https://api.eu.nylas.com
           EMAIL_DISCOVERY_QUERY: newer_than:730d -in:spam -in:trash
           PAYMENT_SHADOW_AUDIT_MAX_MESSAGES: '10000'
-          PAYMENT_SHADOW_AUDIT_CONCURRENCY: '6'
         run: |
           set -euo pipefail
           DB_KEY="${SUPABASE_SECRET_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-}}"
@@ -65,4 +64,4 @@ jobs:
           if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then unset SUPABASE_SERVICE_ROLE_KEY; fi
           if [ -z "${SUPABASE_SECRET_KEY:-}" ]; then unset SUPABASE_SECRET_KEY; fi
 
-          npx tsx apps/api/src/scripts/nylas-payment-shadow-link-audit.ts
+          npx tsx apps/api/src/scripts/nylas-payment-shadow-link-audit-v2.ts
