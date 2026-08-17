@@ -1,5 +1,5 @@
 import type { EmailExtraction } from '../ai/openai-email-extractor.js';
-import { isCarrierSenderDomain } from '../email/sender-role.js';
+import { identifyMerchantSender, isCarrierSenderDomain } from '../email/sender-role.js';
 import {
   isPublicMailboxSenderDomain,
   isSharedPlatformSenderDomain,
@@ -81,6 +81,7 @@ function safeSenderDomain(domains: string[]): string | null {
     || isSharedPlatformSenderDomain(domain)
     || isPublicMailboxSenderDomain(domain)
     || isNonMerchantInfrastructureSenderDomain(domain)
+    || identifyMerchantSender([domain]) !== null
   ) return null;
   return domain;
 }
