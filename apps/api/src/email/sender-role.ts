@@ -7,6 +7,7 @@ const CARRIER_SENDER_DEFINITIONS = [
   { name: 'DHL', trustedDomains: ['dhl.com', 'dhl.hu'] },
   { name: 'UPS', trustedDomains: ['ups.com'] },
   { name: 'MPL', trustedDomains: ['posta.hu'] },
+  { name: 'XLS Futár', trustedDomains: ['xlsfutar.hu'] },
 ] as const;
 
 const PUBLIC_MAILBOX_DOMAINS = new Set([

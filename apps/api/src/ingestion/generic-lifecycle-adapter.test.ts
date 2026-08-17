@@ -14,6 +14,7 @@ test('parses merchant shipment with explicit dispatch and tracking identity', ()
   });
 
   assert.ok(parsed);
+  assert.equal(parsed.parserVersion, 'generic-lifecycle-v1.1');
   assert.equal(parsed.extraction.event_type, 'shipment');
   assert.equal(parsed.shipmentPhase, 'shipped');
   assert.equal(parsed.extraction.tracking_number, '3406978622');
@@ -34,6 +35,23 @@ test('parses merchant in-transit message with exact order identity', () => {
   assert.equal(parsed.extraction.event_type, 'shipment');
   assert.equal(parsed.shipmentPhase, 'in_transit');
   assert.equal(parsed.extraction.order_number, '212109289');
+});
+
+test('keeps order-level in-transit wording when physical fulfillment is independently present', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['orders.unknown-shop.hu'],
+    subject: 'A HU991188 rendelésed már úton van',
+    bodyText: [
+      'Rendelésszám: HU991188',
+      'Küldemény azonosítója: 1979394976',
+      'A csomagot nyomon követheted a futár oldalán.',
+    ].join('\n'),
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed.extraction.event_type, 'shipment');
+  assert.equal(parsed.shipmentPhase, 'in_transit');
+  assert.equal(parsed.extraction.order_number, 'HU991188');
 });
 
 test('parses formal Hungarian shipped wording when the order identity comes before the order noun', () => {
@@ -94,6 +112,22 @@ test('parses out-for-delivery and delivery as separate states', () => {
   assert.equal(delivered.extraction.event_type, 'delivery');
 });
 
+test('rejects digital ticket purchase whose subject merely says the order is on its way', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['boditesok.hu'],
+    subject: 'A rendelésed úton van a(z) Bódi Tesók oldalról!',
+    bodyText: [
+      'A rendelésedet sikeresen feldolgoztuk.',
+      'Rendelés #288498',
+      'VIP jegy - Őszi Roadshow 2025',
+      'EXTRA GYORS SZÁLLÍTÁS: 298 Ft',
+      'Esemény helyszín: Törökszentmiklós',
+      'Esemény dátum: 2025-11-15',
+    ].join('\n'),
+  });
+  assert.equal(parsed, null);
+});
+
 test('rejects utility invoice without order identity', () => {
   const parsed = parseGenericLifecycleEmail({
     senderDomains: ['ugyfelszolgalat.dijnet.hu'],
@@ -117,6 +151,51 @@ test('rejects public mailbox senders from the generic merchant lifecycle lane', 
     senderDomains: ['gmail.com'],
     subject: 'Csomagod úton van',
     bodyText: 'Rendelésszám: X-99118\nCsomagodat feladtuk.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects observed Chameleoon shipment relay as merchant identity', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['shipments.chameleoon.sk'],
+    subject: 'Az engaro rendelésedet átadta a futárnak',
+    bodyText: 'Rendelésszám: 25051657\nRendelésedet átadtuk a futárszolgálatnak.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects Szamlazz.hu provider infrastructure as merchant identity even for merchant-branded shipment copy', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['szamlazz.hu'],
+    subject: '1140165 számú Marketa.hu rendelésedet átadtuk a futárszolgálatnak',
+    bodyText: 'Rendelésszám: 1140165\nRendelésedet átadtuk a futárszolgálatnak.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects Billingo provider infrastructure as merchant identity', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['mail.billingo.hu'],
+    subject: 'Számlád elkészült',
+    bodyText: 'Rendelésszám: DEMO-889911\nSzámlád elkészült. Számlaszám: DEMO/2026/18',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects documented MyShoprenter fallback sender infrastructure as merchant identity', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['myshoprenter.hu'],
+    subject: 'Rendelésed úton van',
+    bodyText: 'Rendelésszám: SR-889911\nRendelésed már úton van.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('known merchant sender cannot bypass its dedicated parser through generic fallback', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['dorko.hu'],
+    subject: 'DK2001799 - rendelésed úton van - átadtuk a GLS futárnak!',
+    bodyText: 'Rendelésszám: DK2001799\nCsomagod hamarosan kézhez kapod.',
   });
   assert.equal(parsed, null);
 });

@@ -1,12 +1,12 @@
 import type { EmailExtraction } from '../ai/openai-email-extractor.js';
-import { isCarrierSenderDomain } from '../email/sender-role.js';
+import { identifyMerchantSender, isCarrierSenderDomain } from '../email/sender-role.js';
 import {
   isPublicMailboxSenderDomain,
   isSharedPlatformSenderDomain,
   stripQuotedHistoryForGenericOrder,
 } from './generic-order-confirmation-adapter.js';
 
-export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1';
+export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.1';
 
 export type GenericLifecycleEvent = 'shipment' | 'delivery' | 'invoice_or_receipt';
 export type GenericLifecycleShipmentPhase =
@@ -36,6 +36,32 @@ function normalizeDomain(value: string): string {
   return value.trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
 }
 
+function domainMatches(domain: string, expected: string): boolean {
+  const normalized = normalizeDomain(domain);
+  const target = normalizeDomain(expected);
+  return normalized === target || normalized.endsWith(`.${target}`);
+}
+
+/**
+ * Shared transactional infrastructure can carry a merchant-branded lifecycle
+ * email without being the merchant itself. It is useful evidence for a
+ * dedicated provider/platform adapter, but it must never become generic
+ * merchant identity.
+ *
+ * Keep this list evidence-driven. Every entry below is backed by either an
+ * observed real recipient email or existing BuyFlow provider/platform research.
+ */
+const NON_MERCHANT_INFRASTRUCTURE_DOMAINS = [
+  'chameleoon.sk',
+  'szamlazz.hu',
+  'billingo.hu',
+  'myshoprenter.hu',
+] as const;
+
+function isNonMerchantInfrastructureSenderDomain(domain: string): boolean {
+  return NON_MERCHANT_INFRASTRUCTURE_DOMAINS.some((provider) => domainMatches(domain, provider));
+}
+
 function merchantFromDomain(domain: string): string {
   const labels = normalizeDomain(domain).split('.').filter(Boolean);
   const root = labels.length >= 2 ? labels[labels.length - 2]! : (labels[0] ?? domain);
@@ -54,6 +80,8 @@ function safeSenderDomain(domains: string[]): string | null {
     isCarrierSenderDomain(domain)
     || isSharedPlatformSenderDomain(domain)
     || isPublicMailboxSenderDomain(domain)
+    || isNonMerchantInfrastructureSenderDomain(domain)
+    || identifyMerchantSender([domain]) !== null
   ) return null;
   return domain;
 }
@@ -155,10 +183,28 @@ const EXPLICIT_SHIPPED_PATTERNS = [
   /\bwe (?:have )?shipped (?:your )?(?:order|package)\b/i,
 ] as const;
 
-const IN_TRANSIT_PATTERNS = [
-  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese|csomagod) (?:mar )?uton van\b/i,
-  /\b(?:your )?(?:order|package) is on (?:its|the) way\b/i,
-  /\b(?:your )?(?:order|package) is in transit\b/i,
+const PACKAGE_IN_TRANSIT_PATTERNS = [
+  /\b(?:csomagod|csomagja) (?:mar )?uton van\b/i,
+  /\b(?:your )?package is on (?:its|the) way\b/i,
+  /\b(?:your )?package is in transit\b/i,
+] as const;
+
+const ORDER_IN_TRANSIT_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese) (?:mar )?uton van\b/i,
+  /\b(?:your )?order is on (?:its|the) way\b/i,
+  /\b(?:your )?order is in transit\b/i,
+] as const;
+
+const PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS = [
+  /\bcsomag(?:od|ja|odat|jat|ok|ot)?\b/i,
+  /\bfutar(?:nak|szolgalat(?:nak)?)?\b/i,
+  /\bkuldemeny(?:ed|e|szam|azonosito|\s+azonositoja)?\b/i,
+  /\bnyomkovet/i,
+  /\btracking\b/i,
+  /\bparcel\b/i,
+  /\bshipment\b/i,
+  /\bcourier\b/i,
+  /\bcarrier\b/i,
 ] as const;
 
 const INVOICE_SIGNAL_PATTERNS = [
@@ -226,7 +272,13 @@ export function parseGenericLifecycleEmail(input: {
   } else if (hasAny(context, EXPLICIT_SHIPPED_PATTERNS)) {
     shipmentPhase = 'shipped';
     reason = 'explicit_physical_shipment_signal';
-  } else if (hasAny(context, IN_TRANSIT_PATTERNS)) {
+  } else if (
+    hasAny(context, PACKAGE_IN_TRANSIT_PATTERNS)
+    || (
+      hasAny(context, ORDER_IN_TRANSIT_PATTERNS)
+      && hasAny(context, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
+    )
+  ) {
     shipmentPhase = 'in_transit';
     reason = 'explicit_in_transit_signal';
   }
