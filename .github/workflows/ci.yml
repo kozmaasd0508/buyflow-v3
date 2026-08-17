@@ -79,4 +79,16 @@ jobs:
           grep -F "const key = 'buyflow-audit-lookup-v1';" \
             apps/api/src/protocols/generic-commerce-shadow.ts >/dev/null
 
+          # Audit-only date mapping. Expose only YYYY-MM-DD beside the deterministic
+          # fingerprint so the remaining candidates can be located in Gmail without
+          # logging raw sender, subject, body, message id, order id, or amount.
+          perl -0pi -e 's/confidence: extraction\.confidence,\n    sender_domain_fingerprint:/confidence: extraction.confidence,\n    received_day: email.receivedAt.slice(0, 10),\n    sender_domain_fingerprint:/' \
+            apps/api/src/protocols/generic-commerce-shadow.ts
+          grep -F 'received_day: email.receivedAt.slice(0, 10),' \
+            apps/api/src/protocols/generic-commerce-shadow.ts >/dev/null
+          perl -0pi -e "s/unprofiledPipelineEligibleCandidates \+= 1;\n        if \(candidateTier === 'strong'\)/unprofiledPipelineEligibleCandidates += 1;\n        console.log(JSON.stringify({ mode: 'audit_candidate_day', fingerprint: evaluation.row.sender_domain_fingerprint, received_day: (evaluation.row as GenericCommerceShadowDiagnostic \& { received_day?: string }).received_day ?? null, tier: candidateTier }));\n        if (candidateTier === 'strong')/" \
+            apps/api/src/scripts/nylas-generic-commerce-audit.ts
+          grep -F "mode: 'audit_candidate_day'" \
+            apps/api/src/scripts/nylas-generic-commerce-audit.ts >/dev/null
+
           npm run nylas:generic-commerce-audit --workspace @buyflow/api
