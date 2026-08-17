@@ -1,6 +1,7 @@
 import type { NormalizedEmail } from '../email/types.js';
 import { detectProtocolEvidence } from './detect.js';
 import { protocolDetectionInputFromEmail } from './email-input.js';
+import { emitGenericCommerceShadowEmailObservation } from './generic-commerce-shadow.js';
 import { assertValidProtocolProfile } from './profile-validator.js';
 import { ALZA_MERCHANT_TEST_V1 } from './profiles/alza-merchant-test-v1.js';
 import { DPD_HUNGARY_CARRIER_TEST_V1 } from './profiles/dpd-hungary-carrier-test-v1.js';
@@ -162,9 +163,10 @@ export function observeProductionShadowEmail(
 }
 
 /**
- * Emit a privacy-reduced observation payload suitable for production logs.
- * The logger receives no raw email content and there is intentionally no
- * persistence hook here.
+ * Emit privacy-reduced observation payloads suitable for production logs.
+ * The same already-fetched message is also passed through the generic commerce
+ * shadow lane, which emits only when the central deterministic parser truly
+ * falls through to the generic order-confirmation parser.
  */
 export function emitProductionShadowEmailObservation(
   email: NormalizedEmail,
@@ -181,5 +183,6 @@ export function emitProductionShadowEmailObservation(
       rows,
     }),
   );
+  emitGenericCommerceShadowEmailObservation(email, log);
   return rows;
 }
