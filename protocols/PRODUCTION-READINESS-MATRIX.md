@@ -53,12 +53,14 @@ Manual review confirmed the dominant pattern is the physical-handoff boundary: p
 
 The **46 GLS conflicts are now closed** as one repeated, non-dangerous comparator mismatch. Direct Gmail review reproduced exactly 46 standard GLS parcel-information messages with the same pre-advice fingerprint: the partner had prepared the parcel while delivery was still described as a future expectation. The GLS protocol shadow and GLS-specific deterministic parser both keep these at `SHIPMENT_CREATED`; only the standalone generic carrier comparator promoted them because of its broad `Kézbesítés várható` pattern. See `protocols/carriers/hu/gls/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 
+The **7 Alza conflicts are now closed** as a multi-event versus single-result comparator difference. Direct recipient emails show final AlzaBox/DPD messages can independently prove a logistics event and a final `INVOICE` event in the same message. The protocol shadow keeps those facts separate, while the legacy deterministic commerce parser returns one primary commerce result. See `protocols/merchants/hu/alza/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
+
 ## Executive rollout summary
 
 | Readiness | Count | Meaning |
 |---|---:|---|
-| GREEN | 6 | Candidate for production-shadow instrumentation only |
-| YELLOW | 21 | Continue shadow / gather or resolve specific evidence |
+| GREEN | 7 | Candidate for production-shadow instrumentation only |
+| YELLOW | 20 | Continue shadow / gather or resolve specific evidence |
 | RED | 6 | Research or negative-only for positive lifecycle automation |
 | **Total** | **33** | 31 test + 2 research-only profiles |
 
@@ -69,7 +71,8 @@ Recommended first production-shadow wave:
 3. `carrier.hu.expressone`
 4. `carrier.hu.gls`
 5. `merchant.hu.gymbeam`
-6. `payment.hu.simplepay`
+6. `merchant.hu.alza`
+7. `payment.hu.simplepay`
 
 These should still emit observations only. No automatic production write is implied by this ranking.
 
@@ -96,7 +99,7 @@ These should still emit observations only. No automatic production write is impl
 | `merchant.hu.gymbeam` | **GREEN** | **16 exact / 16; 0 conflict** | Direct legacy + current auth generations; order creation, processing, pre-handoff, delay, merchant payment proof and invoice are explicitly separated | Eligible for production-shadow only; preserve carrier/payment provider precedence and do not add unsupported final states |
 | `merchant.hu.notino` | RED | Hard-negative oriented | Verified unfinished cart / account / newsletter separation; no invented positive lifecycle | Need a direct real transaction lifecycle before positive production work |
 | `merchant.hu.pcx` | YELLOW | 2 shadow-only, 0 conflict | Direct order, packing, physical DPD handoff and invoice attachment boundaries are strong | Live sample count is still too small |
-| `merchant.hu.alza` | YELLOW | 23 total: 14 exact, 2 shadow-only, 7 conflicts | Rich direct lifecycle: received order, processing, payment action, cancellation, physical DPD handoff, delay, pickup, return/refund boundaries | Resolve/document all 7 overlap conflicts by event; keep initial receipt semantically distinct from contract acceptance |
+| `merchant.hu.alza` | **GREEN** | 23 total: 14 exact, 2 shadow-only, **7 reviewed conflicts** | Rich direct lifecycle with strict receipt/acceptance, payment, handoff, pickup, return/refund and final-invoice boundaries; the 7 conflicts were multi-event finalization evidence compared with a single-result legacy commerce parser | Production-shadow candidate only; keep `ORDER_CREATED` distinct from contract acceptance, preserve payment semantics and allow `INVOICE` to coexist independently with logistics evidence |
 | `merchant.hu.ipon` | YELLOW | 18 shadow-only, 0 conflict | Direct order, processing/pre-advice/invoice plus strong cart/review/human-reply negatives | Needs independent replay/ground-truth set because legacy parser is mostly silent |
 | `merchant.hu.euronics` | YELLOW | 2 shadow-only, 0 conflict | Direct order creation and cancellation semantics with account/marketing hard negatives | More live lifecycle volume required |
 | `merchant.hu.bestbyte` | YELLOW | 1 shadow-only, 0 conflict | Strong direct invoice authority only; marketplace/carrier wrappers excluded | Too narrow and too little live volume for merchant-wide production use |
@@ -151,7 +154,7 @@ These are library-wide, not profile-specific:
 ### Gate A — close YELLOW conflicts
 
 - GLS: **closed 2026-08-17** — all 46 differences were reviewed as the same safe pre-advice/comparator boundary; see `protocols/carriers/hu/gls/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
-- Alza: review/tag all 7 overlap differences, especially initial order receipt vs acceptance and payment-action semantics.
+- Alza: **closed 2026-08-17** — the 7 differences were reviewed as multi-event finalization evidence versus the legacy single-result comparator; see `protocols/merchants/hu/alza/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - MPL: close the single conflict.
 - Express One: retain the conservative pre-advice boundary and document the two differences as reviewed/non-dangerous.
 
