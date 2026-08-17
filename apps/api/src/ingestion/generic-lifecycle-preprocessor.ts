@@ -54,7 +54,6 @@ function reviewValidation(input: {
       'generic_lifecycle_no_state_mutation',
     ]),
   ];
-
   const result = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
   result.extraction_source = 'deterministic';
   result.parser_version = input.parsed.parserVersion;
@@ -82,6 +81,19 @@ function observationPayload(parsed: GenericLifecycleParseResult): Record<string,
     would_mutate_shipment_state: false,
     would_create_document: false,
   };
+}
+
+export function buildGenericLifecycleValidatedEnvelope(
+  validatedObservations: Array<Record<string, unknown>>,
+): Record<string, unknown> {
+  if (validatedObservations.length === 0) {
+    throw new Error('Generic lifecycle validated envelope requires at least one observation');
+  }
+  const result: Record<string, unknown> = { ...validatedObservations[0]! };
+  result.generic_lifecycle_observations = validatedObservations;
+  result.generic_lifecycle_observation_count = validatedObservations.length;
+  result.generic_lifecycle_multi_observation = validatedObservations.length > 1;
+  return result;
 }
 
 function canReplacePriorGenericLifecycle(existing: {
@@ -113,26 +125,12 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
   const bodyText = email.bodyHtml
     ? htmlToCompactText(email.bodyHtml, BODY_MAX_CHARS)
     : (email.snippet ?? '').trim().slice(0, BODY_MAX_CHARS);
-  const observations = parseGenericLifecycleObservations({
-    senderDomains: domains,
-    subject: email.subject,
-    bodyText,
-  });
+  const observations = parseGenericLifecycleObservations({ senderDomains: domains, subject: email.subject, bodyText });
   if (observations.length === 0) return { matched: false };
 
   const parsed = observations[0]!;
-  const validatedObservations = observations.map((observation) => reviewValidation({
-    parsed: observation,
-    domains,
-    subject: email.subject,
-    bodyText,
-  }));
-  // Keep the compatibility result separate from the nested observation list.
-  // Otherwise the first nested observation would reference its own parent.
-  const validatedResult: Record<string, unknown> = { ...validatedObservations[0]! };
-  validatedResult.generic_lifecycle_observations = validatedObservations;
-  validatedResult.generic_lifecycle_observation_count = observations.length;
-  validatedResult.generic_lifecycle_multi_observation = observations.length > 1;
+  const validatedObservations = observations.map((observation) => reviewValidation({ parsed: observation, domains, subject: email.subject, bodyText }));
+  const validatedResult = buildGenericLifecycleValidatedEnvelope(validatedObservations);
 
   const structuredResult = {
     schema_version: 2,
@@ -162,27 +160,18 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
   const existingParser = existing?.validated_result && typeof existing.validated_result === 'object'
     ? (existing.validated_result as Record<string, unknown>).parser_version
     : null;
-  const replaceFallback = existing
-    ? canReplaceAiOffFallbackWithDeterministic({
-        validatedResult: existing.validated_result,
-        validationStatus: existing.validation_status,
-        processingStatus: existing.processing_status,
-      })
-    : false;
-  const replacePriorGeneric = existing
-    ? canReplacePriorGenericLifecycle({
-        parserVersion: existingParser,
-        validationStatus: existing.validation_status,
-      })
-    : false;
+  const replaceFallback = existing ? canReplaceAiOffFallbackWithDeterministic({
+    validatedResult: existing.validated_result,
+    validationStatus: existing.validation_status,
+    processingStatus: existing.processing_status,
+  }) : false;
+  const replacePriorGeneric = existing ? canReplacePriorGenericLifecycle({
+    parserVersion: existingParser,
+    validationStatus: existing.validation_status,
+  }) : false;
 
   let sourceEmailId: string;
-  if (
-    existing
-    && existingParser !== GENERIC_LIFECYCLE_PARSER_VERSION
-    && !replaceFallback
-    && !replacePriorGeneric
-  ) {
+  if (existing && existingParser !== GENERIC_LIFECYCLE_PARSER_VERSION && !replaceFallback && !replacePriorGeneric) {
     return {
       matched: true,
       sourceEmailId: existing.id as string,
@@ -222,17 +211,13 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
       processed_at: now,
       processing_status: 'review',
     }).select('id').single();
-    if (insertError || !inserted) {
-      throw new Error(`Generic lifecycle source insert failed: ${insertError?.message ?? 'missing row'}`);
-    }
+    if (insertError || !inserted) throw new Error(`Generic lifecycle source insert failed: ${insertError?.message ?? 'missing row'}`);
     sourceEmailId = inserted.id as string;
   }
 
-  const orderNumber = observations
-    .map((observation) => observation.extraction.order_number)
+  const orderNumber = observations.map((observation) => observation.extraction.order_number)
     .find((value): value is string => typeof value === 'string' && value.length > 0) ?? null;
-  const trackingNumber = observations
-    .map((observation) => observation.extraction.tracking_number)
+  const trackingNumber = observations.map((observation) => observation.extraction.tracking_number)
     .find((value): value is string => typeof value === 'string' && value.length > 0) ?? null;
   const confidence = Math.max(...observations.map((observation) => observation.extraction.confidence));
 
@@ -245,13 +230,10 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     confidence,
   });
 
-  const linked = link.decision === 'linked_order_domain'
-    || link.decision === 'linked_tracking'
-    || link.decision === 'already_linked';
+  const linked = link.decision === 'linked_order_domain' || link.decision === 'linked_tracking' || link.decision === 'already_linked';
   validatedResult.generic_lifecycle_link_decision = link.decision;
   validatedResult.generic_lifecycle_link_reason = link.reason;
   if (link.purchaseId) validatedResult.linked_purchase_id = link.purchaseId;
-
   for (const observation of validatedObservations) {
     observation.generic_lifecycle_link_decision = link.decision;
     observation.generic_lifecycle_link_reason = link.reason;
