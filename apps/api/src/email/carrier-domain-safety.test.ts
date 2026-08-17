@@ -9,6 +9,7 @@ test('trusted carrier domains and their real subdomains remain recognized', () =
   assert.equal(carrierNameForSenderDomain('notify.dhl.com'), 'DHL');
   assert.equal(carrierNameForSenderDomain('ups.com'), 'UPS');
   assert.equal(isCarrierSenderDomain('posta.hu'), true);
+  assert.equal(carrierNameForSenderDomain('noreply.xlsfutar.hu'), 'XLS Futár');
 });
 
 test('carrier brand tokens inside unrelated domains never establish carrier identity', () => {
@@ -17,6 +18,7 @@ test('carrier brand tokens inside unrelated domains never establish carrier iden
     'dpd-login.example',
     'expressone-support.example',
     'foxpost-pay.example',
+    'xlsfutar.hu.attacker.example',
     'notify.dhl.com.attacker.example',
     'ups.com.attacker.example',
     'email.gls-hungary.com.attacker.example',
