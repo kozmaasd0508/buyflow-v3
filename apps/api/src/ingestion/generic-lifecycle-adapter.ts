@@ -6,7 +6,7 @@ import {
   stripQuotedHistoryForGenericOrder,
 } from './generic-order-confirmation-adapter.js';
 
-export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.1';
+export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.2';
 
 export type GenericLifecycleEvent = 'shipment' | 'delivery' | 'invoice_or_receipt';
 export type GenericLifecycleShipmentPhase =
@@ -155,6 +155,33 @@ function hasAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
+/**
+ * Lifecycle words inside explanatory/future instructions are not evidence that
+ * the state is true now. Real reviewed examples include:
+ * - "ertesitunk, amint rendelesed atveheto"
+ * - "e-mailben kuldjuk, mikor a rendeleset atadtuk a futarszolgalatnak"
+ *
+ * Keep this narrow: remove only the sentence carrying the future reporting
+ * construction. Order/tracking identities are still extracted from the full
+ * fresh message, and an independent current-state sentence remains usable.
+ */
+const FUTURE_CONDITIONAL_LIFECYCLE_STATEMENT_PATTERNS = [
+  /\b(?:tovabbi\s+e-?mailben\s+)?ertesit(?:unk|juk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
+  /\b(?:e-?mailben\s+)?(?:kuldjuk|kuldeni\s+fogjuk|kuldunk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
+  /\bwe(?:'ll|\s+will)\s+(?:notify|email|send)[^.!?\n]{0,180}\b(?:when|once|as\s+soon\s+as)\b/i,
+  /\byou(?:'ll|\s+will)\s+(?:be\s+notified|receive)[^.!?\n]{0,180}\b(?:when|once|as\s+soon\s+as)\b/i,
+] as const;
+
+function currentLifecycleEvidenceText(subject: string, body: string): string {
+  const currentBody = body
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .filter((segment) => !hasAny(segment, FUTURE_CONDITIONAL_LIFECYCLE_STATEMENT_PATTERNS))
+    .join('\n');
+  return `${subject}\n${currentBody}`.trim();
+}
+
 const DELIVERED_PATTERNS = [
   /\b(?:rendelesed|megrendelesed|csomagod) (?:sikeresen )?kezbesitve\b/i,
   /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) (?:sikeresen )?kezbesitett(?:uk|ek)\b/i,
@@ -232,8 +259,9 @@ export function parseGenericLifecycleEmail(input: {
   const trackingNumber = extractFirst(context, TRACKING_PATTERNS)?.toUpperCase() ?? null;
   const invoiceNumber = extractFirst(context, INVOICE_PATTERNS);
   const merchant = merchantFromDomain(senderDomain);
+  const evidenceContext = currentLifecycleEvidenceText(subject, freshBody);
 
-  if (orderNumber && hasAny(context, INVOICE_SIGNAL_PATTERNS)) {
+  if (orderNumber && hasAny(evidenceContext, INVOICE_SIGNAL_PATTERNS)) {
     return {
       extraction: baseExtraction({
         eventType: 'invoice_or_receipt',
@@ -259,24 +287,24 @@ export function parseGenericLifecycleEmail(input: {
   let reason = '';
   let eventType: GenericLifecycleEvent = 'shipment';
 
-  if (hasAny(context, DELIVERED_PATTERNS)) {
+  if (hasAny(evidenceContext, DELIVERED_PATTERNS)) {
     shipmentPhase = 'delivered';
     eventType = 'delivery';
     reason = 'explicit_delivery_signal';
-  } else if (hasAny(context, READY_FOR_PICKUP_PATTERNS)) {
+  } else if (hasAny(evidenceContext, READY_FOR_PICKUP_PATTERNS)) {
     shipmentPhase = 'ready_for_pickup';
     reason = 'explicit_ready_for_pickup_signal';
-  } else if (hasAny(context, OUT_FOR_DELIVERY_PATTERNS)) {
+  } else if (hasAny(evidenceContext, OUT_FOR_DELIVERY_PATTERNS)) {
     shipmentPhase = 'out_for_delivery';
     reason = 'explicit_out_for_delivery_signal';
-  } else if (hasAny(context, EXPLICIT_SHIPPED_PATTERNS)) {
+  } else if (hasAny(evidenceContext, EXPLICIT_SHIPPED_PATTERNS)) {
     shipmentPhase = 'shipped';
     reason = 'explicit_physical_shipment_signal';
   } else if (
-    hasAny(context, PACKAGE_IN_TRANSIT_PATTERNS)
+    hasAny(evidenceContext, PACKAGE_IN_TRANSIT_PATTERNS)
     || (
-      hasAny(context, ORDER_IN_TRANSIT_PATTERNS)
-      && hasAny(context, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
+      hasAny(evidenceContext, ORDER_IN_TRANSIT_PATTERNS)
+      && hasAny(evidenceContext, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
     )
   ) {
     shipmentPhase = 'in_transit';
