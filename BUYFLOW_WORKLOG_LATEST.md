@@ -2,122 +2,92 @@
 
 > Newest detailed entry. Read after `BUYFLOW_HANDOFF.md`. Previous detailed entries remain in Git history and `BUYFLOW_WORKLOG.md`.
 
-## 2026-08-16 — Protocol / Merchant Library research wave 1
+## 2026-08-17 — Unknown Merchant generic order v1.4 safety hardening
 
 ### Goal
 
-After building the Protocol Library foundation, research the first commerce-engine wave from primary sources and begin merchant-specific knowledge, without enabling AI, replacing the current deterministic pipeline, or inventing unsupported email subjects.
+Make the generic/unknown-merchant order-confirmation layer safer using the exact false-positive classes found by the live v1.3 mailbox audit, without enabling automatic Purchase writes or changing the intentionally empty production protocol registry.
 
-### Foundation reference
+### Starting point
 
-PR #99 added the common versioned evidence/provenance/prohibition contract. Production registry remains empty; research profiles do not alter live recognition.
+Main before this release: `9bb89dcfa35b56b63a9ba4867110a51b62a4803e`.
 
-### PR #101 — WooCommerce research v1
+The v1.3 read-only two-year audit had reviewed 9,437 messages and found:
+- 12 raw generic candidates
+- 9 unprofiled candidates
+- 7 unprofiled sender families
+- 2 strong unprofiled candidates
 
-Added:
-- `apps/api/src/protocols/profiles/woocommerce-research-v1.ts`
-- tests
-- `protocols/commerce/woocommerce/1.0.0-research.1/README.md`
+Manual review identified four unsafe/duplicate observations:
+- two structurally rich automatic acknowledgements that explicitly denied contract formation/merchant acceptance,
+- one ABOUT YOU order acknowledgement with positive confirmation wording but explicit purchase-offer non-acceptance,
+- one later Vitál-Kolor merchant reply that quoted the full historical order confirmation and therefore re-triggered generic `ORDER_CREATED`.
 
-Primary-source findings:
-- Processing -> ORDER_PROCESSING only
-- Failed order -> PAYMENT_FAILED
-- Cancelled -> CANCELLED
-- historical Customer Invoice class is Order details/payment request; explicit payment copy required for PAYMENT_ACTION_REQUIRED and never fiscal INVOICE by class name
-- full/partial refund is merchant refund evidence with DO_NOT_MARK_REFUNDED
-- fulfillment-created -> merchant SHIPPED evidence, never DELIVERED
-- Completed deliberately unmapped to SHIPPED/DELIVERED
-- customer note/account/reset-password are hard negatives
+### PR #147 — v1.4 implementation
 
-PR CI #491 green.
+Branch: `agent/generic-order-v14-safety-hardening`.
 
-### PR #102 — Shopify research v1
+`generic-order-confirmation-v1.4` adds:
 
-Added source-backed Shopify catalog and tests.
+1. **Explicit contract/offer non-acceptance guard**
+   - blocks narrow Hungarian and English wording that says the acknowledgement does not form a contract, does not accept the order/purchase offer, or merely confirms receipt;
+   - positive confirmation wording elsewhere does not override explicit non-acceptance;
+   - known merchant-specific adapters remain separate; reviewed JatekBolt semantics still run before the generic hard-negative lane.
 
-Key constraints:
-- notification subject and HTML are merchant-editable/localizable
-- no speculative raw subject regexes were added
-- `shopifyemail.com` is shared platform evidence only and cannot identify merchant/Purchase
-- Order confirmation, fulfillment/shipping, tracking, cancel/refund, pending-payment, pickup, return/exchange and local-delivery semantics are catalogued
-- Shipping confirmation -> SHIPMENT_CREATED, not carrier physical progress
-- Ready for pickup != Delivered
-- refund evidence carries DO_NOT_MARK_REFUNDED
-- Picked up is left OTHER until canonical taxonomy supports it
-- `confirmation_number` is not treated as guaranteed globally unique
+2. **Quoted-history guard**
+   - generic new-order evidence uses only fresh message content above recognized reply/forward history;
+   - handles `On ... wrote:`, Hungarian `... ezt írta:`, Original Message/Eredeti üzenet, forwarded separators, Outlook From/To/Subject blocks and `>` quoting;
+   - full email content remains available to other merchant/lifecycle parsers;
+   - a true fresh order above an older quoted thread remains parseable.
 
-PR CI #493 green.
+Regression coverage was added for Tok-shop-, Mulan-, ABOUT YOU-style disclaimers and Gmail/Outlook/forward quote shapes.
 
-### PR #103 — UNAS + Shoprenter research v1
+First PR CI exposed only one stale test expectation still naming v1.3; no semantic failure. After fixing it, permanent PR CI #609 passed:
+- **680/680 API tests**
+- API typecheck/build PASS
+- mobile typecheck/build PASS
 
-Merged runtime `8f4e0aa343d5d8bcbe094333cbeda5c1c0cab955`.
-- PR CI #495 green
-- main CI #496 green
-- exact Render smoke #390 green
+### PR #148 — one-off live v1.4 audit
 
-UNAS:
-- highly customizable; no executable raw parser in v1
-- recorded structural placeholders: order key/total/status, payment URL, tracking URL, package number, product block
-- merchant-defined status names cannot be globally translated to lifecycle
-- tracking/package identity does not prove physical carrier progress
-- failed/pending payment family remains unmapped until rendered evidence distinguishes state
+Temporary draft audit PR #148 was based on the exact v1.4 release candidate and ran the rolling two-year Nylas audit read-only. It was intentionally closed **without merge** after evidence capture.
 
-Shoprenter:
-- documented shared fallback `order@myshoprenter.hu` -> platform OTHER only
-- subjects/text/HTML editable
-- order confirmation can later support ORDER_CREATED only with merchant + stable identity
-- status change remains merchant-specific
-- Shoprenter Go tracking link = identity only, not shipped/in-transit/delivered
-- payment description = method/instruction, not payment success
+Scope:
+- **9,438 messages**
+- 472 pages
+- not truncated
+- 0 database writes
+- 0 production-registry use
+- 0 automatic Purchase writes
+- 0 full-message fetch failures
+- 0 rate-limit retries
 
-### PR #104 — eMAG HU merchant research v1
+Before v1.4 -> after v1.4:
+- raw generic: **12 -> 8**
+- unprofiled: **9 -> 5**
+- distinct unprofiled families: **7 -> 4**
+- strong unprofiled: **2 -> 0**
+- repeated unprofiled families: **2 -> 1**
 
-First Hungarian merchant-specific research catalog.
+Privacy-safe deterministic fingerprints proved exact retention/removal:
+- Manna: 2 -> 2 retained
+- Scitec: 1 -> 1 retained
+- Zákány: 1 -> 1 retained
+- Vitál-Kolor: 2 -> 1; original retained, quoted `Re:` duplicate removed
+- ABOUT YOU reviewed non-acceptance fingerprint removed
+- both reviewed unsafe strong fingerprints removed
 
-Merged runtime `3c648b87ff3c8335102af7b71e94cc05cefdedfd`.
-- PR CI #497 green
-- main CI #498 green
-- exact Render smoke #392 green
+This is the desired precision improvement: all four reviewed unsafe/duplicate observations disappeared while all five reviewed legitimate order-received/recorded observations survived.
 
-Official-source safety findings:
-- eMAG Marketplace platform and actual seller are separate identities
-- Folyamatban is seller preparation, not shipment
-- AWB generation can move Marketplace order to Befejezett; this is at most SHIPMENT_CREATED, never physical shipment/delivery proof
-- one order can have multiple parcels/AWBs; keep multiple Shipment identities
-- easybox pickup notification -> READY_FOR_PICKUP, never DELIVERED
-- cancellation != refund
-- return request -> collection/receipt/inspection/approval -> refund are separate stages
-- merchant/platform refund cannot finalize settled REFUNDED without stronger payment evidence
-- online-card failure alone cannot create/guess a Purchase
-- invoice/warranty document availability is separate from exact PDF/email identity and active warranty case
+The audit run also passed **680/680 tests** and all API/mobile builds.
 
-No stable first-party customer-email sender/subject/body set was found in the first pass, so no eMAG subject strings were invented and no raw parser was enabled.
+### Safety state
 
-### Research wave 1 checkpoint
+- generic parser identities remain shadow/review-only at the write gate;
+- `would_write=false` for generic production-shadow diagnostics;
+- no production protocol profile was activated;
+- no Purchase/Shipment/Payment/Invoice/Return/Refund/Warranty write was added;
+- temporary audit PR #148 was closed without merge.
 
-Completed research coverage:
-1. WooCommerce
-2. Shopify
-3. UNAS
-4. Shoprenter
-5. eMAG HU
+### Next action after release
 
-All remain `research` / unregistered for live lifecycle extraction. No production inbox scans or new data writes were caused by this research.
-
-The user asked to review the first phase before moving to the next large group, so stop here for review.
-
-### Benchmark requirement before promotion
-
-Permanent PR #97 benchmark remains the guardrail:
-- 70 purchase/lifecycle fixtures + 30 noise
-- 30/30 noise excluded
-- 0 wrong order/tracking identities
-- 0 unsafe lifecycle promotions
-- unseen generic recognition 9/70 baseline
-
-Any future `research -> test/production` promotion must re-run this and preserve false Purchase=0 and wrong auto-link=0.
-
-### Candidate next work after approval
-
-- Merchant research: MediaMarkt -> GymBeam -> Notino, or
-- collect observed rendered Woo/Shopify/UNAS/Shoprenter/eMAG customer emails and begin safe executable `test` profiles.
+Merge PR #147 only after its final documentation-triggered CI is green, then require exact main-push CI and exact Render Webhook Smoke for the merge SHA. After release, keep generic order detection shadow-only and expand unseen merchant/template/language coverage before designing generic lifecycle matching to an already-known Purchase.
