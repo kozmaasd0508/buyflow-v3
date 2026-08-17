@@ -45,6 +45,25 @@ test('real R-V Webshop-style mail emits invoice and shipment without inventing a
   assert.equal(observations[1]?.shipmentPhase, 'shipped');
 });
 
+test('real eDuna-style formal order wording emits invoice and shipment', () => {
+  const observations = parseGenericLifecycleObservations({
+    senderDomains: ['eduna.hu'],
+    subject: 'Értesítés',
+    bodyText: [
+      'Ezúton értesítjük, hogy 89445 számú rendelését átadtuk a futárnak.',
+      'A csomag kézbesítéséről a futár cég fogja tájékoztatni.',
+      'Csatolva küldjük az elkészült számlát.',
+    ].join('\n'),
+  });
+
+  assert.equal(observations.length, 2);
+  assert.equal(observations[0]?.extraction.event_type, 'invoice_or_receipt');
+  assert.equal(observations[0]?.extraction.order_number, '89445');
+  assert.equal(observations[1]?.extraction.event_type, 'shipment');
+  assert.equal(observations[1]?.shipmentPhase, 'shipped');
+  assert.equal(observations[1]?.extraction.order_number, '89445');
+});
+
 test('legacy single-result API keeps invoice as primary for combined mail', () => {
   const parsed = parseGenericLifecycleEmail({
     senderDomains: ['irodamarket.hu'],
