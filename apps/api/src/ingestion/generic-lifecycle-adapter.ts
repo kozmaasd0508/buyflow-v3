@@ -64,6 +64,7 @@ const ORDER_PATTERNS = [
   /\b(?:rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:a\s+)?(?:rendeles|megrendeles)\s*#\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /#([a-z0-9][a-z0-9._/-]{3,39})\s+szamu\s+(?:rendeleshez|megrendeleshez)\b/i,
+  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet)\b/i,
   /^([a-z]{1,8}\d{4,20})\s*-\s*(?:rendelesed|megrendelesed)\b/im,
   /\b(?:bestellnummer|bestellnr\.?|auftragsnummer)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:numero de commande|commande n[°o]?|numero de pedido|pedido n[°o]?)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
@@ -128,7 +129,7 @@ function hasAny(text: string, patterns: readonly RegExp[]): boolean {
 
 const DELIVERED_PATTERNS = [
   /\b(?:rendelesed|megrendelesed|csomagod) (?:sikeresen )?kezbesitve\b/i,
-  /\b(?:rendelesedet|megrendelesedet|csomagodat) (?:sikeresen )?kezbesitett(?:uk|ek)\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) (?:sikeresen )?kezbesitett(?:uk|ek)\b/i,
   /\b(?:your )?(?:order|package) (?:has been |was )?delivered\b/i,
   /\bdelivered successfully\b/i,
 ] as const;
@@ -142,20 +143,20 @@ const READY_FOR_PICKUP_PATTERNS = [
 
 const OUT_FOR_DELIVERY_PATTERNS = [
   /\b(?:rendelesed|megrendelesed|csomagod) (?:mar )?(?:a )?kezbesitonel van\b/i,
-  /\b(?:ma|a mai napon) kezbesit(?:juk|ik) (?:a )?(?:rendelesedet|megrendelesedet|csomagodat)\b/i,
+  /\b(?:ma|a mai napon) kezbesit(?:juk|ik) (?:a )?(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat)\b/i,
   /\b(?:your )?(?:order|package) is out for delivery\b/i,
   /\bout for delivery\b/i,
 ] as const;
 
 const EXPLICIT_SHIPPED_PATTERNS = [
-  /\b(?:rendelesedet|megrendelesedet|csomagodat|rendelt csomagot) [^\n.]{0,80}\bfeladtuk\b/i,
-  /\b(?:rendelesedet|megrendelesedet|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak)\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat|rendelt csomagot) [^\n.]{0,80}\b(?:feladtuk|elkuld(?:tuk|tek))\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak|szallitonak)\b/i,
   /\b(?:your )?(?:order|package) (?:has been |was )?shipped\b/i,
   /\bwe (?:have )?shipped (?:your )?(?:order|package)\b/i,
 ] as const;
 
 const IN_TRANSIT_PATTERNS = [
-  /\b(?:rendelesed|megrendelesed|csomagod) (?:mar )?uton van\b/i,
+  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese|csomagod) (?:mar )?uton van\b/i,
   /\b(?:your )?(?:order|package) is on (?:its|the) way\b/i,
   /\b(?:your )?(?:order|package) is in transit\b/i,
 ] as const;

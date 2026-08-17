@@ -36,6 +36,19 @@ test('parses merchant in-transit message with exact order identity', () => {
   assert.equal(parsed.extraction.order_number, '212109289');
 });
 
+test('parses formal Hungarian shipped wording when the order identity comes before the order noun', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['sinsay.com'],
+    subject: 'Visszaigazolás arról, hogy a 15710474710 rendelést elküldték.',
+    bodyText: 'A megrendelését elküldtük. A következő napokban megkapja.',
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed.extraction.event_type, 'shipment');
+  assert.equal(parsed.shipmentPhase, 'shipped');
+  assert.equal(parsed.extraction.order_number, '15710474710');
+});
+
 test('parses invoice tied to an explicit order identity', () => {
   const parsed = parseGenericLifecycleEmail({
     senderDomains: ['info.jatektenger.hu'],
