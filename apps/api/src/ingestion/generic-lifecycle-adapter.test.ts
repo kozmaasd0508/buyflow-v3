@@ -14,7 +14,7 @@ test('parses merchant shipment with explicit dispatch and tracking identity', ()
   });
 
   assert.ok(parsed);
-  assert.equal(parsed.parserVersion, 'generic-lifecycle-v1.2');
+  assert.equal(parsed.parserVersion, 'generic-lifecycle-v1.3');
   assert.equal(parsed.extraction.event_type, 'shipment');
   assert.equal(parsed.shipmentPhase, 'shipped');
   assert.equal(parsed.extraction.tracking_number, '3406978622');

@@ -6,7 +6,7 @@ import {
   stripQuotedHistoryForGenericOrder,
 } from './generic-order-confirmation-adapter.js';
 
-export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.2';
+export const GENERIC_LIFECYCLE_PARSER_VERSION = 'generic-lifecycle-v1.3';
 
 export type GenericLifecycleEvent = 'shipment' | 'delivery' | 'invoice_or_receipt';
 export type GenericLifecycleShipmentPhase =
@@ -42,15 +42,6 @@ function domainMatches(domain: string, expected: string): boolean {
   return normalized === target || normalized.endsWith(`.${target}`);
 }
 
-/**
- * Shared transactional infrastructure can carry a merchant-branded lifecycle
- * email without being the merchant itself. It is useful evidence for a
- * dedicated provider/platform adapter, but it must never become generic
- * merchant identity.
- *
- * Keep this list evidence-driven. Every entry below is backed by either an
- * observed real recipient email or existing BuyFlow provider/platform research.
- */
 const NON_MERCHANT_INFRASTRUCTURE_DOMAINS = [
   'chameleoon.sk',
   'szamlazz.hu',
@@ -92,7 +83,7 @@ const ORDER_PATTERNS = [
   /\b(?:rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:a\s+)?(?:rendeles|megrendeles)\s*#\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /#([a-z0-9][a-z0-9._/-]{3,39})\s+szamu\s+(?:rendeleshez|megrendeleshez)\b/i,
-  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet)\b/i,
+  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet|rendeleset|megrendeleset|rendelesed|megrendelesed|rendelese|megrendelese)\b/i,
   /^([a-z]{1,8}\d{4,20})\s*-\s*(?:rendelesed|megrendelesed)\b/im,
   /\b(?:bestellnummer|bestellnr\.?|auftragsnummer)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:numero de commande|commande n[°o]?|numero de pedido|pedido n[°o]?)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
@@ -155,18 +146,6 @@ function hasAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-/**
- * Lifecycle words inside explanatory/future instructions are not evidence that
- * the state is true now. Real reviewed examples include:
- * - "ertesitunk, amint rendelesed atveheto"
- * - "e-mailben kuldjuk, mikor a rendeleset atadtuk a futarszolgalatnak"
- * - "miutan kaptal ertesitest, hogy a rendelesed atveheto"
- *
- * Keep this narrow: remove only the sentence carrying the future reporting or
- * prerequisite construction. Order/tracking identities are still extracted
- * from the full fresh message, and an independent current-state sentence
- * remains usable.
- */
 const FUTURE_CONDITIONAL_LIFECYCLE_STATEMENT_PATTERNS = [
   /\b(?:tovabbi\s+e-?mailben\s+)?ertesit(?:unk|juk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
   /\b(?:e-?mailben\s+)?(?:kuldjuk|kuldeni\s+fogjuk|kuldunk)[^.!?\n]{0,180}\b(?:amint|amikor|mikor)\b/i,
@@ -208,8 +187,8 @@ const OUT_FOR_DELIVERY_PATTERNS = [
 ] as const;
 
 const EXPLICIT_SHIPPED_PATTERNS = [
-  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat|rendelt csomagot) [^\n.]{0,80}\b(?:feladtuk|elkuld(?:tuk|tek))\b/i,
-  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak|szallitonak)\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|rendelesed|megrendelesed|rendelese|megrendelese|csomagodat|rendelt csomagot) [^\n.]{0,80}\b(?:feladtuk|elkuld(?:tuk|tek))\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|rendelesed|megrendelesed|rendelese|megrendelese|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak|szallitonak)\b/i,
   /\b(?:your )?(?:order|package) (?:has been |was )?shipped\b/i,
   /\bwe (?:have )?shipped (?:your )?(?:order|package)\b/i,
 ] as const;
@@ -242,31 +221,95 @@ const INVOICE_SIGNAL_PATTERNS = [
   /\b(?:rendelesedhez|megrendelesedhez|rendeleshez|megrendeleshez) tartozo szamla\b/i,
   /\bszamlad (?:elkeszult|kiallitottuk)\b/i,
   /\belektronikus szamla(?:d)? [^\n.]{0,80}\b(?:kiallitva|kiallitottuk|kerult kiallit(?:asra|va))\b/i,
+  /\buj elektronikus szamlad erkezett\b/i,
+  /\bmellekeltuk (?:a )?szamlad\b/i,
+  /\bmellekletekent kuldjuk [^\n.]{0,100}\b(?:rendelesed|megrendelesed|rendelese|megrendelese) szamlajat\b/i,
+  /\b(?:csatolva|mellekletben|mellekletekent) [^\n.]{0,120}\b(?:elkeszult )?szamla(?:t|dat|jat)\b/i,
+  /\b(?:rendelesed|megrendelesed|rendelese|megrendelese) szamla(?:ja|jat|dat)\b/i,
   /\binvoice (?:for|for your) (?:order|purchase)\b/i,
   /\byour invoice (?:is ready|has been issued)\b/i,
 ] as const;
 
-export function parseGenericLifecycleEmail(input: {
+function shipmentObservation(input: {
+  merchant: string;
+  orderNumber: string | null;
+  trackingNumber: string | null;
+  senderDomain: string;
+  evidenceContext: string;
+}): GenericLifecycleParseResult | null {
+  let shipmentPhase: GenericLifecycleShipmentPhase | null = null;
+  let reason = '';
+  let eventType: GenericLifecycleEvent = 'shipment';
+
+  if (hasAny(input.evidenceContext, DELIVERED_PATTERNS)) {
+    shipmentPhase = 'delivered';
+    eventType = 'delivery';
+    reason = 'explicit_delivery_signal';
+  } else if (hasAny(input.evidenceContext, READY_FOR_PICKUP_PATTERNS)) {
+    shipmentPhase = 'ready_for_pickup';
+    reason = 'explicit_ready_for_pickup_signal';
+  } else if (hasAny(input.evidenceContext, OUT_FOR_DELIVERY_PATTERNS)) {
+    shipmentPhase = 'out_for_delivery';
+    reason = 'explicit_out_for_delivery_signal';
+  } else if (hasAny(input.evidenceContext, EXPLICIT_SHIPPED_PATTERNS)) {
+    shipmentPhase = 'shipped';
+    reason = 'explicit_physical_shipment_signal';
+  } else if (
+    hasAny(input.evidenceContext, PACKAGE_IN_TRANSIT_PATTERNS)
+    || (
+      hasAny(input.evidenceContext, ORDER_IN_TRANSIT_PATTERNS)
+      && hasAny(input.evidenceContext, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
+    )
+  ) {
+    shipmentPhase = 'in_transit';
+    reason = 'explicit_in_transit_signal';
+  }
+
+  if (!shipmentPhase) return null;
+
+  return {
+    extraction: baseExtraction({
+      eventType,
+      merchant: input.merchant,
+      orderNumber: input.orderNumber,
+      trackingNumber: input.trackingNumber,
+      confidence: input.orderNumber && input.trackingNumber ? 0.96 : 0.93,
+    }),
+    parserVersion: GENERIC_LIFECYCLE_PARSER_VERSION,
+    shipmentPhase,
+    senderDomain: input.senderDomain,
+    reasons: [
+      'merchant_owned_sender_domain',
+      reason,
+      ...(input.orderNumber ? ['explicit_order_identity'] : []),
+      ...(input.trackingNumber ? ['explicit_tracking_identity'] : []),
+      'generic_lifecycle_link_only',
+    ],
+  };
+}
+
+export function parseGenericLifecycleObservations(input: {
   senderDomains: string[];
   subject?: string | null;
   bodyText?: string | null;
-}): GenericLifecycleParseResult | null {
+}): GenericLifecycleParseResult[] {
   const senderDomain = safeSenderDomain(input.senderDomains);
-  if (!senderDomain) return null;
+  if (!senderDomain) return [];
 
   const subject = normalizeText(input.subject ?? '');
   const freshBody = stripQuotedHistoryForGenericOrder(normalizeText(input.bodyText ?? ''));
   const context = `${subject}\n${freshBody}`.trim();
-  if (!context) return null;
+  if (!context) return [];
 
   const orderNumber = extractFirst(context, ORDER_PATTERNS);
   const trackingNumber = extractFirst(context, TRACKING_PATTERNS)?.toUpperCase() ?? null;
   const invoiceNumber = extractFirst(context, INVOICE_PATTERNS);
   const merchant = merchantFromDomain(senderDomain);
   const evidenceContext = currentLifecycleEvidenceText(subject, freshBody);
+  const observations: GenericLifecycleParseResult[] = [];
 
   if (orderNumber && hasAny(evidenceContext, INVOICE_SIGNAL_PATTERNS)) {
-    return {
+    observations.push({
       extraction: baseExtraction({
         eventType: 'invoice_or_receipt',
         merchant,
@@ -281,59 +324,29 @@ export function parseGenericLifecycleEmail(input: {
         'explicit_order_identity',
         'explicit_invoice_for_order_signal',
         ...(invoiceNumber ? ['explicit_invoice_identity'] : []),
+        'generic_lifecycle_link_only',
       ],
-    };
+    });
   }
 
-  if (!orderNumber && !trackingNumber) return null;
-
-  let shipmentPhase: GenericLifecycleShipmentPhase | null = null;
-  let reason = '';
-  let eventType: GenericLifecycleEvent = 'shipment';
-
-  if (hasAny(evidenceContext, DELIVERED_PATTERNS)) {
-    shipmentPhase = 'delivered';
-    eventType = 'delivery';
-    reason = 'explicit_delivery_signal';
-  } else if (hasAny(evidenceContext, READY_FOR_PICKUP_PATTERNS)) {
-    shipmentPhase = 'ready_for_pickup';
-    reason = 'explicit_ready_for_pickup_signal';
-  } else if (hasAny(evidenceContext, OUT_FOR_DELIVERY_PATTERNS)) {
-    shipmentPhase = 'out_for_delivery';
-    reason = 'explicit_out_for_delivery_signal';
-  } else if (hasAny(evidenceContext, EXPLICIT_SHIPPED_PATTERNS)) {
-    shipmentPhase = 'shipped';
-    reason = 'explicit_physical_shipment_signal';
-  } else if (
-    hasAny(evidenceContext, PACKAGE_IN_TRANSIT_PATTERNS)
-    || (
-      hasAny(evidenceContext, ORDER_IN_TRANSIT_PATTERNS)
-      && hasAny(evidenceContext, PHYSICAL_FULFILLMENT_CONTEXT_PATTERNS)
-    )
-  ) {
-    shipmentPhase = 'in_transit';
-    reason = 'explicit_in_transit_signal';
-  }
-
-  if (!shipmentPhase) return null;
-
-  return {
-    extraction: baseExtraction({
-      eventType,
+  if (orderNumber || trackingNumber) {
+    const shipment = shipmentObservation({
       merchant,
       orderNumber,
       trackingNumber,
-      confidence: orderNumber && trackingNumber ? 0.96 : 0.93,
-    }),
-    parserVersion: GENERIC_LIFECYCLE_PARSER_VERSION,
-    shipmentPhase,
-    senderDomain,
-    reasons: [
-      'merchant_owned_sender_domain',
-      reason,
-      ...(orderNumber ? ['explicit_order_identity'] : []),
-      ...(trackingNumber ? ['explicit_tracking_identity'] : []),
-      'generic_lifecycle_link_only',
-    ],
-  };
+      senderDomain,
+      evidenceContext,
+    });
+    if (shipment) observations.push(shipment);
+  }
+
+  return observations;
+}
+
+export function parseGenericLifecycleEmail(input: {
+  senderDomains: string[];
+  subject?: string | null;
+  bodyText?: string | null;
+}): GenericLifecycleParseResult | null {
+  return parseGenericLifecycleObservations(input)[0] ?? null;
 }
