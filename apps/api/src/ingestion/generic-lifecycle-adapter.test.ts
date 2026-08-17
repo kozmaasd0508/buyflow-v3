@@ -14,7 +14,7 @@ test('parses merchant shipment with explicit dispatch and tracking identity', ()
   });
 
   assert.ok(parsed);
-  assert.equal(parsed.parserVersion, 'generic-lifecycle-v1.1');
+  assert.equal(parsed.parserVersion, 'generic-lifecycle-v1.2');
   assert.equal(parsed.extraction.event_type, 'shipment');
   assert.equal(parsed.shipmentPhase, 'shipped');
   assert.equal(parsed.extraction.tracking_number, '3406978622');
@@ -90,6 +90,69 @@ test('parses ready-for-pickup only with a hard purchase identity', () => {
   assert.ok(parsed);
   assert.equal(parsed.shipmentPhase, 'ready_for_pickup');
   assert.equal(parsed.extraction.order_number, 'HU-991188');
+});
+
+test('does not treat Oazis procurement future pickup notification as ready for pickup', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['oaziscomputer.hu'],
+    subject: '[#215048] - Beszerzés alatt',
+    bodyText: [
+      'Rendelés azonosító #215048',
+      'Megrendelésed beszerzése folyamatban.',
+      'További e-mailben értesítünk, amint rendelésed átvehető, vagy szállítható.',
+    ].join('\n'),
+  });
+
+  assert.equal(parsed, null);
+});
+
+test('does not treat Oazis order-recorded pickup prerequisite as ready for pickup', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['oaziscomputer.hu'],
+    subject: '[#215048] Megrendelés rögzítve',
+    bodyText: [
+      'A #215048 számú megrendelésed sikeresen rögzítettük.',
+      'Ez egy automatikus rendelés összesítő, mely nem minősül rendelés visszaigazolásnak.',
+      'Rendelés azonosító',
+      '#215048',
+      'Átvétel módja',
+      'GLS futárszolgálat',
+      'Ha személyes átvételt választottál, a problémamentes kiszolgálás érdekében csak akkor indulj el a megrendelésedért, miután kaptál értesítést, hogy a rendelésed átvehető.',
+    ].join('\n'),
+  });
+
+  assert.equal(parsed, null);
+});
+
+test('does not treat Klarstein processing FAQ future handoff as shipped', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['xqueue.berlin-brands-group.com'],
+    subject: 'Köszönjük Klarstein sz. megrendelését',
+    bodyText: [
+      'Tájékoztatjuk, hogy rendelését fogadtuk és jelenleg feldolgozás alatt van.',
+      'Megrendelés száma: 0408253445',
+      'A számlát e-mailben küldjük, mikor a rendelését átadtuk a futárszolgálatnak.',
+      'Miután a küldeményét átadtuk a futárcégnek, e-mailben küldjük el annak csomagkövetését.',
+    ].join('\n'),
+  });
+
+  assert.equal(parsed, null);
+});
+
+test('keeps a current shipment when the same email also explains a future pickup notification', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['orders.demo-shop.hu'],
+    subject: 'Rendelésed feladva',
+    bodyText: [
+      'Rendelésszám: HU-889911',
+      'Rendelésedet átadtuk a futárszolgálatnak.',
+      'E-mailben értesítünk, amikor rendelésed átvehető lesz az automatában.',
+    ].join('\n'),
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed.shipmentPhase, 'shipped');
+  assert.equal(parsed.extraction.order_number, 'HU-889911');
 });
 
 test('parses out-for-delivery and delivery as separate states', () => {
