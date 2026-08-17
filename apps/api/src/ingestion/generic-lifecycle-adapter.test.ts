@@ -37,6 +37,23 @@ test('parses merchant in-transit message with exact order identity', () => {
   assert.equal(parsed.extraction.order_number, '212109289');
 });
 
+test('keeps order-level in-transit wording when physical fulfillment is independently present', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['orders.unknown-shop.hu'],
+    subject: 'A HU991188 rendelésed már úton van',
+    bodyText: [
+      'Rendelésszám: HU991188',
+      'Küldemény azonosítója: 1979394976',
+      'A csomagot nyomon követheted a futár oldalán.',
+    ].join('\n'),
+  });
+
+  assert.ok(parsed);
+  assert.equal(parsed.extraction.event_type, 'shipment');
+  assert.equal(parsed.shipmentPhase, 'in_transit');
+  assert.equal(parsed.extraction.order_number, 'HU991188');
+});
+
 test('parses formal Hungarian shipped wording when the order identity comes before the order noun', () => {
   const parsed = parseGenericLifecycleEmail({
     senderDomains: ['sinsay.com'],
@@ -93,6 +110,22 @@ test('parses out-for-delivery and delivery as separate states', () => {
   assert.ok(delivered);
   assert.equal(delivered.shipmentPhase, 'delivered');
   assert.equal(delivered.extraction.event_type, 'delivery');
+});
+
+test('rejects digital ticket purchase whose subject merely says the order is on its way', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['boditesok.hu'],
+    subject: 'A rendelésed úton van a(z) Bódi Tesók oldalról!',
+    bodyText: [
+      'A rendelésedet sikeresen feldolgoztuk.',
+      'Rendelés #288498',
+      'VIP jegy - Őszi Roadshow 2025',
+      'EXTRA GYORS SZÁLLÍTÁS: 298 Ft',
+      'Esemény helyszín: Törökszentmiklós',
+      'Esemény dátum: 2025-11-15',
+    ].join('\n'),
+  });
+  assert.equal(parsed, null);
 });
 
 test('rejects utility invoice without order identity', () => {
@@ -154,6 +187,15 @@ test('rejects documented MyShoprenter fallback sender infrastructure as merchant
     senderDomains: ['myshoprenter.hu'],
     subject: 'Rendelésed úton van',
     bodyText: 'Rendelésszám: SR-889911\nRendelésed már úton van.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('known merchant sender cannot bypass its dedicated parser through generic fallback', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['dorko.hu'],
+    subject: 'DK2001799 - rendelésed úton van - átadtuk a GLS futárnak!',
+    bodyText: 'Rendelésszám: DK2001799\nCsomagod hamarosan kézhez kapod.',
   });
   assert.equal(parsed, null);
 });
