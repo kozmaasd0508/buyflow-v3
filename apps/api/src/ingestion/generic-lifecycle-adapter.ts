@@ -187,8 +187,8 @@ const OUT_FOR_DELIVERY_PATTERNS = [
 ] as const;
 
 const EXPLICIT_SHIPPED_PATTERNS = [
-  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat|rendelt csomagot) [^\n.]{0,80}\b(?:feladtuk|elkuld(?:tuk|tek))\b/i,
-  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak|szallitonak)\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|rendelesed|megrendelesed|rendelese|megrendelese|csomagodat|rendelt csomagot) [^\n.]{0,80}\b(?:feladtuk|elkuld(?:tuk|tek))\b/i,
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset|rendelesed|megrendelesed|rendelese|megrendelese|csomagodat) [^\n.]{0,100}\batadtuk [^\n.]{0,60}\b(?:futarnak|futarszolgalatnak|szallitonak)\b/i,
   /\b(?:your )?(?:order|package) (?:has been |was )?shipped\b/i,
   /\bwe (?:have )?shipped (?:your )?(?:order|package)\b/i,
 ] as const;
