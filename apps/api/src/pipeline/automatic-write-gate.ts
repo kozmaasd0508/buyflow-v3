@@ -3,6 +3,9 @@ import type { PurchaseResolutionCandidate } from '../resolution/purchase-resolut
 import type { ShipmentResolutionCandidate } from '../resolution/shipment-resolution.js';
 
 const TRUSTED_VALIDATION_STATUSES = new Set(['validated', 'guardrailed']);
+const SHADOW_ONLY_PARSER_VERSION_PATTERNS = [
+  /^generic-order-confirmation-v\d+(?:\.\d+)*$/,
+] as const;
 
 type WritablePurchaseCandidate = PurchaseResolutionCandidate & {
   userId: string;
@@ -26,10 +29,20 @@ type WritableDocumentCandidate = DocumentResolutionCandidate & {
   decision: 'linkable';
 };
 
+export function isShadowOnlyParserVersion(value: unknown): boolean {
+  return typeof value === 'string' && SHADOW_ONLY_PARSER_VERSION_PATTERNS.some(
+    (pattern) => pattern.test(value),
+  );
+}
+
 export function isTrustedAutomaticEvidence(
   validationStatus: unknown,
   validatedResult: Record<string, unknown> | null,
 ): boolean {
+  if (isShadowOnlyParserVersion(validatedResult?.parser_version)) {
+    return false;
+  }
+
   const nestedStatus = validatedResult?.validation_status;
   const effectiveStatus =
     typeof nestedStatus === 'string'
