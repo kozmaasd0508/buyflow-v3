@@ -47,6 +47,18 @@ type FingerprintStats = {
   conflict: number;
 };
 
+type ReviewRow = {
+  senderFingerprint: string;
+  receivedDay: string;
+  eventType: string;
+  shipmentPhase: string;
+  decision: string;
+  hasOrderNumber: boolean;
+  hasTrackingNumber: boolean;
+  hasInvoiceNumber: boolean;
+  reasonCount: number;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -104,6 +116,11 @@ function bodyText(email: NormalizedEmail): string {
 function fingerprint(domain: string): string {
   if (!FINGERPRINT_KEY) throw new Error('GENERIC_LIFECYCLE_AUDIT_HMAC_KEY is required');
   return createHmac('sha256', FINGERPRINT_KEY).update(domain.trim().toLowerCase()).digest('hex').slice(0, 24);
+}
+
+function receivedDay(receivedAt: string): string {
+  const match = /^\d{4}-\d{2}-\d{2}/.exec(receivedAt.trim());
+  return match?.[0] ?? 'unknown-day';
 }
 
 function bump(map: Map<string, number>, key: string, by = 1) {
@@ -173,6 +190,7 @@ async function main() {
   const decisionCounts = new Map<string, number>();
   const parserReasonCounts = new Map<string, number>();
   const fingerprints = new Map<string, FingerprintStats>();
+  const reviewRows: ReviewRow[] = [];
 
   let cursor: string | undefined;
   let pages = 0;
@@ -287,6 +305,20 @@ async function main() {
         unmatched += 1;
         stats.unmatched += 1;
       }
+
+      if (resolved.decision !== 'linked_order_domain' && resolved.decision !== 'linked_tracking') {
+        reviewRows.push({
+          senderFingerprint: fp,
+          receivedDay: receivedDay(email.receivedAt),
+          eventType: generic.extraction.event_type,
+          shipmentPhase: generic.shipmentPhase ?? 'none',
+          decision: resolved.decision,
+          hasOrderNumber: Boolean(generic.extraction.order_number),
+          hasTrackingNumber: Boolean(generic.extraction.tracking_number),
+          hasInvoiceNumber: Boolean(generic.extraction.invoice_number),
+          reasonCount: generic.reasons.length,
+        });
+      }
     }
 
     if (truncated) break;
@@ -296,9 +328,12 @@ async function main() {
   const fallbackFingerprintEntries = [...fingerprints.entries()]
     .filter(([, stats]) => stats.fallback > 0)
     .sort((a, b) => b[1].fallback - a[1].fallback || a[0].localeCompare(b[0]));
+  reviewRows.sort((a, b) => a.receivedDay.localeCompare(b.receivedDay)
+    || a.senderFingerprint.localeCompare(b.senderFingerprint)
+    || a.eventType.localeCompare(b.eventType));
 
   console.log(JSON.stringify({
-    mode: 'read_only_generic_lifecycle_hard_anchor_audit',
+    mode: 'read_only_generic_lifecycle_review_mapping_audit',
     parserTarget: 'generic-lifecycle-v1.1',
     provider: provider.name,
     query: env.EMAIL_DISCOVERY_QUERY,
@@ -318,10 +353,11 @@ async function main() {
       orderIdOutput: false,
       trackingIdOutput: false,
       invoiceIdOutput: false,
+      amountOutput: false,
+      productOutput: false,
     },
     interpretation: {
-      rawCandidate: 'generic-lifecycle-v1.1 parser matched before existing-parser precedence is applied',
-      fallbackCandidate: 'generic lifecycle match not already handled by deterministic lifecycle or deterministic commerce',
+      reviewHandle: 'privacy-safe sender HMAC plus received day and generic semantic shape; no raw identity values',
       hardLinkable: 'exact order+merchant-domain or exact existing tracking resolved to exactly one existing Purchase',
       noDomainTimeFallback: true,
       automaticPurchaseCreationAllowed: false,
@@ -351,6 +387,7 @@ async function main() {
       conflicts,
       unmatched,
       distinctFallbackSenderFingerprints: fallbackFingerprintEntries.length,
+      reviewRows: reviewRows.length,
     },
     eventCounts: sortedObject(eventCounts),
     shipmentPhaseCounts: sortedObject(phaseCounts),
@@ -360,10 +397,11 @@ async function main() {
       senderFingerprint,
       ...stats,
     })),
+    reviewRows,
   }, null, 2));
 }
 
 main().catch((error) => {
-  console.error('Nylas generic lifecycle audit failed:', error instanceof Error ? error.message : 'UnknownError');
+  console.error('Nylas generic lifecycle review mapping audit failed:', error instanceof Error ? error.message : 'UnknownError');
   process.exit(1);
 });
