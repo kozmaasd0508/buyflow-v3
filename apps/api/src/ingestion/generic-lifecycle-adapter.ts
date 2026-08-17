@@ -83,7 +83,7 @@ const ORDER_PATTERNS = [
   /\b(?:rendeles(?:szam|\s+szama|\s+azonosito)|megrendeles(?:szam|\s+szama|\s+azonosito))\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:a\s+)?(?:rendeles|megrendeles)\s*#\s*([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /#([a-z0-9][a-z0-9._/-]{3,39})\s+szamu\s+(?:rendeleshez|megrendeleshez)\b/i,
-  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet|rendeleset|megrendeleset)\b/i,
+  /\b(?:a\s+)?([a-z0-9][a-z0-9._/-]{3,39})\s+(?:szamu\s+)?(?:rendelest|megrendelest|rendelesedet|megrendelesedet|rendeleset|megrendeleset|rendelesed|megrendelesed|rendelese|megrendelese)\b/i,
   /^([a-z]{1,8}\d{4,20})\s*-\s*(?:rendelesed|megrendelesed)\b/im,
   /\b(?:bestellnummer|bestellnr\.?|auftragsnummer)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
   /\b(?:numero de commande|commande n[°o]?|numero de pedido|pedido n[°o]?)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/i,
