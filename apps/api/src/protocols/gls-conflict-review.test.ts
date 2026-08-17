@@ -13,6 +13,7 @@ test('reviewed GLS Kézbesítés várható pre-advice remains SHIPMENT_CREATED',
     'Csomagszám:',
     tracking,
     'Kézbesítés várható: 2026. 08. 20.',
+    '(Amennyiben partnerünk ma feladja a csomago(ka)t.)',
   ].join('\n');
 
   const deterministic = parseGlsLifecycleEmail({
