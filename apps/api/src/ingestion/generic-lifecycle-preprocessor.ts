@@ -84,6 +84,25 @@ function observationPayload(parsed: GenericLifecycleParseResult): Record<string,
   };
 }
 
+/**
+ * Build a JSON-safe top-level compatibility envelope around independent
+ * validated observations. The first nested observation must never be reused as
+ * the envelope object itself, otherwise the array would contain its own parent
+ * and Supabase JSON serialization would fail.
+ */
+export function buildGenericLifecycleValidatedEnvelope(
+  validatedObservations: Array<Record<string, unknown>>,
+): Record<string, unknown> {
+  if (validatedObservations.length === 0) {
+    throw new Error('Generic lifecycle validated envelope requires at least one observation');
+  }
+  const result: Record<string, unknown> = { ...validatedObservations[0]! };
+  result.generic_lifecycle_observations = validatedObservations;
+  result.generic_lifecycle_observation_count = validatedObservations.length;
+  result.generic_lifecycle_multi_observation = validatedObservations.length > 1;
+  return result;
+}
+
 function canReplacePriorGenericLifecycle(existing: {
   parserVersion: unknown;
   validationStatus: unknown;
@@ -127,13 +146,7 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     subject: email.subject,
     bodyText,
   }));
-  // Keep the top-level compatibility result separate from the nested list.
-  // The nested list contains the first observation too, so reusing that same
-  // object here would create a circular JSON reference and break persistence.
-  const validatedResult: Record<string, unknown> = { ...validatedObservations[0]! };
-  validatedResult.generic_lifecycle_observations = validatedObservations;
-  validatedResult.generic_lifecycle_observation_count = observations.length;
-  validatedResult.generic_lifecycle_multi_observation = observations.length > 1;
+  const validatedResult = buildGenericLifecycleValidatedEnvelope(validatedObservations);
 
   const structuredResult = {
     schema_version: 2,
