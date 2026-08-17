@@ -6,7 +6,7 @@ This document is a release-safety view of the protocol library. It does **not** 
 
 ## Readiness labels
 
-- **GREEN** — strong candidate for the next *production-shadow* phase. Rules are based on direct recipient evidence, have hard-negative coverage, and the live mailbox audit shows no unresolved dangerous semantic behavior. GREEN does **not** mean direct production writes are allowed.
+- **GREEN** — strong candidate for the *read-only production-shadow* phase. Rules are based on direct recipient evidence, have hard-negative coverage, and the live mailbox audit shows no unresolved dangerous semantic behavior. GREEN does **not** mean direct production writes are allowed.
 - **YELLOW** — keep in shadow. The profile is useful and may have strong direct evidence, but at least one production gate is still open: insufficient live volume, unresolved cross-parser differences, sender/template variability, provider/header limitation, transitional identity, or narrow sample count.
 - **RED** — research/hard-negative only for positive lifecycle automation. Positive production lifecycle behavior must not be enabled from the current profile.
 
@@ -63,12 +63,12 @@ The **2 Express One conflicts are now closed** as the same pre-advice/physical-p
 
 | Readiness | Count | Meaning |
 |---|---:|---|
-| GREEN | 8 | Candidate for production-shadow instrumentation only |
+| GREEN | 8 | Included in the read-only Gate B production-shadow allowlist |
 | YELLOW | 19 | Continue shadow / gather or resolve specific evidence |
 | RED | 6 | Research or negative-only for positive lifecycle automation |
 | **Total** | **33** | 31 test + 2 research-only profiles |
 
-Recommended first production-shadow wave:
+First production-shadow wave:
 
 1. `carrier.hu.dpd`
 2. `carrier.hu.foxpost`
@@ -79,7 +79,7 @@ Recommended first production-shadow wave:
 7. `merchant.hu.alza`
 8. `payment.hu.simplepay`
 
-These should still emit observations only. No automatic production write is implied by this ranking.
+These profiles emit observations only through the separate Gate B allowlist. No automatic production write is implied or authorized.
 
 ---
 
@@ -145,7 +145,7 @@ These should still emit observations only. No automatic production write is impl
 
 These are library-wide, not profile-specific:
 
-1. **Production registry is still empty by design.** Keep it empty during the next production-shadow instrumentation step.
+1. **Production registry is still empty by design.** Gate B observes GREEN profiles through a separate read-only allowlist and does not change registry membership.
 2. Protocol evidence must continue through the existing deterministic classifier, entity resolution and controlled write gates.
 3. Live ingestion must provide the authentication fields required by promoted profiles consistently. Missing DKIM/Return-Path evidence must fail closed for rules that require it.
 4. Arbitrary raw-header fields such as Számlázz.hu-specific headers are not yet a general `ProtocolDetectionInput` field; do not pretend otherwise.
@@ -163,13 +163,15 @@ These are library-wide, not profile-specific:
 - MPL: **closed 2026-08-17** — the only difference was the current posting notice, retained conservatively as `SHIPMENT_CREATED`; see `protocols/carriers/hu/mpl/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 - Express One: **closed 2026-08-17** — both differences were current pre-advice mail where future delivery wording caused generic comparator over-promotion despite explicit no-handoff evidence; see `protocols/carriers/hu/expressone/1.0.0-test.1/CONFLICT-REVIEW-2026-08-17.md`.
 
-### Gate B — production-shadow instrumentation
+### Gate B — production-shadow instrumentation complete
 
-With Gate A closed, the next separate change can add an explicitly reviewed **read-only production-shadow** path for GREEN profiles only. It may record counters/diagnostics, but must not mutate Purchase, shipment, payment, invoice, return, refund or warranty state.
+**Implemented 2026-08-17 in PR #142.** Live Nylas `message.created` events are observed by a separate allowlist containing only the eight reviewed GREEN profiles. The observer emits privacy-reduced diagnostics only: profile/event/rule/source/prohibition metadata plus authentication-presence and identifier-presence booleans. It does not log raw subject/body, sender address, provider message ID or extracted identifier values.
+
+Every Gate B observation is hard-coded `would_write: false`; test-status profiles remain non-production-eligible, required authentication evidence still fails closed, and observer failures are isolated so they cannot block the normal ingestion pipeline. `BUYFLOW_PROTOCOL_PRODUCTION_SHADOW_ENABLED=false` is an immediate operational kill switch. Gate B does **not** mutate Purchase, shipment, payment, invoice, return, refund or warranty state and does not authorize any production write.
 
 ### Gate C — recall expansion
 
-After readiness work, prioritize real mailbox gaps by frequency rather than adding random merchants. Current high-value gap identified during manual review: **SportVision**, followed by families such as FNP Products, Marketa, Digitmaster, Book24 and Dronozok.
+After readiness work, prioritize real mailbox gaps by frequency rather than adding random merchants. Current high-value gap identified during manual review: **SportVision**, followed by families such as FNP Products, Marketa, Digitmaster, Book24 and Dronozok. In parallel, the generic/unknown-merchant lane should be expanded so previously unseen merchant-owned order confirmations can be recognized without requiring one profile per webshop.
 
 ### Gate D — only later consider write promotion
 
