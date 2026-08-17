@@ -36,7 +36,7 @@ jobs:
       - name: Mobile web build
         run: npm run build --workspace @buyflow/mobile
 
-      - name: Live Nylas protocol shadow audit (one-off, read-only)
+      - name: Live Nylas cross-parser consensus audit (one-off, read-only)
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/nylas-live-shadow-audit-oneoff'
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
@@ -45,13 +45,12 @@ jobs:
           SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
           NYLAS_API_URI: https://api.eu.nylas.com
           EMAIL_DISCOVERY_QUERY: newer_than:730d -in:spam -in:trash
-          PROTOCOL_SHADOW_MAX_MESSAGES: '10000'
-          PROTOCOL_SHADOW_CONCURRENCY: '8'
+          PROTOCOL_CONSENSUS_MAX_MESSAGES: '10000'
         run: |
           set -euo pipefail
           DB_KEY="${SUPABASE_SECRET_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-}}"
           if [ -z "${NYLAS_API_KEY:-}" ] || [ -z "$DB_KEY" ]; then
-            echo '{"mode":"read_only_protocol_shadow_audit","status":"skipped_missing_runtime_secrets"}'
+            echo '{"mode":"read_only_protocol_cross_parser_consensus_audit","status":"skipped_missing_runtime_secrets"}'
             exit 0
           fi
 
@@ -66,4 +65,4 @@ jobs:
           if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then unset SUPABASE_SERVICE_ROLE_KEY; fi
           if [ -z "${SUPABASE_SECRET_KEY:-}" ]; then unset SUPABASE_SECRET_KEY; fi
 
-          npm run nylas:protocol-shadow-audit --workspace @buyflow/api
+          npm run nylas:protocol-consensus-audit --workspace @buyflow/api
