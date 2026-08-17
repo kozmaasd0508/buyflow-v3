@@ -22,6 +22,13 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().min(1).default('gpt-5.4-nano'),
   BUYFLOW_AI_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
 
+  // Gate B is read-only by construction. This switch is an operational kill
+  // switch only; disabling it never changes the production protocol registry.
+  BUYFLOW_PROTOCOL_PRODUCTION_SHADOW_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+
   BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
