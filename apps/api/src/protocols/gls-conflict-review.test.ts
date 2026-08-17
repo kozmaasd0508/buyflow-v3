@@ -8,8 +8,10 @@ test('reviewed GLS Kézbesítés várható pre-advice remains SHIPMENT_CREATED',
   const bodyText = [
     'Ezúton értesítünk, hogy partnerünk csomago(ka)t készített össze számodra.',
     'A csomago(ka)t a feladást követő munkanapon megkíséreljük kézbesíteni az alábbiak szerint:',
-    'Feladó: Example Merchant Kft.',
-    `Csomagszám: ${tracking}`,
+    'Feladó:',
+    'Example Merchant Kft.',
+    'Csomagszám:',
+    tracking,
     'Kézbesítés várható: 2026. 08. 20.',
   ].join('\n');
 
