@@ -72,4 +72,11 @@ jobs:
           grep -F '![429, 502, 503, 504].includes(statusCodeOf(error) ?? 0)' \
             apps/api/src/scripts/nylas-generic-commerce-audit.ts >/dev/null
 
+          # Audit-only deterministic HMAC key. This keeps raw sender domains out of
+          # logs while making the privacy fingerprint reproducible for manual Gmail review.
+          perl -0pi -e "s/const key = env\.NYLAS_WEBHOOK_SECRET \?\? PROCESS_LOCAL_FINGERPRINT_SECRET;/const key = 'buyflow-audit-lookup-v1';/" \
+            apps/api/src/protocols/generic-commerce-shadow.ts
+          grep -F "const key = 'buyflow-audit-lookup-v1';" \
+            apps/api/src/protocols/generic-commerce-shadow.ts >/dev/null
+
           npm run nylas:generic-commerce-audit --workspace @buyflow/api
