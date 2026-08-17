@@ -14,6 +14,7 @@ test('parses merchant shipment with explicit dispatch and tracking identity', ()
   });
 
   assert.ok(parsed);
+  assert.equal(parsed.parserVersion, 'generic-lifecycle-v1.1');
   assert.equal(parsed.extraction.event_type, 'shipment');
   assert.equal(parsed.shipmentPhase, 'shipped');
   assert.equal(parsed.extraction.tracking_number, '3406978622');
@@ -117,6 +118,42 @@ test('rejects public mailbox senders from the generic merchant lifecycle lane', 
     senderDomains: ['gmail.com'],
     subject: 'Csomagod úton van',
     bodyText: 'Rendelésszám: X-99118\nCsomagodat feladtuk.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects observed Chameleoon shipment relay as merchant identity', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['shipments.chameleoon.sk'],
+    subject: 'Az engaro rendelésedet átadta a futárnak',
+    bodyText: 'Rendelésszám: 25051657\nRendelésedet átadtuk a futárszolgálatnak.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects Szamlazz.hu provider infrastructure as merchant identity even for merchant-branded shipment copy', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['szamlazz.hu'],
+    subject: '1140165 számú Marketa.hu rendelésedet átadtuk a futárszolgálatnak',
+    bodyText: 'Rendelésszám: 1140165\nRendelésedet átadtuk a futárszolgálatnak.',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects Billingo provider infrastructure as merchant identity', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['mail.billingo.hu'],
+    subject: 'Számlád elkészült',
+    bodyText: 'Rendelésszám: DEMO-889911\nSzámlád elkészült. Számlaszám: DEMO/2026/18',
+  });
+  assert.equal(parsed, null);
+});
+
+test('rejects documented MyShoprenter fallback sender infrastructure as merchant identity', () => {
+  const parsed = parseGenericLifecycleEmail({
+    senderDomains: ['myshoprenter.hu'],
+    subject: 'Rendelésed úton van',
+    bodyText: 'Rendelésszám: SR-889911\nRendelésed már úton van.',
   });
   assert.equal(parsed, null);
 });
