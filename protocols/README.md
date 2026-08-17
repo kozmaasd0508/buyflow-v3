@@ -41,6 +41,12 @@ Production processing must never perform live web searches per email. Research i
 
 The runtime TypeScript evidence contract lives in `apps/api/src/protocols/`.
 
+## Production readiness
+
+See [`PRODUCTION-READINESS-MATRIX.md`](./PRODUCTION-READINESS-MATRIX.md) for the current GREEN / YELLOW / RED promotion assessment, live-mailbox audit baseline, profile-specific blockers and the recommended production-shadow rollout order.
+
+A GREEN label in that matrix is **not** permission to perform production writes. It only means a profile is a candidate for the next read-only production-shadow phase.
+
 ## Evidence, not final decisions
 
 A protocol match may say that an email is strong evidence for `ORDER_PROCESSING`, `SHIPMENT_CREATED`, `PAYMENT_FAILED`, etc. It does not itself create or link a Purchase.
