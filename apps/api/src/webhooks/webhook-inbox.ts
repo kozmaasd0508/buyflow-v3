@@ -1,4 +1,6 @@
+import { env } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
 import { guardNylasMessageWhenAiDisabled } from '../ingestion/deterministic-ai-off-fallback.js';
 import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
@@ -10,6 +12,7 @@ import {
   type AutomaticPipelineResult,
   type AutomationMode,
 } from '../pipeline/automatic-email-pipeline.js';
+import { emitProductionShadowEmailObservation } from '../protocols/production-shadow.js';
 
 interface WebhookInboxRow {
   id: string;
@@ -29,6 +32,26 @@ export interface WebhookInboxProcessResult {
 
 function safeErrorCode(error: unknown): string {
   return error instanceof Error && error.name ? error.name.slice(0, 80) : 'UnknownError';
+}
+
+async function observeProtocolProductionShadow(input: {
+  grantId: string;
+  messageId: string;
+}): Promise<void> {
+  if (!env.BUYFLOW_PROTOCOL_PRODUCTION_SHADOW_ENABLED) return;
+
+  try {
+    const provider = createEmailProvider({
+      provider: 'nylas',
+      providerAccountId: input.grantId,
+    });
+    const email = await provider.getMessage(input.messageId);
+    emitProductionShadowEmailObservation(email);
+  } catch (error) {
+    // Gate B must never change or block the existing ingestion path. Only a
+    // privacy-reduced error class is logged; message/grant IDs are omitted.
+    console.warn('[protocol-production-shadow-error]', safeErrorCode(error));
+  }
 }
 
 function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
@@ -126,6 +149,14 @@ export async function processWebhookInboxEvent(
       }
       return { claimed: true };
     }
+
+    // Gate B: observe the explicitly reviewed GREEN protocol profiles on the
+    // live Nylas message before normal processing. The observer has no database
+    // dependency/write hook, and failures are isolated from ingestion above.
+    await observeProtocolProductionShadow({
+      grantId: event.grant_id,
+      messageId: event.provider_message_id,
+    });
 
     // Gmail category labels are advisory only. Real purchase confirmations can land in
     // Personal, Updates, or other categories, so every signed message.created event
