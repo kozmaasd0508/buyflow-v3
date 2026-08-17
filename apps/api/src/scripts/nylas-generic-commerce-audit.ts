@@ -462,7 +462,7 @@ async function main() {
       distinctGenericFingerprints: fingerprints.size,
       repeatedGenericFingerprints: repeatedFingerprints,
       distinctUnprofiledPipelineFingerprints,
-      repeatedUnprofiledPipelineFingerprints,
+      repeatedUnprofiledPipelineFingerprints: repeatedUnprofiledFingerprints,
     },
     candidateTierCounts: sortedNumberObject(tierCounts),
     confidenceCounts: sortedNumberObject(confidenceCounts),
