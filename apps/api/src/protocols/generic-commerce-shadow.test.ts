@@ -41,7 +41,7 @@ test('true generic fall-through becomes read-only review diagnostic', () => {
   assert.equal(row.would_write, false);
   assert.equal(row.validation_status, 'review');
   assert.equal(row.eligible_for_purchase_creation, false);
-  assert.equal(row.parser_version, 'generic-order-confirmation-v1.3');
+  assert.equal(row.parser_version, 'generic-order-confirmation-v1.4');
   assert.equal(row.event_type, 'order_created');
   assert.equal(row.evidence_present.order_number, true);
   assert.equal(row.evidence_present.total, true);

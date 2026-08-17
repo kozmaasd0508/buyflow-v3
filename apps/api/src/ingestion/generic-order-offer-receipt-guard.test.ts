@@ -53,7 +53,7 @@ test('generic parser still recognizes a normal Hungarian order confirmation with
   });
 
   assert.ok(parsed);
-  assert.equal(parsed.parserVersion, 'generic-order-confirmation-v1.3');
+  assert.equal(parsed.parserVersion, 'generic-order-confirmation-v1.4');
   assert.equal(parsed.extraction.event_type, 'order_created');
   assert.equal(parsed.extraction.order_number, 'HU-2026-8811');
 });

@@ -1,7 +1,7 @@
 import type { EmailExtraction, ProductExtraction } from '../ai/openai-email-extractor.js';
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 
-const PARSER_VERSION = 'generic-order-confirmation-v1.3';
+const PARSER_VERSION = 'generic-order-confirmation-v1.4';
 const JATEKBOLT_PARSER_VERSION = 'jatekbolt-order-received-v1';
 
 const SHARED_PLATFORM_SENDER_DOMAINS = [
@@ -176,15 +176,60 @@ const EXPLICIT_NON_ACCEPTANCE_PATTERNS = [
   /\b(?:ez az|ez a) (?:uzenet|ertesites) nem minosul (?:a )?megrendeles visszaigazolasanak\b/i,
   /\b(?:csak|csupan) (?:a )?veteli ajanlat (?:be)?erkezeserol ertesit(?:unk|es)\b/i,
   /\b(?:a )?(?:rendeles|megrendeles) (?:rogzitese|beerk(?:ezese|ezese)) nem jelenti (?:a )?(?:rendeles|megrendeles) elfogadasat\b/i,
-  /\bthis (?:e-?mail|email|message) does not constitute (?:an? )?(?:order confirmation|acceptance of (?:your )?order)\b/i,
-  /\bthis (?:e-?mail|email|message) is not (?:an? )?(?:order confirmation|acceptance of (?:your )?order)\b/i,
+  /\b(?:ez (?:egy |az |a )?)?(?:automatikusan kuldott |automatikus )?(?:e-?mail|email|uzenet|ertesites|visszaigazolas)[^\n.]{0,140}\bnem jelent(?:i)?\b[^\n.]{0,140}\b(?:automatikus )?szerzodeskotes(?:t|et)?\b/i,
+  /\b(?:ez (?:egy |az |a )?)?(?:automatikusan kuldott |automatikus )?(?:e-?mail|email|uzenet|ertesites|visszaigazolas)[^\n.]{0,140}\bnem jelent(?:i)?\b[^\n.]{0,160}\b(?:a )?szerzodes(?: megkoteset| letrejottet)\b/i,
+  /\b(?:ez (?:egy |az |a )?)?(?:automatikusan kuldott |automatikus )?(?:e-?mail|email|uzenet|ertesites|visszaigazolas)[^\n.]{0,160}\bnem jelent(?:i)?\b[^\n.]{0,180}\b(?:a )?(?:veteli (?:szerzodes megkotesere vonatkozo )?)?ajanlat elfogadasat\b/i,
+  /\b(?:csak|csupan) (?:azt )?(?:igazolja|erositi meg),? hogy (?:a )?(?:rendelest|megrendelest) megkaptuk\b/i,
+  /\bthis (?:e-?mail|email|message) does not constitute (?:an? )?(?:order confirmation|acceptance of (?:your )?(?:order|offer))\b/i,
+  /\bthis (?:e-?mail|email|message) is not (?:an? )?(?:order confirmation|acceptance of (?:your )?(?:order|offer))\b/i,
+  /\bthis (?:e-?mail|email|message|acknowledg(?:e)?ment)[^\n.]{0,120}\bdoes not mean\b[^\n.]{0,120}\ba contract has been (?:formed|concluded)\b/i,
+  /\bthis (?:e-?mail|email|message|acknowledg(?:e)?ment)[^\n.]{0,120}\bdoes not constitute\b[^\n.]{0,120}\b(?:a )?contract\b/i,
   /\byour order has not yet been accepted\b/i,
   /\bwe (?:have )?received your order,? but (?:it|your order) has not (?:yet )?been accepted\b/i,
-  /\b(?:only|merely) acknowledges? receipt of (?:your )?(?:purchase offer|order request)\b/i,
+  /\bwe (?:have )?received your order,? but (?:we )?have not (?:yet )?accepted it\b/i,
+  /\b(?:only|merely) acknowledges? receipt of (?:your )?(?:purchase offer|order request|order)\b/i,
+  /\backnowledges? receipt (?:only|solely)\b/i,
 ];
 
 function hasExplicitNonAcceptanceDisclaimer(text: string): boolean {
   return EXPLICIT_NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+const QUOTED_HISTORY_SEPARATORS = [
+  /^\s*-{2,}\s*(?:original message|eredeti uzenet|forwarded message|tovabbitott uzenet)\s*-{2,}\s*$/i,
+  /^\s*begin forwarded message\s*:\s*$/i,
+  /^\s*on\s+.{1,300}\s+wrote\s*:\s*$/i,
+  /^\s*.{1,300}\bezt\s+irta\s*:\s*$/i,
+];
+
+function looksLikeQuotedHeaderBlock(lines: string[], index: number): boolean {
+  const first = lines[index]?.trim() ?? '';
+  if (!/^(?:from|felado)\s*:/i.test(first)) return false;
+
+  const window = lines.slice(index, index + 8).join('\n');
+  const hasRecipient = /(?:^|\n)\s*(?:to|cimzett)\s*:/im.test(window);
+  const hasSubject = /(?:^|\n)\s*(?:subject|targy)\s*:/im.test(window);
+  return hasRecipient && hasSubject;
+}
+
+export function stripQuotedHistoryForGenericOrder(text: string): string {
+  const lines = text.split('\n');
+  const fresh: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (
+      QUOTED_HISTORY_SEPARATORS.some((pattern) => pattern.test(line)) ||
+      looksLikeQuotedHeaderBlock(lines, index)
+    ) {
+      break;
+    }
+
+    if (/^\s*>/.test(line)) continue;
+    fresh.push(line);
+  }
+
+  return fresh.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function extractOrderNumber(text: string): string | null {
@@ -408,7 +453,8 @@ export function parseGenericOrderConfirmationEmail(input: {
   const jatekbolt = parseJatekboltOrderReceived({ domains, subject, body });
   if (jatekbolt) return jatekbolt;
 
-  const context = `${subject}\n${body}`;
+  const freshBody = stripQuotedHistoryForGenericOrder(body);
+  const context = `${subject}\n${freshBody}`;
   if (hasExplicitNonAcceptanceDisclaimer(context)) return null;
 
   const orderNumber = extractOrderNumber(context);
@@ -418,10 +464,10 @@ export function parseGenericOrderConfirmationEmail(input: {
   const confirmationSignal = CONFIRMATION_PATTERNS.some((pattern) => pattern.test(context));
   if (!confirmationSignal) return null;
 
-  const total = extractLabeledMoney(body, TOTAL_LABELS);
-  const paymentMethod = extractLineAfterLabel(body, PAYMENT_LABELS);
-  const shippingMethod = extractLineAfterLabel(body, SHIPPING_LABELS);
-  const products = extractSimpleProducts(body, total?.currency ?? null);
+  const total = extractLabeledMoney(freshBody, TOTAL_LABELS);
+  const paymentMethod = extractLineAfterLabel(freshBody, PAYMENT_LABELS);
+  const shippingMethod = extractLineAfterLabel(freshBody, SHIPPING_LABELS);
+  const products = extractSimpleProducts(freshBody, total?.currency ?? null);
   const orderDetailsCue = /\b(?:order details|order summary|rendeles reszletei|megrendeles adatai|bestellubersicht|details de la commande|resumen del pedido)\b/i.test(context);
 
   const corroborators = [
@@ -436,7 +482,7 @@ export function parseGenericOrderConfirmationEmail(input: {
   if (corroborators < 2) return null;
 
   const merchant = merchantFromDomain(domains[0]!);
-  const paymentStatus = detectPaymentStatus(paymentMethod, body);
+  const paymentStatus = detectPaymentStatus(paymentMethod, freshBody);
   const confidence = corroborators >= 4 ? 0.97 : corroborators === 3 ? 0.95 : 0.92;
 
   const extraction: EmailExtraction = {
