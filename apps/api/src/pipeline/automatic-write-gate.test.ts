@@ -4,6 +4,7 @@ import {
   canAutomaticallyWriteDocument,
   canAutomaticallyWritePurchase,
   canAutomaticallyWriteShipment,
+  isShadowOnlyParserVersion,
   isTrustedAutomaticEvidence,
 } from './automatic-write-gate.js';
 import type { DocumentResolutionCandidate } from '../resolution/document-resolution.js';
@@ -40,6 +41,26 @@ test('validated and guardrailed evidence are trusted, review evidence is not', (
   assert.equal(isTrustedAutomaticEvidence('guardrailed', null), true);
   assert.equal(isTrustedAutomaticEvidence('review', null), false);
   assert.equal(isTrustedAutomaticEvidence('validated', { validation_status: 'review' }), false);
+});
+
+test('generic order confirmation parser versions are permanently shadow-only at the write gate', () => {
+  assert.equal(isShadowOnlyParserVersion('generic-order-confirmation-v1.2'), true);
+  assert.equal(isShadowOnlyParserVersion('generic-order-confirmation-v2.0'), true);
+  assert.equal(isShadowOnlyParserVersion('jatekbolt-order-received-v1'), false);
+  assert.equal(isShadowOnlyParserVersion('deterministic-commerce-v2'), false);
+
+  assert.equal(isTrustedAutomaticEvidence('validated', {
+    validation_status: 'validated',
+    parser_version: 'generic-order-confirmation-v1.2',
+  }), false);
+  assert.equal(isTrustedAutomaticEvidence('guardrailed', {
+    validation_status: 'guardrailed',
+    parser_version: 'generic-order-confirmation-v2.0',
+  }), false);
+  assert.equal(isTrustedAutomaticEvidence('validated', {
+    validation_status: 'validated',
+    parser_version: 'jatekbolt-order-received-v1',
+  }), true);
 });
 
 test('allows strongly corroborated purchase creation', () => {
