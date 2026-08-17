@@ -182,10 +182,14 @@ export function resolvePaymentShadow(
 
       const distance = dayDistance(evidence.receivedAt, purchase.orderedAt);
       const withinTwoDays = distance !== null && distance <= 2;
-      if (withinTwoDays) {
+      const hasIndependentSignal = exactDomain || exactName || exactAmountCurrency || referenceMatches;
+
+      // Time is only corroborating evidence. A nearby purchase cannot become a
+      // candidate solely because it happened close to the provider receipt.
+      if (hasIndependentSignal && withinTwoDays) {
         score += 20;
         reasons.push('within_2_days');
-      } else if (distance !== null && distance <= 7) {
+      } else if (hasIndependentSignal && distance !== null && distance <= 7) {
         score += 8;
         reasons.push('within_7_days');
       }
