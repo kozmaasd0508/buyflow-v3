@@ -6,7 +6,7 @@ Status date: **2026-08-17**
 
 BuyFlow has a multi-language deterministic generic order-confirmation parser. The current hardened version is `generic-order-confirmation-v1.4`. It is the last fallback in the central deterministic commerce parser after known carrier and merchant adapters.
 
-This lane is useful because it can recognize a real order-confirmation structure from a merchant-owned sender domain even when BuyFlow has no dedicated merchant profile. However, an unknown merchant is not yet strong enough evidence for automatic Purchase creation without live false-positive measurement.
+This lane is useful because it can recognize a real order-confirmation structure from a merchant-owned sender domain even when BuyFlow has no dedicated merchant profile. Unknown-merchant evidence remains shadow/review-only and is not authorized for automatic Purchase creation.
 
 ## Safety issue found
 
@@ -35,7 +35,7 @@ Observed generic funnel:
 - 12 raw generic candidates
 - 9 unprofiled candidates
 - 7 unprofiled sender families
-- 2 strong candidates
+- 2 strong unprofiled candidates
 
 All 9 unprofiled candidates were manually reviewed. The audit exposed two safety classes that v1.3 did not cover broadly enough:
 
@@ -73,6 +73,46 @@ Only the generic new-order parser receives a fresh-content view of the body. It 
 
 The original full email is not globally modified. Other merchant/lifecycle parsers can continue using the complete message. A genuine fresh order above an older quoted support thread remains eligible for generic parsing.
 
+## v1.4 live mailbox verification — complete
+
+A second one-off, read-only rolling two-year Nylas audit ran on **2026-08-17** against `generic-order-confirmation-v1.4`.
+
+Scope:
+- **9,438 messages**
+- 472 pages
+- not truncated
+- 9,437 messages already contained body content in the list response
+- 0 metadata fallback candidates
+- 0 full-message fetches/failures
+- 0 rate-limit retries
+- 0 database writes
+- 0 production-registry use
+- 0 automatic Purchase writes
+
+Before v1.4 -> after v1.4:
+- raw generic candidates: **12 -> 8**
+- unprofiled pipeline candidates: **9 -> 5**
+- distinct unprofiled sender families: **7 -> 4**
+- strong unprofiled candidates: **2 -> 0**
+- repeated unprofiled families: **2 -> 1**
+
+Privacy-safe deterministic fingerprint comparison confirmed the exact intended behavior:
+- Manna family `4212760e683c65357426068b`: **2 -> 2**, retained
+- Scitec family `0befa22aede731f97629886b`: **1 -> 1**, retained
+- Zákány family `8b95da671d66463c3ccc5fa5`: **1 -> 1**, retained
+- Vitál-Kolor family `86eb61771d3a2d768c810ea3`: **2 -> 1**; original order retained, quoted `Re:` duplicate removed
+- previous ABOUT YOU fingerprint `b4fa33c05602b361837dc308`: removed
+- previous unsafe strong fingerprints `d6dd3412f1ec0a3c8b4ec702` and `c19202271d7479eef7fce2e4`: removed
+
+The live result therefore matches the manual audit exactly: the reviewed unsafe rich acknowledgements and the quoted-history duplicate disappeared, while the reviewed normal order-received/recorded anchors survived.
+
+Verification on the same code:
+- **680/680 API tests passed**
+- API typecheck/build passed
+- mobile typecheck/build passed
+
+The temporary audit PR #148 was closed **without merge** after the result was captured.
+
 ## Live production-shadow diagnostics
 
 The existing Gate B live observer also evaluates whether the already-fetched Nylas message truly falls through the central deterministic parser to the generic order-confirmation parser.
@@ -91,15 +131,7 @@ The diagnostic contains only:
 - `eligible_for_purchase_creation = false`
 - `would_write = false`
 
-The diagnostic intentionally omits:
-- raw sender address/domain
-- subject
-- email body/snippet
-- provider message/thread ID
-- order number value
-- monetary value
-- product names
-- customer address/email
+The diagnostic intentionally omits raw sender/domain, subject, email body/snippet, provider message/thread ID, order-number value, monetary value, product names and customer identity/address.
 
 The generic shadow lane has no database write callback. It is invoked from the existing Gate B observer, so its failures remain isolated from normal ingestion by the same outer production-shadow error boundary.
 
@@ -118,6 +150,4 @@ It also does not promote WooCommerce, Shopify, UNAS, Shoprenter or any other gen
 
 ## Next evidence gate
 
-After v1.4 unit/CI verification, rerun the same rolling two-year read-only mailbox audit. The already reviewed unsafe disclaimer candidates and quoted-history duplicate should disappear, while the reviewed normal received/recorded order anchors should remain.
-
-Only after a fresh mailbox audit and manual review should any narrower generic event be considered for a later promotion proposal. Automatic Purchase creation remains out of scope for this gate.
+Keep generic unknown-merchant order detection in **shadow/review-only mode**. The next useful expansion is broader unseen-merchant/language/template coverage and then generic lifecycle matching against an already-known Purchase. Any future automatic Purchase-write proposal requires a separate deliberate gate, new live false-positive measurement and explicit production authorization.
