@@ -1,0 +1,47 @@
+/* First BuyFlow-specific cleanup pass on top of the OxShop-inspired reset. */
+
+html.oxshop-ui-reset .buyflow-cleanup-hidden {
+  display: none !important;
+}
+
+html.oxshop-ui-reset .oxshop-section-row {
+  align-items: center !important;
+}
+
+html.oxshop-ui-reset .oxshop-section-row > div {
+  min-width: 0;
+}
+
+html.oxshop-ui-reset .oxshop-category-section .oxshop-section-row h2 {
+  margin-top: 3px !important;
+}
+
+html.oxshop-ui-reset .oxshop-category-strip > button {
+  min-height: 82px;
+}
+
+html.oxshop-ui-reset .oxshop-category-strip > button strong {
+  line-height: 1.15;
+}
+
+html.oxshop-ui-reset .oxshop-bell {
+  overflow: visible;
+}
+
+html.oxshop-ui-reset .oxshop-bottom-nav .nav-item[aria-label="Profil"] {
+  color: #7e7b77 !important;
+}
+
+html.oxshop-ui-reset .oxshop-bottom-nav .nav-item[aria-label="Profil"]:active {
+  color: var(--ox-accent) !important;
+}
+
+html.oxshop-ui-reset .oxshop-promo-card .welcome-copy > p:last-of-type {
+  max-width: 300px;
+}
+
+@media (max-width: 420px) {
+  html.oxshop-ui-reset .oxshop-category-strip > button {
+    min-height: 76px;
+  }
+}
