@@ -46,6 +46,7 @@ test('SES and Nylas produce the same deterministic recognition result', () => {
 test('uses the snippet when no HTML body is available', () => {
   const email = carrierEmail('ses');
   delete email.bodyHtml;
+  email.subject = 'Parcel information received';
   email.snippet = 'Tracking number: 87654321\nShipment information received';
 
   const parsed = parseNormalizedDeterministicEmail(email);
