@@ -1,0 +1,357 @@
+.shopping-profile-account-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(91,114,255,.28), rgba(177,91,255,.22));
+  color: #dbe0ff;
+  font-weight: 900;
+  font-size: 15px;
+}
+
+.shopping-profile-overlay {
+  position: fixed;
+  z-index: 180;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s ease;
+}
+
+.shopping-profile-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.shopping-profile-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3,5,12,.67);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.shopping-profile-sheet {
+  position: relative;
+  width: min(100%, 760px);
+  max-height: min(91dvh, 900px);
+  margin: 0 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  border: 1px solid rgba(255,255,255,.12);
+  border-bottom: 0;
+  border-radius: 30px 30px 0 0;
+  background:
+    radial-gradient(circle at 88% -8%, rgba(145,92,255,.24), transparent 34%),
+    radial-gradient(circle at 4% 5%, rgba(65,111,255,.2), transparent 36%),
+    rgba(10,13,25,.96);
+  box-shadow: 0 -28px 80px rgba(0,0,0,.46);
+  transform: translateY(28px);
+  transition: transform .26s cubic-bezier(.2,.8,.2,1);
+}
+
+.shopping-profile-overlay.open .shopping-profile-sheet { transform: translateY(0); }
+
+.shopping-profile-header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  margin: 0 -18px;
+  padding: 19px 18px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(10,13,25,.82);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.shopping-profile-header p,
+.shopping-email-card-head p,
+.shopping-profile-identity p {
+  margin: 0 0 4px;
+  color: #aab5ff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .17em;
+}
+
+.shopping-profile-header h2 { margin: 0; font-size: 24px; letter-spacing: -.035em; }
+.shopping-profile-header > button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,.06);
+  color: #edf0ff;
+  font-size: 24px;
+  line-height: 1;
+}
+
+#shopping-profile-body { display: grid; gap: 15px; padding-top: 18px; }
+
+.shopping-profile-loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: #a9b1c6;
+  font-size: 12px;
+}
+
+.shopping-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 21px;
+  background: rgba(255,255,255,.045);
+}
+
+.shopping-profile-avatar {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 17px;
+  background: linear-gradient(145deg, #6178ff, #9b5cff 72%, #d068f2);
+  box-shadow: 0 12px 28px rgba(91,91,255,.25);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.shopping-profile-identity > div:last-child { min-width: 0; }
+.shopping-profile-identity strong,
+.shopping-profile-identity span { display: block; }
+.shopping-profile-identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.shopping-profile-identity span { margin-top: 4px; color: #9ea7bc; font-size: 10.5px; }
+
+.shopping-email-card {
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 25px;
+  background: linear-gradient(145deg, rgba(25,31,54,.94), rgba(14,18,34,.82));
+  box-shadow: 0 18px 48px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.shopping-email-card.assigned {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(88,122,255,.22), transparent 38%),
+    linear-gradient(145deg, rgba(25,31,54,.94), rgba(14,18,34,.86));
+}
+
+.shopping-email-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.shopping-email-card-head h3 { margin: 0; font-size: 22px; letter-spacing: -.035em; }
+
+.shopping-email-live,
+.shopping-email-new {
+  flex: 0 0 auto;
+  min-height: 27px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 850;
+}
+.shopping-email-live { background: rgba(85,215,165,.12); color: #9ce9c8; }
+.shopping-email-live i { width: 6px; height: 6px; border-radius: 999px; background: #55d7a5; box-shadow: 0 0 12px rgba(85,215,165,.75); }
+.shopping-email-new { background: rgba(129,146,255,.14); color: #bcc4ff; }
+
+.shopping-email-help {
+  margin: 13px 0 16px;
+  color: #a9b1c6;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.shopping-email-address-display {
+  min-height: 68px;
+  padding: 11px 12px 11px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(129,146,255,.24);
+  border-radius: 18px;
+  background: rgba(105,119,255,.09);
+}
+.shopping-email-address-display strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(14px, 4vw, 18px);
+  letter-spacing: -.025em;
+}
+.shopping-email-address-display button {
+  min-height: 40px;
+  flex: 0 0 auto;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px;
+  background: rgba(255,255,255,.075);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.shopping-email-lock-note,
+.shopping-email-once,
+.shopping-profile-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.shopping-email-lock-note {
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 15px;
+  background: rgba(85,215,165,.07);
+  color: #bdebd8;
+}
+.shopping-email-lock-note > span,
+.shopping-email-once > span,
+.shopping-profile-shield {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+.shopping-email-lock-note > span { background: rgba(85,215,165,.14); color: #75ddb4; }
+.shopping-email-lock-note p { margin: 0; }
+.shopping-email-lock-note strong,
+.shopping-email-lock-note small { display: block; }
+.shopping-email-lock-note strong { font-size: 11px; }
+.shopping-email-lock-note small { margin-top: 3px; color: #87aa9c; font-size: 9.5px; line-height: 1.45; }
+
+.shopping-email-label { display: block; margin: 17px 0 7px; color: #d8def0; font-size: 10px; font-weight: 800; }
+
+.shopping-email-input-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  min-height: 56px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 17px;
+  background: rgba(255,255,255,.055);
+  overflow: hidden;
+}
+.shopping-email-input-row:focus-within {
+  border-color: rgba(129,146,255,.62);
+  box-shadow: 0 0 0 4px rgba(92,107,255,.08);
+}
+.shopping-email-input-row input {
+  width: 100%;
+  min-width: 0;
+  height: 54px;
+  padding: 0 5px 0 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f7f9ff;
+  font-size: 15px;
+  font-weight: 800;
+}
+.shopping-email-input-row > span {
+  padding: 0 13px 0 6px;
+  color: #96a1bd;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.shopping-email-availability {
+  min-height: 31px;
+  margin-top: 7px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 750;
+}
+.shopping-email-availability.checking { background: rgba(255,255,255,.045); color: #a6aec2; }
+.shopping-email-availability.available { background: rgba(85,215,165,.09); color: #8fe3bd; }
+.shopping-email-availability.taken,
+.shopping-email-availability.invalid,
+.shopping-email-availability.error { background: rgba(255,123,145,.09); color: #ffabb9; }
+.shopping-email-rules { display: block; margin: 7px 2px 14px; color: #737d96; font-size: 8.8px; line-height: 1.45; }
+
+.shopping-email-primary,
+.shopping-profile-error button {
+  width: 100%;
+  min-height: 49px;
+  border: 0;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #5c72ff, #8d61ff);
+  color: white;
+  box-shadow: 0 14px 30px rgba(91,91,255,.22);
+  font-weight: 850;
+}
+.shopping-email-primary:disabled { opacity: .48; cursor: default; box-shadow: none; }
+
+.shopping-email-once {
+  margin-top: 13px;
+  color: #8f98af;
+}
+.shopping-email-once > span { background: rgba(255,255,255,.06); color: #aab5ff; }
+.shopping-email-once p { margin: 2px 0 0; font-size: 9.5px; line-height: 1.5; }
+
+.shopping-profile-privacy {
+  padding: 15px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 19px;
+  background: rgba(255,255,255,.035);
+}
+.shopping-profile-shield { background: rgba(85,215,165,.1); color: #72d9af; }
+.shopping-profile-privacy strong { display: block; font-size: 11.5px; }
+.shopping-profile-privacy p { margin: 4px 0 0; color: #8992a9; font-size: 9.7px; line-height: 1.55; }
+.shopping-profile-privacy b { color: #aeb7ff; }
+
+.shopping-profile-error {
+  padding: 18px;
+  border: 1px solid rgba(255,123,145,.17);
+  border-radius: 20px;
+  background: rgba(145,38,66,.12);
+}
+.shopping-profile-error strong,
+.shopping-profile-error span { display: block; }
+.shopping-profile-error strong { color: #ffc1cd; font-size: 13px; }
+.shopping-profile-error span { margin: 6px 0 14px; color: #cf98a3; font-size: 10px; line-height: 1.5; }
+.shopping-profile-error button { width: auto; min-height: 41px; padding: 0 15px; }
+
+@media (min-width: 720px) {
+  .shopping-profile-overlay { align-items: center; padding: 22px; }
+  .shopping-profile-sheet {
+    border-bottom: 1px solid rgba(255,255,255,.12);
+    border-radius: 30px;
+    padding-bottom: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shopping-profile-overlay,
+  .shopping-profile-sheet { transition: none; }
+}
