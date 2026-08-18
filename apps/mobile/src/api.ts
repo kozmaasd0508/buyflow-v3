@@ -95,6 +95,22 @@ export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount' | 
   documents: DocumentSummary[];
 }
 
+export interface ShoppingInboxMessage {
+  id: string;
+  fromAddress: string | null;
+  subject: string | null;
+  receivedAt: string | null;
+  classification: string | null;
+  processingStatus: string;
+  linkedPurchaseId: string | null;
+}
+
+export interface ShoppingInboxData {
+  assigned: boolean;
+  emailAddress: string | null;
+  messages: ShoppingInboxMessage[];
+}
+
 async function apiRequest<T>(
   path: string,
   accessToken: string,
@@ -137,6 +153,16 @@ export async function loadPurchase(
     accessToken,
   );
   return data.purchase;
+}
+
+export async function loadShoppingInbox(
+  accessToken: string,
+  limit = 50,
+): Promise<ShoppingInboxData> {
+  return apiRequest<ShoppingInboxData>(
+    `/api/shopping-inbox?limit=${encodeURIComponent(String(limit))}`,
+    accessToken,
+  );
 }
 
 export async function hideProduct(accessToken: string, productId: string): Promise<void> {
