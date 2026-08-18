@@ -18,6 +18,11 @@ const BODY = [
   'Rendelés elfogadóhelyen nyilvántartott azonosítója: SHOP-12345',
 ].join('\n');
 
+const NYLAS_LAYOUT_BODY = BODY.replace(
+  'Sikeresen fizettél 12 345 Ft-ot bankkártyával!',
+  'Sikeresen\nfizettél\n12 345 Ft-ot\nbankkártyával!',
+);
+
 test('new Barion sender is shadow PAYMENT_SUCCESS and production registry cannot see it', () => {
   const input = {
     senderDomains: ['barion.com'],
@@ -36,6 +41,20 @@ test('new Barion sender is shadow PAYMENT_SUCCESS and production registry cannot
   assert.ok(evidence[0]?.prohibitions.includes('DO_NOT_CREATE_PURCHASE'));
   assert.ok(evidence[0]?.prohibitions.includes('DO_NOT_AUTO_LINK'));
   assert.ok(evidence[0]?.prohibitions.includes('DO_NOT_MARK_REFUNDED'));
+});
+
+test('Nylas whitespace layout keeps the same authenticated Barion PAYMENT_SUCCESS semantics', () => {
+  const evidence = rows({
+    senderDomains: ['barion.com'],
+    senderAddresses: ['noreply@barion.com'],
+    dkimDomains: ['barion.com'],
+    subject: 'Sikeres fizetés',
+    bodyText: NYLAS_LAYOUT_BODY,
+  });
+  assert.equal(evidence.length, 1);
+  assert.equal(evidence[0]?.event_candidate, 'PAYMENT_SUCCESS');
+  assert.equal(evidence[0]?.identifiers.payment_reference, '0123456789abcdef0123456789abcdef');
+  assert.equal(evidence[0]?.production_eligible, false);
 });
 
 test('older barion@barion.com sender remains valid authenticated PAYMENT_SUCCESS', () => {
