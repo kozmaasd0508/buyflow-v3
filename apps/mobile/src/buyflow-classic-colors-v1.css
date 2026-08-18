@@ -1,0 +1,293 @@
+/* BuyFlow classic palette on top of the OxShop-inspired structure.
+ * Layout/navigation stays as-is; only visual palette is restored.
+ */
+
+:root {
+  --ox-bg: #070914;
+  --ox-surface: rgba(17,22,39,.9);
+  --ox-surface-soft: rgba(255,255,255,.055);
+  --ox-text: #f7f9ff;
+  --ox-muted: #a9b1c6;
+  --ox-line: rgba(255,255,255,.10);
+  --ox-accent: #8192ff;
+  --ox-accent-dark: #6f7fff;
+  --ox-accent-soft: rgba(111,126,255,.16);
+  --ox-success: #55d7a5;
+  --ox-warning: #f4b75c;
+  --ox-danger: #ff7b91;
+}
+
+html.oxshop-ui-reset,
+html.oxshop-ui-reset body,
+html.oxshop-ui-reset #app {
+  background: #070914 !important;
+  color: #f7f9ff !important;
+}
+
+html.oxshop-ui-reset .ambient-stage {
+  display: block !important;
+}
+
+html.oxshop-ui-reset .topbar.oxshop-topbar {
+  background: linear-gradient(180deg, rgba(7,9,20,.94), rgba(7,9,20,.70) 82%, rgba(7,9,20,0)) !important;
+  border-bottom-color: rgba(255,255,255,.06) !important;
+}
+
+html.oxshop-ui-reset .oxshop-profile-head,
+html.oxshop-ui-reset .oxshop-profile-head strong {
+  color: #f7f9ff !important;
+}
+
+html.oxshop-ui-reset .oxshop-profile-head small {
+  color: #9ba5bd !important;
+}
+
+html.oxshop-ui-reset .oxshop-profile-head .mini-brand,
+.bf-ox-settings-avatar {
+  background: linear-gradient(145deg, #6178ff, #9b5cff 70%, #d068f2) !important;
+  box-shadow: 0 13px 32px rgba(101,91,255,.28) !important;
+}
+
+html.oxshop-ui-reset .avatar-button,
+html.oxshop-ui-reset .oxshop-icon-button,
+html.oxshop-ui-reset .round-action {
+  border-color: rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.055) !important;
+  color: #dce1f4 !important;
+}
+
+html.oxshop-ui-reset .oxshop-dot {
+  border-color: #0d1120 !important;
+  background: #b66cff !important;
+}
+
+html.oxshop-ui-reset .welcome-card.oxshop-promo-card {
+  background:
+    radial-gradient(circle at 88% 16%, rgba(205,91,255,.34), transparent 28%),
+    radial-gradient(circle at 78% 92%, rgba(52,176,255,.24), transparent 35%),
+    linear-gradient(135deg, rgba(82,92,245,.34), rgba(23,27,51,.96) 48%, rgba(13,17,31,.96)) !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+  color: #fff !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+
+html.oxshop-ui-reset .oxshop-promo-action {
+  background: linear-gradient(135deg, #5c72ff, #8d61ff) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 30px rgba(91,91,255,.25) !important;
+}
+
+html.oxshop-ui-reset .welcome-orb.oxshop-promo-visual {
+  background: linear-gradient(145deg, rgba(98,118,255,.96), rgba(172,83,255,.96)) !important;
+  color: #fff !important;
+  box-shadow: 0 16px 38px rgba(105,91,255,.34) !important;
+}
+
+html.oxshop-ui-reset .oxshop-promo-visual::before,
+html.oxshop-ui-reset .oxshop-promo-visual::after {
+  background: rgba(255,255,255,.13) !important;
+}
+
+html.oxshop-ui-reset .oxshop-promo-visual > span {
+  border-color: rgba(255,255,255,.58) !important;
+  background: #c267ef !important;
+}
+
+html.oxshop-ui-reset #bf-home-search.oxshop-search,
+html.oxshop-ui-reset .bf-purchases-search,
+html.oxshop-ui-reset .entity-card.oxshop-product-card,
+html.oxshop-ui-reset .entity-card.oxshop-entity-card,
+html.oxshop-ui-reset .oxshop-stat-strip .insight-card,
+html.oxshop-ui-reset .empty-card,
+html.oxshop-ui-reset .loading-card,
+html.oxshop-ui-reset .detail-empty,
+html.oxshop-ui-reset .account-popover {
+  border-color: rgba(255,255,255,.09) !important;
+  background: linear-gradient(155deg, rgba(24,30,52,.90), rgba(12,16,30,.78)) !important;
+  color: #f7f9ff !important;
+  box-shadow: 0 16px 42px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.035) !important;
+}
+
+html.oxshop-ui-reset #bf-home-search input,
+html.oxshop-ui-reset .bf-purchases-search input,
+html.oxshop-ui-reset .oxshop-product-card .entity-title,
+html.oxshop-ui-reset .oxshop-entity-card .entity-title,
+html.oxshop-ui-reset .oxshop-stat-strip .insight-card strong,
+html.oxshop-ui-reset .oxshop-page .page-title-row h1,
+html.oxshop-ui-reset .oxshop-section-row h2,
+html.oxshop-ui-reset .oxshop-overview-section h2,
+html.oxshop-ui-reset .oxshop-latest-section h2 {
+  color: #f7f9ff !important;
+}
+
+html.oxshop-ui-reset #bf-home-search input::placeholder,
+html.oxshop-ui-reset .oxshop-product-card .entity-top small,
+html.oxshop-ui-reset .oxshop-entity-card .entity-top small,
+html.oxshop-ui-reset .oxshop-product-card .entity-meta-line,
+html.oxshop-ui-reset .oxshop-entity-card .entity-meta-line,
+html.oxshop-ui-reset .oxshop-stat-strip .insight-card small,
+html.oxshop-ui-reset .oxshop-stat-strip .insight-card em,
+html.oxshop-ui-reset .oxshop-page .page-title-row p:last-child,
+html.oxshop-ui-reset .oxshop-page .eyebrow,
+html.oxshop-ui-reset .oxshop-section-row span,
+html.oxshop-ui-reset .oxshop-overview-section .eyebrow,
+html.oxshop-ui-reset .oxshop-latest-section .eyebrow {
+  color: #9099b1 !important;
+}
+
+html.oxshop-ui-reset .oxshop-search-filter,
+html.oxshop-ui-reset .oxshop-stat-strip .insight-icon,
+html.oxshop-ui-reset .oxshop-product-card .entity-icon,
+html.oxshop-ui-reset .oxshop-entity-card .entity-icon {
+  background: linear-gradient(145deg, rgba(92,113,255,.20), rgba(155,92,255,.13)) !important;
+  color: #aeb7ff !important;
+}
+
+html.oxshop-ui-reset .oxshop-product-card .entity-bottom > strong,
+html.oxshop-ui-reset .oxshop-entity-card .entity-bottom > strong,
+html.oxshop-ui-reset .oxshop-section-row > button,
+html.oxshop-ui-reset .oxshop-overview-section .round-action,
+html.oxshop-ui-reset .oxshop-latest-section .round-action {
+  color: #9da9ff !important;
+}
+
+html.oxshop-ui-reset .bottom-nav.oxshop-bottom-nav {
+  border-top-color: rgba(255,255,255,.08) !important;
+  background: rgba(13,17,31,.92) !important;
+  box-shadow: 0 -8px 28px rgba(0,0,0,.30) !important;
+}
+
+html.oxshop-ui-reset .nav-item.oxshop-nav-item {
+  color: #7f899f !important;
+}
+
+html.oxshop-ui-reset .nav-item.oxshop-nav-item.active {
+  color: #b8c0ff !important;
+}
+
+html.oxshop-ui-reset .nav-item.oxshop-nav-item.active::before {
+  background: linear-gradient(90deg, #5c72ff, #9b5cff, #d068f2) !important;
+}
+
+/* OxShop-style Settings hub, BuyFlow classic colors */
+.bf-ox-settings-hub {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(82,92,245,.14), transparent 28%),
+    radial-gradient(circle at 92% 18%, rgba(196,83,255,.12), transparent 32%),
+    #070914 !important;
+  color: #f7f9ff !important;
+}
+
+.bf-ox-settings-head {
+  border-bottom-color: rgba(255,255,255,.08) !important;
+  background: rgba(7,9,20,.94) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+}
+
+.bf-ox-settings-back {
+  color: #dfe4f6 !important;
+}
+
+.bf-ox-settings-profile-copy strong,
+.bf-ox-settings-row {
+  color: #f7f9ff !important;
+}
+
+.bf-ox-settings-profile-copy span,
+.bf-ox-settings-row-copy small,
+.bf-ox-settings-label,
+.bf-ox-settings-chevron {
+  color: #9099b1 !important;
+}
+
+.bf-ox-settings-card {
+  border-color: rgba(255,255,255,.09) !important;
+  background: linear-gradient(155deg, rgba(24,30,52,.90), rgba(12,16,30,.78)) !important;
+  box-shadow: 0 16px 42px rgba(0,0,0,.18) !important;
+}
+
+.bf-ox-settings-row {
+  border-bottom-color: rgba(255,255,255,.07) !important;
+  background: transparent !important;
+}
+
+button.bf-ox-settings-row:active {
+  background: rgba(255,255,255,.045) !important;
+}
+
+.bf-ox-settings-icon {
+  background: linear-gradient(145deg, rgba(92,113,255,.22), rgba(155,92,255,.15)) !important;
+  color: #aeb7ff !important;
+}
+
+.bf-ox-settings-static .bf-ox-settings-icon {
+  background: rgba(52,176,255,.12) !important;
+  color: #7fc4ff !important;
+}
+
+.bf-ox-settings-logout {
+  color: #ff9bad !important;
+}
+
+.bf-ox-settings-logout .bf-ox-settings-icon {
+  background: rgba(255,123,145,.12) !important;
+  color: #ff9bad !important;
+}
+
+/* Legacy full-screen settings/profile sheets also inherit the classic palette. */
+.settings-overlay,
+.gmail-settings-overlay,
+.settings-sheet,
+.gmail-settings-sheet,
+.shopping-profile-overlay,
+.shopping-profile-sheet,
+.shopping-inbox-overlay,
+.shopping-inbox-sheet {
+  background: #070914 !important;
+  color: #f7f9ff !important;
+}
+
+.settings-header,
+.gmail-settings-header,
+.shopping-profile-header,
+.shopping-inbox-header {
+  border-bottom-color: rgba(255,255,255,.08) !important;
+  background: rgba(7,9,20,.95) !important;
+  color: #f7f9ff !important;
+}
+
+.settings-profile-card,
+.settings-info-card,
+.gmail-connection-card,
+.gmail-account-card,
+.gmail-settings-toolbar,
+.gmail-settings-explainer,
+.gmail-empty-state,
+.shopping-email-card,
+.shopping-profile-identity,
+.shopping-profile-privacy,
+.shopping-inbox-message,
+.shopping-inbox-address-card {
+  border-color: rgba(255,255,255,.09) !important;
+  background: linear-gradient(155deg, rgba(24,30,52,.90), rgba(12,16,30,.78)) !important;
+  color: #f7f9ff !important;
+}
+
+.settings-close,
+.gmail-settings-close,
+.shopping-profile-header button,
+.shopping-inbox-header button {
+  border-color: rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.055) !important;
+  color: #f7f9ff !important;
+}
+
+.gmail-primary-button,
+.gmail-secondary-button,
+.shopping-email-primary {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #5c72ff, #8d61ff) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 30px rgba(91,91,255,.22) !important;
+}
