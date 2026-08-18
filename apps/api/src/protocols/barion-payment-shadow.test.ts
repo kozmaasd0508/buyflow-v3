@@ -20,7 +20,7 @@ const BODY = [
 
 const NYLAS_LAYOUT_BODY = BODY.replace(
   'Sikeresen fizettél 12 345 Ft-ot bankkártyával!',
-  'Sikeresen\nfizettél\n12 345 Ft-ot\nbankkártyával!',
+  'Sikeresen\nfizettél\n12 345 Ft -ot\nbankkártyával!',
 );
 
 test('new Barion sender is shadow PAYMENT_SUCCESS and production registry cannot see it', () => {
@@ -43,7 +43,7 @@ test('new Barion sender is shadow PAYMENT_SUCCESS and production registry cannot
   assert.ok(evidence[0]?.prohibitions.includes('DO_NOT_MARK_REFUNDED'));
 });
 
-test('Nylas whitespace layout keeps the same authenticated Barion PAYMENT_SUCCESS semantics', () => {
+test('real Nylas whitespace and Ft tag-boundary layout keeps authenticated Barion PAYMENT_SUCCESS semantics', () => {
   const evidence = rows({
     senderDomains: ['barion.com'],
     senderAddresses: ['noreply@barion.com'],
