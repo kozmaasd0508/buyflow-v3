@@ -6,6 +6,7 @@ import { registerEmailConnectionRoutes } from './api/email-connection-routes.js'
 import { registerEmailScanReviewRoutes } from './api/email-scan-review-routes.js';
 import { registerProductActionRoutes } from './api/product-action-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
+import { registerShoppingEmailRoutes } from './api/shopping-email-routes.js';
 import { passwordResetPageHtml } from './auth/reset-password-page.js';
 import { env, requireNylasWebhookSecret } from './config.js';
 import { drainAlzaInternalFulfillmentRecoveryV1 } from './ingestion/alza-internal-fulfillment-recovery-v1.js';
@@ -92,6 +93,7 @@ app.addContentTypeParser(
 await registerAppApiRoutes(app);
 await registerProductActionRoutes(app);
 await registerEmailConnectionRoutes(app);
+await registerShoppingEmailRoutes(app);
 await registerEmailScanReviewRoutes(app);
 await registerEmailAuditRoutes(app);
 await registerPurchaseRecoveryRoutes(app);
