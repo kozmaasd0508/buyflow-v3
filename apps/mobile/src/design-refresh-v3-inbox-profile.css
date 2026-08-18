@@ -1,0 +1,360 @@
+/* BuyFlow design refresh V3 — Shopping Inbox + Profile / BuyFlow email.
+ * Visual-only layer. No inbox, SES, account or shopping-email semantics change.
+ */
+
+:root {
+  --bf-v3-panel: linear-gradient(155deg, rgba(25,31,54,.96), rgba(10,14,28,.9));
+  --bf-v3-soft: rgba(255,255,255,.045);
+  --bf-v3-border: rgba(255,255,255,.095);
+  --bf-v3-muted: #919bb2;
+}
+
+/* Shared sheet polish */
+.shopping-inbox-sheet.bf-v3-sheet,
+.shopping-profile-sheet.bf-v3-sheet {
+  border-color: rgba(255,255,255,.115);
+  background:
+    radial-gradient(circle at 92% -8%, rgba(178,80,255,.25), transparent 31%),
+    radial-gradient(circle at 4% 3%, rgba(62,111,255,.23), transparent 35%),
+    rgba(8,11,23,.985);
+  box-shadow: 0 -34px 90px rgba(0,0,0,.54), inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.shopping-inbox-header,
+.shopping-profile-header {
+  min-height: 82px;
+  border-color: rgba(255,255,255,.075);
+  background: linear-gradient(180deg, rgba(8,11,23,.96), rgba(8,11,23,.84));
+}
+
+.shopping-inbox-header h2,
+.shopping-profile-header h2 {
+  margin-top: 2px;
+  font-size: 26px;
+  letter-spacing: -.045em;
+}
+
+.shopping-inbox-header > button,
+.shopping-profile-header > button,
+#shopping-inbox-refresh {
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.shopping-inbox-header > button:active,
+.shopping-profile-header > button:active,
+#shopping-inbox-refresh:active { transform: scale(.94); }
+
+/* Shopping Inbox hero */
+.bf-v3-inbox #shopping-inbox-body { gap: 18px; }
+
+.bf-v3-inbox .shopping-inbox-address-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 156px;
+  padding: 22px;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 88% 15%, rgba(196,83,255,.29), transparent 27%),
+    radial-gradient(circle at 92% 103%, rgba(44,169,255,.2), transparent 34%),
+    linear-gradient(138deg, rgba(84,101,255,.22), rgba(22,27,49,.95) 48%, rgba(10,14,28,.94));
+  box-shadow: 0 24px 64px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.075);
+}
+
+.bf-v3-inbox .shopping-inbox-address-card::after {
+  content: "@";
+  position: absolute;
+  right: 22px;
+  top: 21px;
+  display: grid;
+  width: 57px;
+  height: 57px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(92,116,255,.92), rgba(169,81,255,.9));
+  box-shadow: 0 15px 36px rgba(91,76,255,.3), inset 0 1px 0 rgba(255,255,255,.22);
+  color: white;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.bf-v3-inbox .shopping-inbox-address-card::before {
+  content: "";
+  position: absolute;
+  right: -70px;
+  bottom: -100px;
+  width: 210px;
+  height: 210px;
+  border: 1px solid rgba(255,255,255,.065);
+  border-radius: 50%;
+  box-shadow: 0 0 0 30px rgba(255,255,255,.015), 0 0 0 62px rgba(255,255,255,.01);
+}
+
+.bf-v3-inbox .shopping-inbox-address-card > * { position: relative; z-index: 1; }
+.bf-v3-inbox .shopping-inbox-address-card strong {
+  max-width: calc(100% - 76px);
+  margin-top: 9px;
+  font-size: clamp(20px, 5vw, 27px);
+  line-height: 1.12;
+  letter-spacing: -.035em;
+}
+.bf-v3-inbox .shopping-inbox-address-card small {
+  max-width: 72%;
+  margin-top: 10px;
+  color: #b1bbcf;
+  font-size: 11px;
+}
+
+/* Inbox summary strip, derived only from currently rendered messages */
+.bf-v3-inbox-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 9px;
+}
+
+.bf-v3-inbox-summary > div {
+  min-width: 0;
+  padding: 13px 12px;
+  border: 1px solid var(--bf-v3-border);
+  border-radius: 18px;
+  background: rgba(255,255,255,.038);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.bf-v3-inbox-summary small,
+.bf-v3-inbox-summary strong { display: block; }
+.bf-v3-inbox-summary small {
+  color: #7f899f;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.bf-v3-inbox-summary strong {
+  margin-top: 6px;
+  font-size: 22px;
+  letter-spacing: -.04em;
+}
+.bf-v3-inbox-summary > div:nth-child(2) strong { color: #9fe7c7; }
+.bf-v3-inbox-summary > div:nth-child(3) strong { color: #ffd18a; }
+
+.bf-v3-inbox .shopping-inbox-section-head {
+  padding: 2px 1px 0;
+}
+.bf-v3-inbox .shopping-inbox-section-head h3 { font-size: 23px; }
+
+.bf-v3-inbox .shopping-inbox-list { gap: 12px; }
+.bf-v3-inbox .shopping-inbox-message {
+  position: relative;
+  overflow: hidden;
+  grid-template-columns: 52px minmax(0,1fr);
+  gap: 14px;
+  padding: 16px;
+  border-color: var(--bf-v3-border);
+  border-radius: 23px;
+  background:
+    radial-gradient(circle at 98% 0%, rgba(116,104,255,.09), transparent 31%),
+    var(--bf-v3-panel);
+  box-shadow: 0 15px 38px rgba(0,0,0,.17), inset 0 1px 0 rgba(255,255,255,.035);
+}
+
+.bf-v3-inbox .shopping-inbox-message::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 2px;
+  border-radius: 0 99px 99px 0;
+  background: linear-gradient(180deg, #6f82ff, #a85dff);
+  opacity: .72;
+}
+
+.bf-v3-inbox .shopping-inbox-message-icon {
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(92,115,255,.22), rgba(174,83,255,.13));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.bf-v3-inbox .shopping-inbox-message-main > strong {
+  margin-top: 10px;
+  font-size: 14px;
+  letter-spacing: -.015em;
+}
+.bf-v3-inbox .shopping-inbox-message-main > small { margin-top: 5px; color: #929db5; font-size: 9.8px; }
+.bf-v3-inbox .shopping-inbox-linked { margin-top: 9px; }
+.bf-v3-inbox .shopping-inbox-type { min-height: 25px; padding-inline: 10px; }
+
+.bf-v3-inbox .shopping-inbox-empty,
+.bf-v3-inbox .shopping-inbox-error,
+.bf-v3-inbox .shopping-inbox-loading {
+  min-height: 260px;
+  border-radius: 25px;
+  border-color: var(--bf-v3-border);
+  background: var(--bf-v3-panel);
+  box-shadow: 0 17px 42px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+/* Profile identity */
+.bf-v3-profile #shopping-profile-body { gap: 18px; }
+
+.bf-v3-profile .shopping-profile-identity {
+  position: relative;
+  overflow: hidden;
+  min-height: 112px;
+  padding: 19px;
+  gap: 15px;
+  border-color: var(--bf-v3-border);
+  border-radius: 25px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(118,102,255,.16), transparent 35%),
+    var(--bf-v3-panel);
+  box-shadow: 0 18px 44px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.bf-v3-profile .shopping-profile-avatar {
+  width: 58px;
+  height: 58px;
+  flex-basis: 58px;
+  border-radius: 20px;
+  box-shadow: 0 16px 34px rgba(88,77,255,.3), inset 0 1px 0 rgba(255,255,255,.18);
+  font-size: 21px;
+}
+.bf-v3-profile .shopping-profile-identity strong { font-size: 15px; }
+.bf-v3-profile .shopping-profile-identity span { margin-top: 6px; line-height: 1.45; }
+
+/* Main shopping email card */
+.bf-v3-profile .shopping-email-card {
+  position: relative;
+  overflow: hidden;
+  padding: 22px;
+  border-color: rgba(255,255,255,.115);
+  border-radius: 29px;
+  background: var(--bf-v3-panel);
+  box-shadow: 0 23px 60px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.bf-v3-profile .shopping-email-card.assigned {
+  background:
+    radial-gradient(circle at 91% 6%, rgba(184,82,255,.24), transparent 28%),
+    radial-gradient(circle at 100% 96%, rgba(55,160,255,.17), transparent 35%),
+    linear-gradient(140deg, rgba(83,99,255,.18), rgba(23,28,50,.96) 47%, rgba(10,14,28,.94));
+}
+
+.bf-v3-profile .shopping-email-card.assigned::after {
+  content: "@";
+  position: absolute;
+  right: 22px;
+  bottom: 20px;
+  color: rgba(255,255,255,.035);
+  font-size: 92px;
+  font-weight: 950;
+  line-height: .8;
+  pointer-events: none;
+}
+
+.bf-v3-profile .shopping-email-card > * { position: relative; z-index: 1; }
+.bf-v3-profile .shopping-email-card-head h3 { font-size: 24px; }
+.bf-v3-profile .shopping-email-help { margin: 15px 0 18px; color: #aeb7ca; }
+
+.bf-v3-profile .shopping-email-address-display {
+  min-height: 75px;
+  padding: 12px 12px 12px 16px;
+  border-color: rgba(128,143,255,.28);
+  border-radius: 20px;
+  background: rgba(91,111,255,.095);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+.bf-v3-profile .shopping-email-address-display strong {
+  font-size: clamp(16px, 4.5vw, 21px);
+  letter-spacing: -.03em;
+}
+.bf-v3-profile .shopping-email-address-display button {
+  min-height: 43px;
+  padding-inline: 15px;
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(101,119,255,.24), rgba(155,91,255,.16));
+  color: #f3f5ff;
+}
+
+.bf-v3-profile .shopping-email-lock-note {
+  margin-top: 17px;
+  padding: 14px;
+  border: 1px solid rgba(85,215,165,.09);
+  border-radius: 17px;
+}
+
+/* Chooser state */
+.bf-v3-profile .shopping-email-card.chooser {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(112,96,255,.17), transparent 33%),
+    var(--bf-v3-panel);
+}
+.bf-v3-profile .shopping-email-input-row {
+  min-height: 60px;
+  border-radius: 19px;
+  background: rgba(255,255,255,.045);
+}
+.bf-v3-profile .shopping-email-input-row input { height: 58px; font-size: 16px; }
+.bf-v3-profile .shopping-email-availability { border-radius: 12px; }
+.bf-v3-profile .shopping-email-primary {
+  min-height: 53px;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #5b73ff, #8c61ff 70%, #b65ff2);
+  box-shadow: 0 16px 36px rgba(86,76,255,.27), inset 0 1px 0 rgba(255,255,255,.15);
+}
+
+/* Privacy reassurance */
+.bf-v3-profile .shopping-profile-privacy {
+  padding: 17px;
+  border-color: rgba(255,255,255,.085);
+  border-radius: 22px;
+  background: rgba(255,255,255,.035);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+.bf-v3-profile .shopping-profile-shield {
+  width: 31px;
+  height: 31px;
+  flex-basis: 31px;
+  border-radius: 11px;
+}
+.bf-v3-profile .shopping-profile-privacy strong { font-size: 12px; }
+.bf-v3-profile .shopping-profile-privacy p { margin-top: 6px; font-size: 10px; }
+
+/* Decorative sheet brand mark */
+.bf-v3-sheet-brand {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  margin-right: auto;
+  margin-left: 12px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(93,116,255,.2), rgba(171,82,255,.13));
+  color: #cbd2ff;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+@media (min-width: 720px) {
+  .bf-v3-inbox .shopping-inbox-list {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+  .shopping-inbox-sheet.bf-v3-sheet,
+  .shopping-profile-sheet.bf-v3-sheet { border-radius: 32px; }
+}
+
+@media (max-width: 440px) {
+  .bf-v3-inbox .shopping-inbox-address-card strong { max-width: calc(100% - 66px); font-size: 18px; }
+  .bf-v3-inbox .shopping-inbox-address-card small { max-width: 78%; }
+  .bf-v3-inbox .shopping-inbox-address-card::after { width: 50px; height: 50px; right: 18px; top: 18px; }
+  .bf-v3-inbox-summary > div { padding: 11px 9px; }
+  .bf-v3-inbox-summary strong { font-size: 19px; }
+  .bf-v3-profile .shopping-email-card { padding: 19px; }
+  .bf-v3-sheet-brand { display: none; }
+}
