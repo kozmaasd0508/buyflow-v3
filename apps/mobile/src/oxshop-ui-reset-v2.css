@@ -1,0 +1,289 @@
+/* OxShop-style secondary screens for BuyFlow. UI only. */
+
+html.oxshop-ui-reset-v2 .detail-shell,
+html.oxshop-ui-reset-v2 .detail-page,
+html.oxshop-ui-reset-v2 .oxshop-page {
+  background: transparent !important;
+  color: var(--ox-text) !important;
+}
+
+/* Detail topbar */
+html.oxshop-ui-reset-v2 .detail-topbar.oxshop-detail-topbar {
+  border: 0 !important;
+  background: rgba(247,246,243,.96) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .detail-top-title small { color: #aaa7a2 !important; }
+html.oxshop-ui-reset-v2 .detail-top-title strong { color: #2b2926 !important; }
+
+/* Order detail hero */
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero {
+  min-height: 196px !important;
+  padding: 22px !important;
+  border: 1px solid var(--ox-line) !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero::after { display: none !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero h1 {
+  max-width: 70% !important;
+  color: #24221f !important;
+  font-size: clamp(27px, 7vw, 38px) !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero .eyebrow { color: #aaa7a2 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero-meta {
+  margin-top: auto !important;
+  padding-top: 12px !important;
+  border-top: 1px solid #efede9 !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero-meta strong { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .order-hero-meta span { color: #96928d !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .bf-v2-hero-icon {
+  border: 0 !important;
+  border-radius: 18px !important;
+  background: var(--ox-accent-soft) !important;
+  color: var(--ox-accent) !important;
+  box-shadow: none !important;
+}
+
+/* Detail cards */
+html.oxshop-ui-reset-v2 .oxshop-detail-card,
+html.oxshop-ui-reset-v2 .oxshop-detail-page .detail-card,
+html.oxshop-ui-reset-v2 .oxshop-detail-page .documents-card {
+  border: 1px solid var(--ox-line) !important;
+  border-radius: 20px !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .section-head h2 { color: #252320 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .section-head .eyebrow { color: #aaa7a2 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .detail-row { border-color: #efede9 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .detail-row > span { color: #9b9893 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .detail-row strong,
+html.oxshop-ui-reset-v2 .oxshop-detail-page .detail-row > div { color: #302e2a !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .tracking-number { color: #d85a37 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .document-row { border-color: #efede9 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .document-icon {
+  border: 0 !important;
+  background: #fff0ea !important;
+  color: var(--ox-accent) !important;
+}
+
+/* Current status */
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-card {
+  padding: 20px !important;
+  border: 1px solid var(--ox-line) !important;
+  border-radius: 22px !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-card::before { display: none !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-kicker { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-main h2 { color: #292723 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-main p { color: #898681 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-pill {
+  border: 0 !important;
+  background: var(--ox-accent-soft) !important;
+  color: #d95b37 !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-card.success .buyflow-status-pill { background: #edf8f1 !important; color: #3d9362 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-card.warning .buyflow-status-pill { background: #fff5e7 !important; color: #b47c27 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-card.danger .buyflow-status-pill { background: #fff0f0 !important; color: #ba5656 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-grid > div {
+  border: 0 !important;
+  background: #f7f6f3 !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-grid small { color: #aaa7a2 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-grid strong { color: #35332f !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-status-updated { color: #aaa7a2 !important; }
+
+/* Timeline */
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-card {
+  border: 1px solid var(--ox-line) !important;
+  border-radius: 20px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-dot {
+  border-color: #ddd9d3 !important;
+  background: #fff !important;
+  color: #fff !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-line { background: #e8e5e0 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-title strong { color: #2c2a27 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-title span,
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-copy small { color: #96938e !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-row.done .buyflow-timeline-dot { border-color: #3fa36a !important; background: #3fa36a !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-row.done .buyflow-timeline-line { background: #b8dfc7 !important; }
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-row.current .buyflow-timeline-dot {
+  border-color: var(--ox-accent) !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 4px rgba(242,101,61,.09) !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-detail-page .buyflow-timeline-row.current .buyflow-timeline-copy strong { color: var(--ox-accent) !important; }
+
+/* Login */
+html.oxshop-ui-reset-v2 .login-screen {
+  background: var(--ox-bg) !important;
+}
+html.oxshop-ui-reset-v2 .auth-card.oxshop-auth-card {
+  max-width: 460px !important;
+  padding: 28px !important;
+  border: 1px solid var(--ox-line) !important;
+  border-radius: 26px !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: var(--ox-shadow) !important;
+}
+html.oxshop-ui-reset-v2 .auth-card.oxshop-auth-card::before { display: none !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .auth-brand { border-color: #efede9 !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .auth-brand strong,
+html.oxshop-ui-reset-v2 .oxshop-auth-card .auth-copy h1 { color: #24221f !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .auth-brand small,
+html.oxshop-ui-reset-v2 .oxshop-auth-card .auth-copy > p:last-child { color: #898681 !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .brand-mark {
+  background: var(--ox-accent) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-auth-card .eyebrow { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .bf-v4-auth-features > div {
+  border-color: #ece9e4 !important;
+  background: #f7f6f3 !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-auth-card .bf-v4-auth-features span { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .bf-v4-auth-features strong { color: #34312d !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .bf-v4-auth-features small { color: #9d9994 !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .form-stack label { color: #5b5853 !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .form-stack input {
+  border-color: #e8e5e0 !important;
+  background: #faf9f7 !important;
+  color: #2b2926 !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-auth-card .form-stack input::placeholder { color: #aaa6a0 !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .button.primary {
+  background: var(--ox-accent) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-auth-card .text-button { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-auth-card .security-note { border-color: #efede9 !important; color: #99958f !important; }
+
+/* Shared modal sheets */
+html.oxshop-ui-reset-v2 .shopping-inbox-overlay .shopping-inbox-backdrop,
+html.oxshop-ui-reset-v2 .shopping-profile-overlay .shopping-profile-backdrop,
+html.oxshop-ui-reset-v2 .settings-overlay .settings-backdrop { background: rgba(40,35,31,.28) !important; }
+
+html.oxshop-ui-reset-v2 .oxshop-sheet,
+html.oxshop-ui-reset-v2 .settings-sheet.oxshop-settings-sheet {
+  border-color: #e9e6e1 !important;
+  background: #f9f8f5 !important;
+  color: var(--ox-text) !important;
+  box-shadow: 0 -24px 60px rgba(56,45,37,.13) !important;
+}
+html.oxshop-ui-reset-v2 .shopping-inbox-header,
+html.oxshop-ui-reset-v2 .shopping-profile-header,
+html.oxshop-ui-reset-v2 .settings-header {
+  border-color: #ebe8e3 !important;
+  background: rgba(249,248,245,.94) !important;
+}
+html.oxshop-ui-reset-v2 .shopping-inbox-header p,
+html.oxshop-ui-reset-v2 .shopping-profile-header p,
+html.oxshop-ui-reset-v2 .settings-eyebrow { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .shopping-inbox-header h2,
+html.oxshop-ui-reset-v2 .shopping-profile-header h2,
+html.oxshop-ui-reset-v2 .settings-header h1 { color: #282622 !important; }
+html.oxshop-ui-reset-v2 .shopping-inbox-header > button,
+html.oxshop-ui-reset-v2 .shopping-profile-header > button,
+html.oxshop-ui-reset-v2 .settings-close,
+html.oxshop-ui-reset-v2 #shopping-inbox-refresh {
+  border-color: #e8e5e0 !important;
+  background: #fff !important;
+  color: #4d4944 !important;
+}
+
+/* Inbox */
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-address-card {
+  border: 0 !important;
+  background: linear-gradient(135deg, #f26b42, #e88268) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-address-card > span,
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-address-card small { color: rgba(255,255,255,.78) !important; }
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-address-card strong { color: #fff !important; }
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-address-card::after {
+  border-color: rgba(255,255,255,.25) !important;
+  background: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .bf-v3-inbox-summary > div,
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-message,
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-empty,
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-error,
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-loading {
+  border-color: #ebe8e3 !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-message::after { background: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-message-icon { background: var(--ox-accent-soft) !important; color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-message-main > strong { color: #2e2b27 !important; }
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-message-main > small,
+html.oxshop-ui-reset-v2 .oxshop-inbox-sheet .shopping-inbox-message-top time { color: #9a9691 !important; }
+
+/* Profile */
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-identity,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-card,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-privacy {
+  border-color: #e9e6e1 !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-avatar {
+  background: var(--ox-accent) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-identity p,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-card-head p { color: var(--ox-accent) !important; }
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-identity strong,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-card-head h3 { color: #2c2a27 !important; }
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-identity span,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-help,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-profile-privacy p { color: #908c87 !important; }
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-address-display,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-input-row { border-color: #e8e5e0 !important; background: #f8f7f4 !important; }
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-address-display strong,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-input-row input { color: #2e2b27 !important; }
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-address-display button,
+html.oxshop-ui-reset-v2 .oxshop-profile-sheet .shopping-email-primary { background: var(--ox-accent) !important; color: #fff !important; box-shadow: none !important; }
+
+/* Settings */
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-profile-card,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .gmail-connection-card,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-info-card {
+  border-color: #e9e6e1 !important;
+  background: #fff !important;
+  color: var(--ox-text) !important;
+  box-shadow: none !important;
+}
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-avatar { background: var(--ox-accent) !important; box-shadow: none !important; }
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-profile-card strong,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .gmail-status-row strong,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-info-card strong { color: #2c2a27 !important; }
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-profile-card span,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .gmail-status-row div > span,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .gmail-help,
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-info-card p { color: #96928d !important; }
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .connect-gmail-button { background: var(--ox-accent) !important; box-shadow: none !important; }
+html.oxshop-ui-reset-v2 .oxshop-settings-sheet .settings-logout { border-color: #f0d9d9 !important; background: #fff1f1 !important; color: #b95959 !important; }
+
+@media (min-width: 760px) {
+  html.oxshop-ui-reset-v2 .oxshop-sheet { border-radius: 26px !important; }
+}
