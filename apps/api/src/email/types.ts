@@ -1,4 +1,4 @@
-export type EmailProviderName = 'nylas' | 'gmail';
+export type EmailProviderName = 'nylas' | 'gmail' | 'ses';
 
 export interface EmailAddress {
   email: string;
