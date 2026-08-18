@@ -36,19 +36,24 @@ jobs:
             sleep 10
           done
 
-      - name: Wait for BuyFlow browser preview
+      - name: Wait for matching BuyFlow browser preview
         shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           URL="https://buyflow-v3-api-dev.onrender.com/app/"
           for attempt in $(seq 1 30); do
             body="$(curl -fsS --max-time 20 "$URL" 2>/dev/null || true)"
-            if echo "$body" | grep -q '<title>BuyFlow</title>' && echo "$body" | grep -q 'id="app"'; then
-              echo "BuyFlow browser preview is live"
+            if echo "$body" | grep -q '<title>BuyFlow</title>' \
+              && echo "$body" | grep -q 'id="app"' \
+              && echo "$body" | grep -q "buyflow-build-commit.*$EXPECTED_SHA"; then
+              echo "BuyFlow browser preview matches deployed commit $EXPECTED_SHA"
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              echo "BuyFlow browser preview did not become available in time"
+              echo "BuyFlow browser preview is stale or unavailable"
+              echo "Expected frontend commit: $EXPECTED_SHA"
               exit 1
             fi
             sleep 10
