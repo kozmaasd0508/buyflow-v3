@@ -11,6 +11,9 @@ const SUCCESS_BODY_PATTERN = /Sikeresen\s+fizett[eé]l\s+[0-9][0-9 .\u00a0]*\s*F
 const SUCCESS_LEAD_PATTERN = /Sikeresen\s+fizett[eé]l/i;
 const AMOUNT_FT_PATTERN = /[0-9][0-9 .\u00a0]*\s*Ft/i;
 const FT_OT_ASCII_PATTERN = /Ft-ot/i;
+const FT_OT_ASCII_SPACED_PATTERN = /Ft\s*-\s*ot/i;
+const FT_OT_UNICODE_DASH_PATTERN = /Ft\s*\p{Pd}\s*ot/iu;
+const FT_OT_NO_DASH_PATTERN = /Ft\s+ot/i;
 const FT_OT_DASH_FLEX_PATTERN = /Ft[\s\p{Pd}-]*ot/iu;
 const BANKCARD_PATTERN = /bankk[aá]rty[aá]val/i;
 const PAYMENT_ID_PATTERN = /Fizet[eé]s Barion azonos[ií]t[oó]ja\s*:\s*[0-9a-f]{32}/i;
@@ -31,6 +34,9 @@ async function main(): Promise<void> {
     bodySuccessLeadPass: 0,
     bodyAmountFtPass: 0,
     bodyFtOtAsciiPass: 0,
+    bodyFtOtAsciiSpacedPass: 0,
+    bodyFtOtUnicodeDashPass: 0,
+    bodyFtOtNoDashPass: 0,
     bodyFtOtDashFlexiblePass: 0,
     bodyBankcardPass: 0,
     bodyPaymentIdPass: 0,
@@ -65,6 +71,9 @@ async function main(): Promise<void> {
     if (successLead) counters.bodySuccessLeadPass += 1;
     if (amountFt) counters.bodyAmountFtPass += 1;
     if (FT_OT_ASCII_PATTERN.test(body)) counters.bodyFtOtAsciiPass += 1;
+    if (FT_OT_ASCII_SPACED_PATTERN.test(body)) counters.bodyFtOtAsciiSpacedPass += 1;
+    if (FT_OT_UNICODE_DASH_PATTERN.test(body)) counters.bodyFtOtUnicodeDashPass += 1;
+    if (FT_OT_NO_DASH_PATTERN.test(body)) counters.bodyFtOtNoDashPass += 1;
     if (ftOtDashFlexible) counters.bodyFtOtDashFlexiblePass += 1;
     if (bankcard) counters.bodyBankcardPass += 1;
     if (PAYMENT_ID_PATTERN.test(body)) counters.bodyPaymentIdPass += 1;
@@ -74,7 +83,7 @@ async function main(): Promise<void> {
   }
 
   console.log(JSON.stringify({
-    mode: 'read_only_barion_fast_diagnostic_v1',
+    mode: 'read_only_barion_fast_diagnostic_v2',
     safety: {
       databaseWrites: false,
       mailboxWrites: false,
@@ -92,7 +101,7 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   console.error(JSON.stringify({
-    mode: 'read_only_barion_fast_diagnostic_v1',
+    mode: 'read_only_barion_fast_diagnostic_v2',
     status: 'failed',
     errorKind: error instanceof Error ? error.name : 'UnknownError',
   }));
