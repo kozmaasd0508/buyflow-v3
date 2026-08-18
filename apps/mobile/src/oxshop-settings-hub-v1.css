@@ -1,0 +1,219 @@
+html.bf-ox-settings-open,
+html.bf-ox-settings-open body {
+  overflow: hidden !important;
+}
+
+html.bf-settings-handoff .account-popover {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.bf-ox-settings-hub {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  flex-direction: column;
+  background: #f7f6f3;
+  color: #1b1a18;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.bf-ox-settings-head {
+  min-height: calc(64px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 16px 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0,1fr) 44px;
+  align-items: center;
+  border-bottom: 1px solid #ece9e4;
+  background: rgba(247,246,243,.98);
+}
+
+.bf-ox-settings-head h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -.025em;
+}
+
+.bf-ox-settings-back,
+.bf-ox-settings-head-spacer {
+  width: 40px;
+  height: 40px;
+}
+
+.bf-ox-settings-back {
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #373431;
+}
+
+.bf-ox-settings-back svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bf-ox-settings-content {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 22px 16px calc(28px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bf-ox-settings-profile {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 2px 2px 20px;
+}
+
+.bf-ox-settings-avatar {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f58a67, #ef5c36);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.bf-ox-settings-profile-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.bf-ox-settings-profile-copy strong {
+  font-size: 16px;
+  letter-spacing: -.02em;
+}
+
+.bf-ox-settings-profile-copy span {
+  overflow: hidden;
+  color: #8f8b86;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bf-ox-settings-group {
+  margin-top: 20px;
+}
+
+.bf-ox-settings-label {
+  margin: 0 0 8px 4px;
+  color: #aaa6a0;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .11em;
+}
+
+.bf-ox-settings-card {
+  overflow: hidden;
+  border: 1px solid #ece9e4;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.bf-ox-settings-row {
+  width: 100%;
+  min-height: 70px;
+  padding: 11px 14px;
+  display: grid;
+  grid-template-columns: 42px minmax(0,1fr) 20px;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-bottom: 1px solid #f0ede8;
+  background: #fff;
+  color: #252320;
+  text-align: left;
+}
+
+button.bf-ox-settings-row:active {
+  background: #faf8f5;
+}
+
+.bf-ox-settings-card > .bf-ox-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.bf-ox-settings-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #fff1eb;
+  color: #ed643e;
+}
+
+.bf-ox-settings-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.bf-ox-settings-row-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.bf-ox-settings-row-copy strong {
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.bf-ox-settings-row-copy small {
+  color: #96928c;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.bf-ox-settings-chevron {
+  display: grid;
+  place-items: center;
+  color: #b5b1ab;
+}
+
+.bf-ox-settings-chevron svg {
+  width: 17px;
+  height: 17px;
+}
+
+.bf-ox-settings-static .bf-ox-settings-row {
+  grid-template-columns: 42px minmax(0,1fr);
+}
+
+.bf-ox-settings-static .bf-ox-settings-icon {
+  background: #eef5ff;
+  color: #5f88bd;
+}
+
+.bf-ox-settings-last {
+  margin-top: 28px;
+}
+
+.bf-ox-settings-logout {
+  grid-template-columns: 42px minmax(0,1fr);
+  color: #bd5656;
+}
+
+.bf-ox-settings-logout .bf-ox-settings-icon {
+  background: #fff0f0;
+  color: #c65a5a;
+}
+
+@media (min-width: 700px) {
+  .bf-ox-settings-content {
+    padding-inline: 24px;
+  }
+}
