@@ -12,6 +12,7 @@ import {
   isValidBuyFlowLocalPart,
 } from '../email/buyflow-address.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
+import { registerSesInboundRoutes } from './ses-inbound-routes.js';
 import { registerShoppingInboxRoutes } from './shopping-inbox-routes.js';
 
 async function requireUser(request: FastifyRequest, reply: FastifyReply) {
@@ -29,6 +30,7 @@ function localPartFromAddress(emailAddress: string): string {
 
 export async function registerShoppingEmailRoutes(app: FastifyInstance) {
   await registerShoppingInboxRoutes(app);
+  await registerSesInboundRoutes(app);
 
   app.get('/api/shopping-email', async (request, reply) => {
     const user = await requireUser(request, reply);
