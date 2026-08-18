@@ -68,7 +68,7 @@ function hasSuccessSubject(input: ReturnType<typeof protocolDetectionInputFromEm
 }
 
 function hasSuccessBody(input: ReturnType<typeof protocolDetectionInputFromEmail>): boolean {
-  return /Sikeresen fizett[eé]l\s+[0-9][0-9 .\u00a0]*\s*Ft-ot bankk[aá]rty[aá]val/i.test(input.bodyText ?? '');
+  return /Sikeresen\s+fizett[eé]l\s+[0-9][0-9 .\u00a0]*\s*Ft-ot\s+bankk[aá]rty[aá]val/i.test(input.bodyText ?? '');
 }
 
 function hasPaymentId(input: ReturnType<typeof protocolDetectionInputFromEmail>): boolean {
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
   } while (cursor);
 
   console.log(JSON.stringify({
-    mode: 'read_only_barion_rule_diagnostic_audit_v1',
+    mode: 'read_only_barion_rule_diagnostic_audit_v2',
     safety: {
       databaseWrites: false,
       mailboxWrites: false,
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   console.error(JSON.stringify({
-    mode: 'read_only_barion_rule_diagnostic_audit_v1',
+    mode: 'read_only_barion_rule_diagnostic_audit_v2',
     status: 'failed',
     errorKind: error instanceof Error ? error.name : 'UnknownError',
     statusCode: statusCodeOf(error),
