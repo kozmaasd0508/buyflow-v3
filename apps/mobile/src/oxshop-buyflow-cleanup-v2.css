@@ -1,12 +1,16 @@
-/* BuyFlow cleanup V2 — remove shop-only shortcuts and make settings full-screen. */
+/* BuyFlow cleanup V2 — stable visibility rules without MutationObserver removal loops. */
 
-html.oxshop-ui-reset .oxshop-category-section {
+/* The old OxShop quick-category block is not part of BuyFlow. Keep it hidden even
+ * if an older enhancer recreates the node later. */
+.oxshop-category-section {
   display: none !important;
 }
 
-/* Full-screen settings instead of a narrow floating sheet. */
-html.oxshop-ui-reset .settings-overlay,
-html.oxshop-ui-reset .gmail-settings-overlay {
+/* Full-screen settings instead of a narrow floating sheet. These rules are
+ * intentionally not gated by html.oxshop-ui-reset so settings cannot fall back
+ * to the legacy bottom-sheet presentation during render timing changes. */
+.settings-overlay,
+.gmail-settings-overlay {
   position: fixed !important;
   inset: 0 !important;
   z-index: 180 !important;
@@ -14,19 +18,21 @@ html.oxshop-ui-reset .gmail-settings-overlay {
   background: var(--ox-bg) !important;
 }
 
-html.oxshop-ui-reset .settings-backdrop,
-html.oxshop-ui-reset .gmail-settings-backdrop {
+.settings-backdrop,
+.gmail-settings-backdrop {
   display: none !important;
 }
 
-html.oxshop-ui-reset .settings-sheet,
-html.oxshop-ui-reset .gmail-settings-sheet {
+.settings-sheet,
+.gmail-settings-sheet {
   position: fixed !important;
   inset: 0 !important;
   width: 100% !important;
   max-width: none !important;
   height: 100dvh !important;
   max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: var(--ox-bg) !important;
@@ -35,29 +41,36 @@ html.oxshop-ui-reset .gmail-settings-sheet {
   overflow: hidden !important;
 }
 
-html.oxshop-ui-reset .settings-header,
-html.oxshop-ui-reset .gmail-settings-header {
+.settings-header,
+.gmail-settings-header {
   position: sticky !important;
   top: 0 !important;
   z-index: 2 !important;
   min-height: calc(74px + env(safe-area-inset-top)) !important;
+  margin: 0 !important;
   padding: calc(14px + env(safe-area-inset-top)) 20px 14px !important;
   border-bottom: 1px solid var(--ox-line) !important;
   background: rgba(247,246,243,.97) !important;
+  color: var(--ox-text) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
 }
 
-html.oxshop-ui-reset .settings-header h1,
-html.oxshop-ui-reset .gmail-settings-header h2 {
+.settings-header p,
+.gmail-settings-header p {
+  color: var(--ox-accent) !important;
+}
+
+.settings-header h1,
+.gmail-settings-header h2 {
   margin: 2px 0 0 !important;
   color: var(--ox-text) !important;
   font-size: 28px !important;
   letter-spacing: -.04em !important;
 }
 
-html.oxshop-ui-reset .settings-close,
-html.oxshop-ui-reset .gmail-settings-close {
+.settings-close,
+.gmail-settings-close {
   width: 42px !important;
   height: 42px !important;
   border: 1px solid var(--ox-line) !important;
@@ -67,44 +80,70 @@ html.oxshop-ui-reset .gmail-settings-close {
   box-shadow: none !important;
 }
 
-html.oxshop-ui-reset .settings-content,
-html.oxshop-ui-reset #gmail-settings-body {
+.settings-content,
+#gmail-settings-body {
   height: calc(100dvh - 74px - env(safe-area-inset-top)) !important;
   max-width: 760px !important;
   margin: 0 auto !important;
   padding: 20px 18px calc(34px + env(safe-area-inset-bottom)) !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
+  color: var(--ox-text) !important;
 }
 
-html.oxshop-ui-reset .settings-profile-card,
-html.oxshop-ui-reset .settings-info-card,
-html.oxshop-ui-reset .gmail-connection-card,
-html.oxshop-ui-reset .gmail-account-card,
-html.oxshop-ui-reset .gmail-settings-toolbar,
-html.oxshop-ui-reset .gmail-settings-explainer {
+.settings-profile-card,
+.settings-info-card,
+.gmail-connection-card,
+.gmail-account-card,
+.gmail-settings-toolbar,
+.gmail-settings-explainer,
+.gmail-empty-state {
   border: 1px solid var(--ox-line) !important;
   border-radius: 20px !important;
   background: #fff !important;
+  color: var(--ox-text) !important;
   box-shadow: none !important;
 }
 
-/* Legacy AI/audit controls do not belong in user settings. */
-html.oxshop-ui-reset .scan-review-actions,
-html.oxshop-ui-reset .gmail-scan-actions,
-html.oxshop-ui-reset .gmail-scan-results,
-html.oxshop-ui-reset .gmail-scan-finished,
-html.oxshop-ui-reset #buyflow-deterministic-mode-note,
-html.oxshop-ui-reset [data-audit-window],
-html.oxshop-ui-reset #start-full-ai-audit,
-html.oxshop-ui-reset #view-full-ai-audit,
-html.oxshop-ui-reset #scan-seven-days-button {
+.gmail-connection-main > span,
+.gmail-connection-main > small,
+.gmail-settings-toolbar span,
+.gmail-settings-explainer p,
+.gmail-empty-state p,
+.gmail-empty-state small {
+  color: var(--ox-muted) !important;
+}
+
+.gmail-secondary-button,
+.gmail-primary-button {
+  border-color: var(--ox-line) !important;
+  background: var(--ox-accent) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+/* Legacy scan / AI benchmark controls are internal tooling and must never be
+ * visible in user-facing settings, even when the legacy Gmail renderer refreshes. */
+.scan-review-actions,
+.scan-review-summary,
+.scan-review-note,
+.scan-review-status,
+.scan-review-list,
+.gmail-scan-actions,
+.gmail-scan-pill,
+.gmail-scan-results,
+.gmail-scan-finished,
+#buyflow-deterministic-mode-note,
+[data-audit-window],
+#start-full-ai-audit,
+#view-full-ai-audit,
+#scan-seven-days-button {
   display: none !important;
 }
 
 @media (min-width: 760px) {
-  html.oxshop-ui-reset .settings-content,
-  html.oxshop-ui-reset #gmail-settings-body {
+  .settings-content,
+  #gmail-settings-body {
     padding-inline: 24px !important;
   }
 }
