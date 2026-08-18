@@ -11,7 +11,7 @@ import type { ProtocolProfile } from '../types.js';
  */
 export const BARION_PAYMENT_TEST_V1: ProtocolProfile = {
   protocol_id: 'payment.hu.barion',
-  protocol_version: '1.0.0-test.1',
+  protocol_version: '1.0.0-test.2',
   kind: 'payment',
   status: 'test',
   display_name: 'Barion',
@@ -53,7 +53,7 @@ export const BARION_PAYMENT_TEST_V1: ProtocolProfile = {
       title: 'Observed Barion successful-payment recipient emails (sanitized)',
       provenance: 'observed_real_email',
       observed_at: '2026-08-16',
-      notes: 'Repeated real messages used subject Sikeres fizetés, explicitly stated that the recipient successfully paid an amount by bank card, and included a 32-character Barion payment identifier.',
+      notes: 'Repeated real messages used subject Sikeres fizetés, explicitly stated that the recipient successfully paid an amount by bank card, and included a 32-character Barion payment identifier. Nylas HTML normalization can place line breaks between the same semantic tokens, so the rule permits whitespace variation without dropping any required token.',
     },
     {
       id: 'barion-observed-sender-transition',
@@ -99,7 +99,7 @@ export const BARION_PAYMENT_TEST_V1: ProtocolProfile = {
         {
           id: 'barion.success.explicit',
           field: 'body',
-          pattern: 'Sikeresen fizett[eé]l\\s+[0-9][0-9 .\\u00a0]*\\s*Ft-ot bankk[aá]rty[aá]val',
+          pattern: 'Sikeresen\\s+fizett[eé]l\\s+[0-9][0-9 .\\u00a0]*\\s*Ft-ot\\s+bankk[aá]rty[aá]val',
           required: true,
           source_ids: ['barion-observed-success'],
         },
