@@ -67,8 +67,15 @@ function hasSuccessSubject(input: ReturnType<typeof protocolDetectionInputFromEm
   return /^Sikeres fizet[eé]s$/i.test(input.subject ?? '');
 }
 
+const SUCCESS_BODY_PATTERN = /Sikeresen\s+fizett[eé]l\s+[0-9][0-9 .\u00a0]*\s*Ft-ot\s+bankk[aá]rty[aá]val/i;
+const SUCCESS_LEAD_PATTERN = /Sikeresen\s+fizett[eé]l/i;
+const AMOUNT_FT_PATTERN = /[0-9][0-9 .\u00a0]*\s*Ft/i;
+const FT_OT_ASCII_PATTERN = /Ft-ot/i;
+const FT_OT_DASH_FLEX_PATTERN = /Ft[\s\p{Pd}-]*ot/iu;
+const BANKCARD_PATTERN = /bankk[aá]rty[aá]val/i;
+
 function hasSuccessBody(input: ReturnType<typeof protocolDetectionInputFromEmail>): boolean {
-  return /Sikeresen\s+fizett[eé]l\s+[0-9][0-9 .\u00a0]*\s*Ft-ot\s+bankk[aá]rty[aá]val/i.test(input.bodyText ?? '');
+  return SUCCESS_BODY_PATTERN.test(input.bodyText ?? '');
 }
 
 function hasPaymentId(input: ReturnType<typeof protocolDetectionInputFromEmail>): boolean {
@@ -103,6 +110,16 @@ async function main(): Promise<void> {
   let semanticTripleWithoutDkim = 0;
   let semanticTripleWithNoDkimDomainsAtAll = 0;
   let semanticTripleWithSomeOtherDkimDomain = 0;
+
+  // Privacy-safe diagnostics for the body-normalization boundary.
+  let snippetPresent = 0;
+  let snippetSuccessBodyPass = 0;
+  let bodySuccessLeadPass = 0;
+  let bodyAmountFtPass = 0;
+  let bodyFtOtAsciiPass = 0;
+  let bodyFtOtDashFlexiblePass = 0;
+  let bodyBankcardPass = 0;
+  let bodySemanticTokenSetPass = 0;
 
   do {
     const page = await withRetry(
@@ -147,6 +164,14 @@ async function main(): Promise<void> {
       const paymentId = hasPaymentId(input);
       const semanticTriple = subject && bodySuccess && paymentId;
 
+      const snippet = full.snippet ?? listed.snippet ?? '';
+      const bodyText = input.bodyText ?? '';
+      const successLead = SUCCESS_LEAD_PATTERN.test(bodyText);
+      const amountFt = AMOUNT_FT_PATTERN.test(bodyText);
+      const ftOtAscii = FT_OT_ASCII_PATTERN.test(bodyText);
+      const ftOtDashFlexible = FT_OT_DASH_FLEX_PATTERN.test(bodyText);
+      const bankcard = BANKCARD_PATTERN.test(bodyText);
+
       if (senderAddress) senderAddressPass += 1;
       if (senderDomain) senderDomainPass += 1;
       if (dkim) dkimPass += 1;
@@ -161,6 +186,15 @@ async function main(): Promise<void> {
         if ((input.dkimDomains ?? []).length === 0) semanticTripleWithNoDkimDomainsAtAll += 1;
         else semanticTripleWithSomeOtherDkimDomain += 1;
       }
+
+      if (snippet.trim()) snippetPresent += 1;
+      if (SUCCESS_BODY_PATTERN.test(snippet)) snippetSuccessBodyPass += 1;
+      if (successLead) bodySuccessLeadPass += 1;
+      if (amountFt) bodyAmountFtPass += 1;
+      if (ftOtAscii) bodyFtOtAsciiPass += 1;
+      if (ftOtDashFlexible) bodyFtOtDashFlexiblePass += 1;
+      if (bankcard) bodyBankcardPass += 1;
+      if (successLead && amountFt && ftOtDashFlexible && bankcard) bodySemanticTokenSetPass += 1;
     }
 
     if (truncated) break;
@@ -168,7 +202,7 @@ async function main(): Promise<void> {
   } while (cursor);
 
   console.log(JSON.stringify({
-    mode: 'read_only_barion_rule_diagnostic_audit_v2',
+    mode: 'read_only_barion_rule_diagnostic_audit_v3',
     safety: {
       databaseWrites: false,
       mailboxWrites: false,
@@ -203,12 +237,22 @@ async function main(): Promise<void> {
       semanticTripleWithNoDkimDomainsAtAll,
       semanticTripleWithSomeOtherDkimDomain,
     },
+    bodyNormalizationDiagnostics: {
+      snippetPresent,
+      snippetSuccessBodyPass,
+      bodySuccessLeadPass,
+      bodyAmountFtPass,
+      bodyFtOtAsciiPass,
+      bodyFtOtDashFlexiblePass,
+      bodyBankcardPass,
+      bodySemanticTokenSetPass,
+    },
   }, null, 2));
 }
 
 main().catch((error) => {
   console.error(JSON.stringify({
-    mode: 'read_only_barion_rule_diagnostic_audit_v2',
+    mode: 'read_only_barion_rule_diagnostic_audit_v3',
     status: 'failed',
     errorKind: error instanceof Error ? error.name : 'UnknownError',
     statusCode: statusCodeOf(error),
