@@ -1,17 +1,5 @@
 import './oxshop-buyflow-cleanup-v2.css';
 
-function removeBuyFlowFunctionsBlock() {
-  document.querySelector('.oxshop-category-section')?.remove();
-}
-
-function cleanLegacyAuditUi() {
-  document.querySelectorAll<HTMLElement>(
-    '.scan-review-actions, .gmail-scan-actions, .gmail-scan-results, .gmail-scan-finished, #buyflow-deterministic-mode-note, #start-full-ai-audit, #view-full-ai-audit, #scan-seven-days-button',
-  ).forEach((element) => element.remove());
-
-  document.querySelectorAll<HTMLElement>('[data-audit-window]').forEach((element) => element.remove());
-}
-
 function makeSettingsUserFacing() {
   const gmailButton = document.querySelector<HTMLButtonElement>('#gmail-settings-button');
   if (gmailButton && gmailButton.dataset.buyflowSettingsV2 !== '1') {
@@ -48,23 +36,11 @@ function makeSettingsUserFacing() {
   }
 }
 
-function cleanSettingsCopy() {
-  document.querySelectorAll<HTMLElement>('.gmail-help').forEach((element) => {
-    const text = element.textContent ?? '';
-    if (/7 nap|ellenőrzés|átnézés/i.test(text)) element.remove();
-  });
-
-  document.querySelectorAll<HTMLElement>('.gmail-meta').forEach((element) => {
-    const text = element.textContent ?? '';
-    if (/első ellenőrzés/i.test(text)) element.remove();
-  });
-}
-
 function enhance() {
-  removeBuyFlowFunctionsBlock();
-  cleanLegacyAuditUi();
+  // Visibility is handled in CSS instead of removing DOM nodes. Several legacy
+  // UI enhancers use MutationObserver and would otherwise recreate removed
+  // elements, causing old controls to reappear or observers to fight each other.
   makeSettingsUserFacing();
-  cleanSettingsCopy();
 }
 
 const observer = new MutationObserver(enhance);
