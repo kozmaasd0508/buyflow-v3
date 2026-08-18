@@ -1,0 +1,417 @@
+/* BuyFlow design refresh V4 — Login, account popover and settings.
+ * Visual-only enhancement layer. Authentication and settings behavior are unchanged.
+ */
+
+:root {
+  --bf-v4-panel: linear-gradient(155deg, rgba(25,31,54,.96), rgba(9,13,27,.92));
+  --bf-v4-border: rgba(255,255,255,.10);
+  --bf-v4-muted: #97a1b8;
+}
+
+/* Login */
+.login-screen {
+  width: min(100%, 980px);
+  padding-inline: clamp(16px, 4vw, 30px);
+}
+
+.auth-card.bf-v4-auth-card {
+  position: relative;
+  overflow: hidden;
+  max-width: 500px;
+  padding: clamp(24px, 5vw, 34px);
+  border-color: rgba(255,255,255,.13);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 92% 2%, rgba(188,81,255,.26), transparent 30%),
+    radial-gradient(circle at 0% 100%, rgba(49,164,255,.16), transparent 34%),
+    linear-gradient(150deg, rgba(26,32,56,.95), rgba(9,13,27,.9));
+  box-shadow: 0 34px 90px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+.auth-card.bf-v4-auth-card::before {
+  content: "";
+  position: absolute;
+  width: 210px;
+  height: 210px;
+  right: -78px;
+  top: -108px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 50%;
+  box-shadow: 0 0 0 30px rgba(255,255,255,.014), 0 0 0 62px rgba(255,255,255,.009);
+  pointer-events: none;
+}
+
+.auth-card.bf-v4-auth-card > * { position: relative; z-index: 1; }
+
+.bf-v4-auth-card .auth-brand {
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.bf-v4-auth-card .brand-mark {
+  width: 58px;
+  height: 58px;
+  border-radius: 20px;
+  box-shadow: 0 16px 36px rgba(90,75,255,.34), inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+.bf-v4-auth-card .auth-brand strong {
+  font-size: 20px;
+  letter-spacing: -.02em;
+}
+
+.bf-v4-auth-card .auth-brand small {
+  margin-top: 4px;
+  color: #929db5;
+  font-size: 10.5px;
+}
+
+.bf-v4-auth-card .auth-copy {
+  margin: 28px 0 20px;
+}
+
+.bf-v4-auth-card .auth-copy .eyebrow { color: #a9b3ff; }
+
+.bf-v4-auth-card .auth-copy h1 {
+  max-width: 410px;
+  margin-top: 10px;
+  font-size: clamp(35px, 8vw, 49px);
+  line-height: .98;
+  letter-spacing: -.052em;
+}
+
+.bf-v4-auth-card .auth-copy > p:last-child {
+  max-width: 410px;
+  color: #aab4c8;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.bf-v4-auth-features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+  margin: 0 0 24px;
+}
+
+.bf-v4-auth-features > div {
+  min-width: 0;
+  padding: 12px 10px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 17px;
+  background: rgba(255,255,255,.036);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.bf-v4-auth-features span,
+.bf-v4-auth-features strong,
+.bf-v4-auth-features small { display: block; }
+
+.bf-v4-auth-features span {
+  color: #8793ff;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.bf-v4-auth-features strong {
+  margin-top: 6px;
+  overflow: hidden;
+  color: #f4f6ff;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bf-v4-auth-features small {
+  margin-top: 3px;
+  color: #78839a;
+  font-size: 8.5px;
+}
+
+.bf-v4-auth-card .form-stack { gap: 15px; }
+.bf-v4-auth-card .form-stack label { gap: 8px; color: #d9deef; font-size: 11px; }
+
+.bf-v4-auth-card .form-stack input {
+  min-height: 58px;
+  padding: 0 17px;
+  border-color: rgba(255,255,255,.105);
+  border-radius: 18px;
+  background: rgba(255,255,255,.045);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.bf-v4-auth-card .form-stack input:focus {
+  border-color: rgba(130,145,255,.7);
+  background: rgba(255,255,255,.055);
+  box-shadow: 0 0 0 4px rgba(93,108,255,.09), inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.bf-v4-auth-card .button.primary {
+  min-height: 54px;
+  margin-top: 3px;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #5f75ff, #9560ff 72%, #b05fed);
+  box-shadow: 0 17px 36px rgba(90,75,255,.28), inset 0 1px 0 rgba(255,255,255,.12);
+}
+
+.bf-v4-auth-card .text-button { color: #b5beff; }
+
+.bf-v4-auth-card .security-note {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255,255,255,.065);
+  color: #7f899f;
+}
+
+/* Account popover */
+.account-popover.bf-v4-account-popover {
+  width: min(330px, calc(100vw - 24px));
+  padding: 12px;
+  border-color: rgba(255,255,255,.12);
+  border-radius: 23px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(171,83,255,.17), transparent 36%),
+    linear-gradient(155deg, rgba(24,30,52,.97), rgba(9,13,26,.95));
+  box-shadow: 0 24px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+.bf-v4-account-kicker {
+  padding: 6px 8px 8px;
+  color: #9ca8ff;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
+.bf-v4-account-popover .account-popover-user {
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 17px;
+  background: rgba(255,255,255,.035);
+}
+
+.bf-v4-account-popover .avatar {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(95,117,255,.24), rgba(166,87,255,.16));
+  color: #cbd2ff;
+}
+
+.bf-v4-account-popover .account-popover-user strong { font-size: 13.5px; }
+.bf-v4-account-popover .account-popover-user small { margin-top: 4px; color: #929cb4; }
+
+.bf-v4-account-popover .account-action {
+  min-height: 47px;
+  margin-top: 7px;
+  padding-inline: 13px;
+  border: 1px solid rgba(255,255,255,.065);
+  border-radius: 15px;
+  background: rgba(255,255,255,.04);
+  transition: transform .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.bf-v4-account-popover .account-action:hover {
+  border-color: rgba(128,143,255,.2);
+  background: rgba(255,255,255,.055);
+}
+
+.bf-v4-account-popover .account-action:active { transform: scale(.985); }
+.bf-v4-account-popover .settings-account-action { color: #eef1ff !important; }
+.bf-v4-account-popover #logout-button { color: #ffbcc8; }
+
+/* Settings */
+.settings-sheet.bf-v4-settings-sheet {
+  width: min(100%, 570px);
+  border-left-color: rgba(255,255,255,.11);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(173,81,255,.20), transparent 26%),
+    radial-gradient(circle at 8% 18%, rgba(58,111,255,.13), transparent 33%),
+    linear-gradient(180deg, rgba(12,16,31,.99), rgba(6,9,19,.995));
+  box-shadow: -36px 0 95px rgba(0,0,0,.5), inset 1px 0 0 rgba(255,255,255,.025);
+}
+
+.bf-v4-settings-sheet .settings-header {
+  min-height: 88px;
+  padding-inline: 22px;
+  border-color: rgba(255,255,255,.07);
+  background: linear-gradient(180deg, rgba(9,12,24,.97), rgba(9,12,24,.86));
+}
+
+.bf-v4-settings-sheet .settings-header h1 {
+  margin-top: 4px;
+  font-size: 28px;
+  letter-spacing: -.045em;
+}
+
+.bf-v4-settings-sheet .settings-close {
+  border-radius: 15px;
+  background: rgba(255,255,255,.05);
+  transition: transform .15s ease, background .15s ease;
+}
+.bf-v4-settings-sheet .settings-close:active { transform: scale(.94); }
+
+.bf-v4-settings-sheet .settings-content {
+  padding: 20px 20px calc(34px + env(safe-area-inset-bottom));
+  gap: 24px;
+}
+
+.bf-v4-settings-profile {
+  position: relative;
+  overflow: hidden;
+  min-height: 122px;
+  padding: 20px !important;
+  gap: 15px !important;
+  border-color: rgba(255,255,255,.105) !important;
+  border-radius: 26px !important;
+  background:
+    radial-gradient(circle at 95% 0%, rgba(168,83,255,.20), transparent 34%),
+    linear-gradient(145deg, rgba(27,34,58,.94), rgba(12,17,32,.88)) !important;
+  box-shadow: 0 22px 58px rgba(0,0,0,.23), inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+.bf-v4-settings-profile::after {
+  content: "B";
+  position: absolute;
+  right: 18px;
+  bottom: -18px;
+  color: rgba(255,255,255,.028);
+  font-size: 92px;
+  font-weight: 950;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.bf-v4-settings-profile > * { position: relative; z-index: 1; }
+
+.bf-v4-settings-profile .settings-avatar {
+  width: 58px;
+  height: 58px;
+  flex-basis: 58px;
+  border-radius: 20px;
+  box-shadow: 0 16px 36px rgba(89,75,255,.31), inset 0 1px 0 rgba(255,255,255,.18);
+}
+
+.bf-v4-settings-profile strong { font-size: 15px; }
+.bf-v4-settings-profile span { margin-top: 6px; color: #9da7bc; font-size: 10.5px; }
+
+.bf-v4-settings-sheet .settings-section { gap: 13px; }
+.bf-v4-settings-sheet .settings-section-title { padding-inline: 2px; }
+.bf-v4-settings-sheet .settings-section-title h2 { margin-top: 6px; font-size: 21px; letter-spacing: -.025em; }
+
+.bf-v4-gmail-card,
+.bf-v4-settings-info {
+  border-color: var(--bf-v4-border) !important;
+  border-radius: 24px !important;
+  background: var(--bf-v4-panel) !important;
+  box-shadow: 0 18px 48px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+
+.bf-v4-gmail-card { padding: 19px !important; }
+.bf-v4-gmail-card.connected {
+  border-color: rgba(85,215,165,.17) !important;
+  background:
+    radial-gradient(circle at 98% 0%, rgba(85,215,165,.10), transparent 32%),
+    var(--bf-v4-panel) !important;
+}
+
+.bf-v4-gmail-card .gmail-status-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+}
+
+.bf-v4-gmail-card .gmail-status-row strong { font-size: 13.5px; }
+.bf-v4-gmail-card .gmail-status-row div > span { color: #98a3ba; }
+.bf-v4-gmail-card .gmail-status-pill { padding-inline: 10px; }
+
+.bf-v4-gmail-card .gmail-meta {
+  margin-top: 17px;
+  padding-top: 15px;
+  border-color: rgba(255,255,255,.065);
+}
+
+.bf-v4-gmail-card .gmail-help {
+  color: #8f9ab2;
+  line-height: 1.55;
+}
+
+.bf-v4-gmail-card .connect-gmail-button {
+  min-height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #5f75ff, #9460ff 72%, #aa5fec);
+  box-shadow: 0 16px 34px rgba(90,75,255,.24), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.bf-v4-settings-info {
+  position: relative;
+  padding: 18px !important;
+  background: rgba(255,255,255,.035) !important;
+}
+
+.bf-v4-settings-info::before {
+  content: "i";
+  float: left;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin: -2px 10px 8px 0;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(124,139,255,.11);
+  color: #aeb8ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.bf-v4-settings-info strong { font-size: 12.5px; }
+.bf-v4-settings-info p { margin-top: 8px; color: #8c97ae; line-height: 1.6; }
+
+.bf-v4-settings-sheet .settings-logout {
+  min-height: 50px;
+  border-radius: 16px;
+  background: rgba(145,38,66,.10);
+  transition: transform .15s ease, background .15s ease;
+}
+.bf-v4-settings-sheet .settings-logout:active { transform: scale(.985); }
+
+.bf-v4-settings-sheet .settings-notice {
+  padding: 14px 15px;
+  border-radius: 16px;
+}
+
+@media (min-width: 760px) {
+  .login-screen { min-height: 100dvh; }
+  .auth-card.bf-v4-auth-card { margin-block: 28px; }
+}
+
+@media (max-width: 520px) {
+  .auth-card.bf-v4-auth-card {
+    padding: 23px;
+    border-radius: 30px;
+  }
+
+  .bf-v4-auth-features { grid-template-columns: 1fr; }
+  .bf-v4-auth-features > div {
+    display: grid;
+    grid-template-columns: 28px minmax(0,1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .bf-v4-auth-features strong,
+  .bf-v4-auth-features small,
+  .bf-v4-auth-features span { margin: 0; }
+  .bf-v4-auth-features small { text-align: right; }
+
+  .settings-sheet.bf-v4-settings-sheet { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bf-v4-account-popover .account-action,
+  .bf-v4-settings-sheet .settings-close,
+  .bf-v4-settings-sheet .settings-logout { transition: none; }
+}
