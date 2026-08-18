@@ -1,0 +1,211 @@
+.shopping-inbox-overlay {
+  position: fixed;
+  z-index: 190;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s ease;
+}
+
+.shopping-inbox-overlay.open { opacity: 1; pointer-events: auto; }
+.shopping-inbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3,5,12,.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.shopping-inbox-sheet {
+  position: relative;
+  width: min(100%, 760px);
+  max-height: min(92dvh, 920px);
+  margin: 0 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 18px calc(26px + env(safe-area-inset-bottom, 0px));
+  border: 1px solid rgba(255,255,255,.12);
+  border-bottom: 0;
+  border-radius: 30px 30px 0 0;
+  background:
+    radial-gradient(circle at 92% -4%, rgba(176,82,255,.22), transparent 34%),
+    radial-gradient(circle at 4% 5%, rgba(72,111,255,.22), transparent 38%),
+    rgba(9,12,24,.97);
+  box-shadow: 0 -28px 80px rgba(0,0,0,.48);
+  transform: translateY(28px);
+  transition: transform .26s cubic-bezier(.2,.8,.2,1);
+}
+.shopping-inbox-overlay.open .shopping-inbox-sheet { transform: translateY(0); }
+
+.shopping-inbox-header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  margin: 0 -18px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(9,12,24,.84);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+.shopping-inbox-header p,
+.shopping-inbox-address-card > span,
+.shopping-inbox-section-head span {
+  margin: 0 0 4px;
+  color: #aab5ff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .17em;
+}
+.shopping-inbox-header h2,
+.shopping-inbox-section-head h3 { margin: 0; letter-spacing: -.035em; }
+.shopping-inbox-header h2 { font-size: 24px; }
+.shopping-inbox-header > button,
+#shopping-inbox-refresh {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,.06);
+  color: #eef1ff;
+  font-size: 23px;
+}
+
+#shopping-inbox-body { display: grid; gap: 16px; padding-top: 18px; }
+.shopping-inbox-address-card {
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 25px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(117,92,255,.2), transparent 42%),
+    linear-gradient(145deg, rgba(27,33,58,.95), rgba(14,18,34,.86));
+  box-shadow: 0 18px 46px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.04);
+}
+.shopping-inbox-address-card strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  font-size: clamp(16px, 4.4vw, 21px);
+}
+.shopping-inbox-address-card small { display: block; margin-top: 7px; color: #99a4bb; font-size: 10.5px; line-height: 1.5; }
+
+.shopping-inbox-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shopping-inbox-section-head h3 { font-size: 21px; }
+#shopping-inbox-refresh { font-size: 20px; }
+
+.shopping-inbox-list { display: grid; gap: 10px; }
+.shopping-inbox-message {
+  display: grid;
+  grid-template-columns: 46px minmax(0,1fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 20px;
+  background: rgba(255,255,255,.045);
+}
+.shopping-inbox-message-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(91,114,255,.24), rgba(177,91,255,.18));
+  color: #d7ddff;
+}
+.shopping-inbox-message-main { min-width: 0; }
+.shopping-inbox-message-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shopping-inbox-message-top time { color: #747f98; font-size: 8.8px; white-space: nowrap; }
+.shopping-inbox-type {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  color: #aeb7cc;
+  font-size: 8.5px;
+  font-weight: 850;
+}
+.shopping-inbox-type.linked { background: rgba(84,214,163,.1); color: #91e0bc; }
+.shopping-inbox-type.review { background: rgba(255,194,92,.1); color: #ffd38a; }
+.shopping-inbox-type.blocked { background: rgba(255,112,139,.1); color: #ff9db0; }
+.shopping-inbox-message-main > strong {
+  display: block;
+  margin-top: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.shopping-inbox-message-main > small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8f9ab2;
+  font-size: 9.5px;
+}
+.shopping-inbox-linked {
+  display: inline-block;
+  margin-top: 8px;
+  color: #8edcb8;
+  font-size: 8.8px;
+  font-weight: 800;
+}
+
+.shopping-inbox-empty,
+.shopping-inbox-error,
+.shopping-inbox-loading {
+  min-height: 230px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  padding: 28px 20px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 22px;
+  background: rgba(255,255,255,.035);
+}
+.shopping-inbox-empty-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(108,115,255,.11);
+  color: #bdc5ff;
+  font-size: 22px;
+  font-weight: 900;
+}
+.shopping-inbox-empty strong,
+.shopping-inbox-error strong { font-size: 14px; }
+.shopping-inbox-empty p,
+.shopping-inbox-error span,
+.shopping-inbox-loading span { margin: 0; color: #8994ac; font-size: 10.5px; line-height: 1.55; }
+.shopping-inbox-error button {
+  min-height: 40px;
+  margin-top: 4px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #6178ff, #9b5cff);
+  color: white;
+  font-weight: 850;
+}
+
+@media (min-width: 760px) {
+  .shopping-inbox-overlay { align-items: center; padding: 28px; }
+  .shopping-inbox-sheet { max-height: min(88dvh, 900px); border-bottom: 1px solid rgba(255,255,255,.12); border-radius: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shopping-inbox-overlay,
+  .shopping-inbox-sheet { transition: none; }
+}
