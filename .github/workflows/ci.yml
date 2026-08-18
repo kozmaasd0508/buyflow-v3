@@ -66,3 +66,45 @@ jobs:
 
           npx tsx apps/api/src/scripts/nylas-payment-shadow-link-audit-v2.ts
           npx tsx apps/api/src/scripts/nylas-barion-rule-diagnostic-audit.ts
+
+  barion-fast-diagnostic:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/payment-shadow-live-audit-v1'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Barion fast diagnostic (one-off, read-only)
+        env:
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: https://acjenqkrvnkdvvgordry.supabase.co
+          NYLAS_API_URI: https://api.eu.nylas.com
+        run: |
+          set -euo pipefail
+          DB_KEY="${SUPABASE_SECRET_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-}}"
+          if [ -z "${NYLAS_API_KEY:-}" ] || [ -z "$DB_KEY" ]; then
+            echo '{"mode":"read_only_barion_fast_diagnostic_v1","status":"skipped_missing_runtime_secrets"}'
+            exit 0
+          fi
+
+          RESPONSE="$(curl -fsS \
+            "$SUPABASE_URL/rest/v1/email_connections?provider=eq.nylas&status=eq.active&select=provider_account_id,connected_at&order=connected_at.asc&limit=1" \
+            -H "apikey: $DB_KEY")"
+          GRANT_ID="$(node -e 'const rows=JSON.parse(process.argv[1]); const id=rows?.[0]?.provider_account_id; if (!id) process.exit(2); process.stdout.write(id);' "$RESPONSE")"
+          echo "::add-mask::$GRANT_ID"
+          export NYLAS_SMOKE_GRANT_ID="$GRANT_ID"
+
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then unset SUPABASE_SERVICE_ROLE_KEY; fi
+          if [ -z "${SUPABASE_SECRET_KEY:-}" ]; then unset SUPABASE_SECRET_KEY; fi
+
+          npx tsx apps/api/src/scripts/nylas-barion-fast-diagnostic.ts
