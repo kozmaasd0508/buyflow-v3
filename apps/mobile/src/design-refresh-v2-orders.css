@@ -1,0 +1,288 @@
+/* BuyFlow design refresh V2 — orders and purchase detail.
+ * Visual-only layer: no lifecycle, email, payment or persistence logic changes.
+ */
+
+:root {
+  --bf-v2-surface: linear-gradient(155deg, rgba(24,30,52,.94), rgba(11,15,29,.82));
+  --bf-v2-surface-soft: rgba(255,255,255,.045);
+  --bf-v2-border: rgba(255,255,255,.095);
+  --bf-v2-muted: #929cb5;
+}
+
+/* Order / purchase list */
+.bf-v2-list-page .page-title-row {
+  align-items: flex-end;
+  gap: 14px;
+  padding: 2px 2px 0;
+}
+
+.bf-v2-list-page .page-title-row h1 {
+  margin-bottom: 5px;
+  font-size: clamp(31px, 7vw, 43px);
+  line-height: 1;
+}
+
+.bf-v2-list-page > .stack {
+  gap: 14px !important;
+}
+
+.entity-card.bf-v2-entity-card {
+  position: relative;
+  overflow: hidden;
+  padding: 17px !important;
+  gap: 15px !important;
+  border-color: var(--bf-v2-border) !important;
+  border-radius: 26px !important;
+  background:
+    radial-gradient(circle at 96% 2%, rgba(120,105,255,.13), transparent 31%),
+    var(--bf-v2-surface) !important;
+  box-shadow: 0 18px 46px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.045) !important;
+}
+
+.entity-card.bf-v2-entity-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -44px -66px auto;
+  width: 135px;
+  height: 135px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 50%;
+  box-shadow: 0 0 0 22px rgba(255,255,255,.014), 0 0 0 46px rgba(255,255,255,.009);
+  pointer-events: none;
+}
+
+.bf-v2-entity-card .entity-icon {
+  width: 62px !important;
+  height: 62px !important;
+  flex-basis: 62px !important;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 20px !important;
+  background: linear-gradient(145deg, rgba(93,116,255,.23), rgba(173,84,255,.13)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 12px 28px rgba(57,52,145,.15);
+}
+
+.bf-v2-entity-card .entity-top { gap: 12px; }
+.bf-v2-entity-card .entity-title { font-size: 15px; letter-spacing: -.018em; }
+.bf-v2-entity-card .entity-top small { margin-top: 4px; color: #8993aa; font-size: 9.5px; }
+.bf-v2-entity-card .entity-meta-line { margin-top: 9px; color: #aab2c7; font-size: 10.5px; line-height: 1.45; }
+.bf-v2-entity-card .entity-bottom { margin-top: 11px; }
+.bf-v2-entity-card .entity-bottom > strong { font-size: 16px; letter-spacing: -.025em; }
+.bf-v2-entity-card .entity-chevron {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 11px;
+  background: rgba(255,255,255,.045);
+  color: #aeb7ff;
+}
+
+.bf-v2-entity-card .badge {
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 8.5px;
+  letter-spacing: .01em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+}
+
+.bf-v2-card-progress {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.bf-v2-card-progress span {
+  height: 3px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.075);
+}
+
+.bf-v2-card-progress span.done {
+  background: linear-gradient(90deg, rgba(101,125,255,.9), rgba(159,91,255,.88));
+  box-shadow: 0 0 12px rgba(111,99,255,.22);
+}
+
+.bf-v2-card-progress span.complete {
+  background: rgba(85,215,165,.78);
+}
+
+.bf-v2-card-progress span.stopped {
+  background: rgba(255,123,145,.64);
+}
+
+/* Purchase detail hero */
+.detail-page.bf-v2-detail-page { gap: 25px; }
+
+.bf-v2-detail-page .order-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 208px;
+  padding: 27px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  border-radius: 32px !important;
+  background:
+    radial-gradient(circle at 88% 16%, rgba(186,81,255,.30), transparent 27%),
+    radial-gradient(circle at 78% 104%, rgba(47,169,255,.22), transparent 33%),
+    linear-gradient(138deg, rgba(86,99,255,.22), rgba(22,27,49,.95) 47%, rgba(10,14,28,.94)) !important;
+  box-shadow: 0 26px 70px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+
+.bf-v2-detail-page .order-hero::after {
+  content: "";
+  position: absolute;
+  right: -58px;
+  bottom: -92px;
+  width: 196px;
+  height: 196px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 50%;
+  box-shadow: 0 0 0 28px rgba(255,255,255,.018), 0 0 0 58px rgba(255,255,255,.011);
+  pointer-events: none;
+}
+
+.bf-v2-detail-page .order-hero > * { position: relative; z-index: 1; }
+.bf-v2-detail-page .order-hero h1 { max-width: 72%; font-size: clamp(31px, 8vw, 45px); }
+.bf-v2-detail-page .order-hero .badge { padding: 8px 11px; }
+.bf-v2-detail-page .order-hero-meta {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,.075);
+}
+.bf-v2-detail-page .order-hero-meta strong { font-size: clamp(23px, 6vw, 29px); }
+
+.bf-v2-hero-icon {
+  position: absolute !important;
+  top: 25px;
+  right: 25px;
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 20px;
+  color: white;
+  background: linear-gradient(145deg, rgba(91,116,255,.9), rgba(168,81,255,.88));
+  box-shadow: 0 16px 38px rgba(89,75,255,.28), inset 0 1px 0 rgba(255,255,255,.22);
+}
+
+/* Current status overview */
+.bf-v2-detail-page .buyflow-status-card {
+  padding: 22px;
+  border-radius: 27px;
+  border-color: rgba(255,255,255,.10);
+  background:
+    radial-gradient(circle at 98% 0%, rgba(116,104,255,.18), transparent 31%),
+    var(--bf-v2-surface);
+  box-shadow: 0 20px 52px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+.bf-v2-detail-page .buyflow-status-main h2 { font-size: clamp(23px, 6vw, 31px); letter-spacing: -.035em; }
+.bf-v2-detail-page .buyflow-status-main p { color: #a9b2c8; }
+.bf-v2-detail-page .buyflow-status-grid { gap: 9px; }
+.bf-v2-detail-page .buyflow-status-grid > div {
+  padding: 13px;
+  border-radius: 17px;
+  background: rgba(255,255,255,.035);
+}
+
+/* Section cards */
+.bf-v2-detail-page .content-section { gap: 12px; }
+.bf-v2-detail-page .section-head { padding-inline: 2px; }
+.bf-v2-detail-page .section-head h2 { margin-top: 5px; font-size: 20px; letter-spacing: -.025em; }
+.bf-v2-detail-page .section-head .eyebrow { color: #929dff; }
+
+.bf-v2-detail-page .detail-card,
+.bf-v2-detail-page .documents-card {
+  border: 1px solid var(--bf-v2-border) !important;
+  border-radius: 24px !important;
+  background: var(--bf-v2-surface) !important;
+  box-shadow: 0 17px 44px rgba(0,0,0,.19), inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+
+.bf-v2-detail-page .detail-card { padding: 5px 17px; }
+.bf-v2-detail-page .detail-row { min-height: 57px; border-color: rgba(255,255,255,.065); }
+.bf-v2-detail-page .detail-row > span { color: #8e98b0; font-size: 10px; }
+.bf-v2-detail-page .detail-row strong,
+.bf-v2-detail-page .detail-row > div { color: #f1f4ff; font-size: 11.5px; }
+.bf-v2-detail-page .tracking-number { color: #cbd2ff; }
+
+.bf-v2-detail-page .document-row { min-height: 72px; }
+.bf-v2-detail-page .document-icon {
+  width: 43px;
+  height: 43px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(94,116,255,.2), rgba(155,91,255,.12));
+}
+
+.bf-v2-detail-page .button.secondary {
+  background: rgba(255,255,255,.055);
+  border-color: rgba(255,255,255,.09);
+}
+
+/* Timeline — replace the old light card with the BuyFlow dark system */
+.bf-v2-detail-page .buyflow-timeline-card {
+  padding: 19px 17px !important;
+  border: 1px solid var(--bf-v2-border) !important;
+  border-radius: 25px !important;
+  background: var(--bf-v2-surface) !important;
+  box-shadow: 0 18px 48px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.045) !important;
+}
+
+.bf-v2-detail-page .buyflow-timeline-row { grid-template-columns: 32px minmax(0,1fr); gap: 12px; min-height: 74px; }
+.bf-v2-detail-page .buyflow-timeline-dot {
+  width: 24px;
+  height: 24px;
+  border-color: #3b4255;
+  background: #151a2b;
+  color: white;
+}
+.bf-v2-detail-page .buyflow-timeline-line { top: 23px; background: rgba(255,255,255,.09); }
+.bf-v2-detail-page .buyflow-timeline-title strong { color: #f3f5ff; font-size: 13.5px; }
+.bf-v2-detail-page .buyflow-timeline-title span { color: #818ba3; font-size: 9.5px; }
+.bf-v2-detail-page .buyflow-timeline-copy small { color: #9aa4bb; font-size: 10.5px; line-height: 1.5; }
+
+.bf-v2-detail-page .buyflow-timeline-row.done .buyflow-timeline-dot {
+  border-color: rgba(85,215,165,.75);
+  background: rgba(39,153,111,.9);
+  box-shadow: 0 0 0 4px rgba(85,215,165,.08);
+}
+.bf-v2-detail-page .buyflow-timeline-row.done .buyflow-timeline-line { background: rgba(85,215,165,.27); }
+.bf-v2-detail-page .buyflow-timeline-row.current .buyflow-timeline-dot {
+  border-color: #8494ff;
+  background: #171c31;
+  box-shadow: 0 0 0 5px rgba(112,126,255,.11), 0 0 22px rgba(112,126,255,.15);
+}
+.bf-v2-detail-page .buyflow-timeline-row.current .buyflow-timeline-copy strong { color: #b8c0ff; }
+.bf-v2-detail-page .buyflow-timeline-row.stopped .buyflow-timeline-dot {
+  border-color: rgba(255,123,145,.8);
+  background: rgba(160,57,81,.9);
+}
+.bf-v2-detail-page .buyflow-timeline-row.stopped .buyflow-timeline-line { background: rgba(255,123,145,.25); }
+.bf-v2-detail-page .buyflow-timeline-row.future { opacity: .48; }
+
+/* Softer empty/loading states inside detail */
+.bf-v2-detail-page .detail-empty,
+.bf-v2-detail-page .loading-card {
+  border: 1px solid var(--bf-v2-border);
+  border-radius: 20px;
+  background: rgba(17,22,39,.72);
+}
+
+@media (max-width: 540px) {
+  .entity-card.bf-v2-entity-card { align-items: flex-start; }
+  .bf-v2-entity-card .entity-icon { width: 54px !important; height: 54px !important; flex-basis: 54px !important; border-radius: 17px !important; }
+  .bf-v2-detail-page .order-hero { min-height: 194px; padding: 22px !important; }
+  .bf-v2-detail-page .order-hero h1 { max-width: 76%; }
+  .bf-v2-hero-icon { top: 20px; right: 20px; width: 51px; height: 51px; border-radius: 17px; }
+  .bf-v2-detail-page .buyflow-status-card { padding: 19px; }
+}
+
+@media (min-width: 760px) {
+  .bf-v2-list-page > .stack { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .entity-card.bf-v2-entity-card { min-height: 190px; align-items: flex-start; }
+}
