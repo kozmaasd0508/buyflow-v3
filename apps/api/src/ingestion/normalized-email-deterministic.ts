@@ -1,5 +1,6 @@
 import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extractor.js';
 import type { NormalizedEmail } from '../email/types.js';
+import { isExpressOneOutboundPickupNoise } from './commerce-email-filter.js';
 import {
   parseDeterministicCommerceEmail,
   type DeterministicCommerceParseResult,
@@ -117,6 +118,12 @@ function genericShadowExtraction(email: NormalizedEmail): DeterministicCommerceP
 export function parseNormalizedDeterministicEmail(
   email: NormalizedEmail,
 ): DeterministicCommerceParseResult | null {
+  // Courier pickup bookings made by the mailbox owner are outbound logistics
+  // service events, not lifecycle evidence for a consumer purchase. Apply the
+  // same exclusion used by the inbox relevance filter before any parser can
+  // reinterpret generic "order" or courier language as BuyFlow commerce.
+  if (isExpressOneOutboundPickupNoise(email)) return null;
+
   const deterministic = parseDeterministicCommerceEmail(
     normalizedEmailToDeterministicInput(email),
   );
