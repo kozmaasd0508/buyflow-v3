@@ -11,6 +11,9 @@ export interface EmailDocumentProductCandidate {
   name: string;
   quantity: number;
   raw: string;
+  unitPrice?: number;
+  totalPrice?: number;
+  currency?: EmailDocumentMoneyCandidate['currency'];
 }
 
 export interface EmailDocumentSection {
@@ -44,6 +47,8 @@ export interface EmailDocumentV1 {
   signals: {
     orderNumbers: string[];
     amounts: EmailDocumentMoneyCandidate[];
+    shippingAmounts: EmailDocumentMoneyCandidate[];
+    codAmounts: EmailDocumentMoneyCandidate[];
     products: EmailDocumentProductCandidate[];
     couriers: string[];
     paymentMethods: string[];
@@ -80,6 +85,14 @@ function uniqueMatches(text: string, patterns: RegExp[]): string[] {
   return [...new Set(results)];
 }
 
+function currencyFromToken(token: string): EmailDocumentMoneyCandidate['currency'] {
+  const normalized = token.toUpperCase();
+  if (normalized.includes('FT') || normalized.includes('HUF')) return 'HUF';
+  if (normalized.includes('EUR') || normalized.includes('€')) return 'EUR';
+  if (normalized.includes('GBP') || normalized.includes('£')) return 'GBP';
+  return 'USD';
+}
+
 function parseMoneyValue(raw: string, currency: EmailDocumentMoneyCandidate['currency']): number | null {
   let value = raw.replace(/\s+/g, '').replace(/[^0-9,.-]/g, '');
   if (!value) return null;
@@ -98,28 +111,44 @@ function parseMoneyValue(raw: string, currency: EmailDocumentMoneyCandidate['cur
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+const MONEY_PATTERN = /([0-9][0-9 .,'’\u00a0]{0,18}[0-9]|[0-9])\s*(HUF|Ft|EUR|€|USD|\$|GBP|£)\b/i;
+
+function moneyFromText(text: string): EmailDocumentMoneyCandidate | null {
+  const match = text.match(MONEY_PATTERN);
+  if (!match?.[1] || !match[2]) return null;
+  const currency = currencyFromToken(match[2]);
+  const amount = parseMoneyValue(match[1], currency);
+  return amount === null ? null : { amount, currency, raw: match[0] ?? text };
+}
+
 function amountCandidates(text: string): EmailDocumentMoneyCandidate[] {
-  const pattern = /([0-9][0-9 .,'’\u00a0]{0,18}[0-9]|[0-9])\s*(HUF|Ft|EUR|€|USD|\$|GBP|£)\b/gi;
+  const pattern = new RegExp(MONEY_PATTERN.source, 'gi');
   const results: EmailDocumentMoneyCandidate[] = [];
   for (const match of text.matchAll(pattern)) {
-    const token = (match[2] ?? '').toUpperCase();
-    const currency: EmailDocumentMoneyCandidate['currency'] = token.includes('FT') || token.includes('HUF')
-      ? 'HUF'
-      : token.includes('EUR') || token.includes('€')
-        ? 'EUR'
-        : token.includes('GBP') || token.includes('£')
-          ? 'GBP'
-          : 'USD';
-    const amount = parseMoneyValue(match[1] ?? '', currency);
+    if (!match[1] || !match[2]) continue;
+    const currency = currencyFromToken(match[2]);
+    const amount = parseMoneyValue(match[1], currency);
     if (amount !== null) results.push({ amount, currency, raw: match[0] ?? '' });
   }
   return results.slice(0, 50);
 }
 
-function productCandidates(text: string): EmailDocumentProductCandidate[] {
-  const results: EmailDocumentProductCandidate[] = [];
+function labeledMoneyCandidates(text: string, labels: RegExp[]): EmailDocumentMoneyCandidate[] {
+  const results: EmailDocumentMoneyCandidate[] = [];
   for (const rawLine of text.split('\n')) {
-    const line = rawLine.trim();
+    const normalizedLine = normalizeText(rawLine).toLowerCase();
+    if (!labels.some((label) => label.test(normalizedLine))) continue;
+    const money = moneyFromText(rawLine);
+    if (money) results.push(money);
+  }
+  return results.slice(0, 10);
+}
+
+function productCandidates(text: string): EmailDocumentProductCandidate[] {
+  const rawLines = text.split('\n');
+  const results: EmailDocumentProductCandidate[] = [];
+  for (let index = 0; index < rawLines.length; index += 1) {
+    const line = (rawLines[index] ?? '').trim();
     if (!line) continue;
     const match = line.match(/^\s*(\d{1,3})\s*[x×]\s+(.+?)\s*$/i);
     if (!match?.[1] || !match[2]) continue;
@@ -127,7 +156,31 @@ function productCandidates(text: string): EmailDocumentProductCandidate[] {
     const name = match[2].trim().replace(/\s{2,}/g, ' ');
     if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 100 || name.length < 2 || name.length > 240) continue;
     if (/^(?:szallitas|shipping|utanvet|payment|fizetes|kedvezmeny|discount)\b/i.test(normalizeText(name))) continue;
-    results.push({ name, quantity, raw: line });
+
+    let price: EmailDocumentMoneyCandidate | null = null;
+    for (let lookahead = index + 1; lookahead < Math.min(rawLines.length, index + 6); lookahead += 1) {
+      const candidateLine = (rawLines[lookahead] ?? '').trim();
+      if (!candidateLine) continue;
+      if (/^\s*\d{1,3}\s*[x×]\s+/i.test(candidateLine)) break;
+      const normalizedCandidate = normalizeText(candidateLine).toLowerCase();
+      if (/^(?:szallitas|shipping|utanvet|payment|fizetesi|brutto|vegosszeg|grand total|order total)\b/.test(normalizedCandidate)) break;
+      const candidateMoney = moneyFromText(candidateLine);
+      if (candidateMoney) {
+        price = candidateMoney;
+        break;
+      }
+    }
+
+    results.push({
+      name,
+      quantity,
+      raw: line,
+      ...(price ? {
+        unitPrice: quantity > 0 ? price.amount / quantity : price.amount,
+        totalPrice: price.amount,
+        currency: price.currency,
+      } : {}),
+    });
   }
   const deduped = new Map<string, EmailDocumentProductCandidate>();
   for (const result of results) {
@@ -221,6 +274,8 @@ export function buildEmailDocumentV1(email: NormalizedEmail): EmailDocumentV1 {
     signals: {
       orderNumbers,
       amounts: amountCandidates(normalized),
+      shippingAmounts: labeledMoneyCandidates(text, [/\bszallitas\b/, /\bshipping\b/]),
+      codAmounts: labeledMoneyCandidates(text, [/\butanvet\b/, /\bcash on delivery\b/, /\bcod\b/]),
       products: productCandidates(text),
       couriers: detectCouriers(normalized),
       paymentMethods: extractLabelValue(text, ['Fizetési mód', 'Fizetesi mod', 'Payment method']),
