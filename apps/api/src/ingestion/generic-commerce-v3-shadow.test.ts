@@ -21,18 +21,6 @@ function email(input: { sender: string; subject: string; body: string }): Normal
 
 const positiveCases = [
   {
-    sender: 'no-reply@expressone.hu',
-    subject: 'Expressone értesítés #772013',
-    body: 'Köszönjük megrendelését, amelyet rendszerünkben rögzítettünk a #772013 azonosító alatt.',
-    event: 'order_created',
-  },
-  {
-    sender: 'no-reply@expressone.hu',
-    subject: 'Expressone értesítés',
-    body: 'Az "772013" azonosítóval rögzített árufelvétel státusza megváltozott: a megbízást a futár elfogadta.',
-    event: 'shipment',
-  },
-  {
     sender: 'info@fnp.hu',
     subject: 'A FNP Products rendelésed teljesített. Rendelésed átadtuk a futárnak.',
     body: 'A 46789 számú rendelésed átadtuk a futárnak a kézbesítéshez.',
@@ -109,6 +97,16 @@ for (const row of positiveCases) {
 }
 
 const noiseCases = [
+  {
+    sender: 'no-reply@expressone.hu',
+    subject: 'Expressone értesítés #772013',
+    body: 'Köszönjük megrendelését, amelyet rendszerünkben rögzítettünk a #772013 azonosító alatt. A megrendelt árufelvételi napra nincs feladásra váró küldeménye esetén kérjük az árufelvétel lemondását.',
+  },
+  {
+    sender: 'no-reply@expressone.hu',
+    subject: 'Expressone értesítés',
+    body: 'Az "772013" azonosítóval rögzített árufelvétel státusza megváltozott: a megbízást a futár elfogadta.',
+  },
   {
     sender: 'info@expressone.hu',
     subject: 'Kézbesítéssel kapcsolatos információk',
