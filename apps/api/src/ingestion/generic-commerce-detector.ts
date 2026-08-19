@@ -9,6 +9,8 @@ export interface GenericCommerceShadowResult {
   reasons: string[];
   orderNumber: string | null;
   total: { amount: number; currency: string } | null;
+  shippingAmount: { amount: number; currency: string } | null;
+  codAmount: { amount: number; currency: string } | null;
   carrier: string | null;
   paymentMethod: string | null;
   shippingMethod: string | null;
@@ -92,6 +94,8 @@ export function detectGenericCommerceV1(document: EmailDocumentV1): GenericComme
   if (score < 5) return null;
 
   const total = chooseLikelyTotal(document);
+  const shippingAmount = document.signals.shippingAmounts[0] ?? null;
+  const codAmount = document.signals.codAmounts[0] ?? null;
   const confidence = Math.min(0.95, 0.58 + score * 0.045);
   return {
     eventType: 'order_created',
@@ -99,6 +103,8 @@ export function detectGenericCommerceV1(document: EmailDocumentV1): GenericComme
     reasons,
     orderNumber: document.signals.orderNumbers[0] ?? null,
     total,
+    shippingAmount: shippingAmount ? { amount: shippingAmount.amount, currency: shippingAmount.currency } : null,
+    codAmount: codAmount ? { amount: codAmount.amount, currency: codAmount.currency } : null,
     carrier: document.signals.couriers[0] ?? null,
     paymentMethod: document.signals.paymentMethods[0] ?? null,
     shippingMethod: document.signals.shippingMethods[0] ?? null,
