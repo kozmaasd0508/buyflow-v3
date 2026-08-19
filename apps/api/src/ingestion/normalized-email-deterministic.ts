@@ -70,7 +70,22 @@ function genericShadowExtraction(email: NormalizedEmail): DeterministicCommerceP
     cod_amount: null,
     cod_currency: null,
     invoice_number: null,
-    products: [],
+    products: generic.products.map((product) => ({
+      name: product.name,
+      brand: null,
+      model: null,
+      variant: null,
+      sku: null,
+      gtin: null,
+      category: null,
+      quantity: product.quantity,
+      unit_price: null,
+      total_price: null,
+      currency: generic.total?.currency ?? null,
+      product_url: null,
+      image_url: null,
+      confidence: 0.72,
+    })),
     confidence: generic.confidence,
   };
 
@@ -83,6 +98,7 @@ function genericShadowExtraction(email: NormalizedEmail): DeterministicCommerceP
       ...(document.sender.primaryDomain ? [`sender_domain:${document.sender.primaryDomain}`] : []),
       ...(document.sections.length ? [`structured_sections:${document.sections.length}`] : []),
       ...(document.signals.amounts.length ? [`money_candidates:${document.signals.amounts.length}`] : []),
+      ...(document.signals.products.length ? [`product_candidates:${document.signals.products.length}`] : []),
     ],
   };
 }
