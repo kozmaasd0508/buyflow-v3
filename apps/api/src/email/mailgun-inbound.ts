@@ -209,7 +209,10 @@ function shadowExtractionSnapshot(structuredResult: Record<string, unknown>) {
       const row = value as Record<string, unknown>;
       const name = typeof row.name === 'string' ? row.name : null;
       const quantity = typeof row.quantity === 'number' ? row.quantity : null;
-      return name ? [{ name, quantity }] : [];
+      const unitPrice = typeof row.unit_price === 'number' ? row.unit_price : null;
+      const totalPrice = typeof row.total_price === 'number' ? row.total_price : null;
+      const currency = typeof row.currency === 'string' ? row.currency : null;
+      return name ? [{ name, quantity, unitPrice, totalPrice, currency }] : [];
     })
     : [];
 
@@ -218,6 +221,9 @@ function shadowExtractionSnapshot(structuredResult: Record<string, unknown>) {
     orderNumber: typeof structuredResult.order_number === 'string' ? structuredResult.order_number : null,
     total: typeof structuredResult.total === 'number' ? structuredResult.total : null,
     currency: typeof structuredResult.currency === 'string' ? structuredResult.currency : null,
+    shippingAmount: typeof structuredResult.shipping_amount === 'number' ? structuredResult.shipping_amount : null,
+    codAmount: typeof structuredResult.cod_amount === 'number' ? structuredResult.cod_amount : null,
+    codCurrency: typeof structuredResult.cod_currency === 'string' ? structuredResult.cod_currency : null,
     carrier: typeof structuredResult.carrier === 'string' ? structuredResult.carrier : null,
     paymentStatus: typeof structuredResult.payment_status === 'string' ? structuredResult.payment_status : null,
     paymentMethod: typeof structuredResult.payment_method === 'string' ? structuredResult.payment_method : null,
