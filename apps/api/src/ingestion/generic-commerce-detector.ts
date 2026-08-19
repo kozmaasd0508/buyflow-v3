@@ -33,6 +33,7 @@ const ORDER_CONFIRMATION_PATTERNS = [
   /\b(?:automata\s+)?megrendeles\s+visszaigazolas\b/i,
   /\b(?:sikeres\s+)?rendeles\s+megerosites(?:e|et)?\b/i,
   /\brendeles\s+megerositese\b/i,
+  /\b(?:rendeles|megrendeles|order)\s*(?:#|no\.?|nr\.?|szam(?:u)?|azonosito)?\s*[:-]?\s*(?:[a-z]{1,8}-\d[\w-]{2,}|#?\d{5,})\b/i,
   /\bkoszonjuk!?\s*(?:megkaptuk|hogy leadtad)?[^\n.]{0,80}\b(?:rendelesed|megrendelesed)\b/i,
   /\bmegkaptuk\s+(?:a\s+)?(?:rendelesedet|megrendelesedet)\b/i,
   /\b(?:rendelesed|megrendelesed)\s+(?:feldolgozas alatt|mar keszul)\b/i,
