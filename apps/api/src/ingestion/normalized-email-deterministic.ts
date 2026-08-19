@@ -10,6 +10,7 @@ import {
   detectGenericCommerceV1,
   GENERIC_COMMERCE_SHADOW_VERSION,
 } from './generic-commerce-detector.js';
+import { parseGenericCommerceV5SubjectFallback } from './generic-commerce-v5-subject-fallback.js';
 
 const DEFAULT_BODY_MAX_CHARS = 80_000;
 
@@ -127,5 +128,7 @@ export function parseNormalizedDeterministicEmail(
   const deterministic = parseDeterministicCommerceEmail(
     normalizedEmailToDeterministicInput(email),
   );
-  return deterministic ?? genericShadowExtraction(email);
+  return deterministic
+    ?? genericShadowExtraction(email)
+    ?? parseGenericCommerceV5SubjectFallback(email);
 }
