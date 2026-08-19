@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
 
 const mobileDistDir = fileURLToPath(new URL('../../mobile/dist/', import.meta.url));
 
@@ -35,6 +36,8 @@ async function sendFile(reply: FastifyReply, filePath: string) {
 }
 
 export async function registerWebPreview(app: FastifyInstance) {
+  await registerRawEmailAuditRoutes(app);
+
   app.get('/app', async (_request, reply) => reply.redirect('/app/'));
 
   app.get('/app/', async (_request, reply) => {
