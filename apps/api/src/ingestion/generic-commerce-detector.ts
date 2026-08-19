@@ -54,8 +54,6 @@ const SHIPMENT_PATTERNS = [
   /\b(?:feldolgozasa|feldolgozasat)\s+megkezd(?:odott|tuk)\b/i,
   /\batadtuk\s+a\s+futarszolgalat\b/i,
   /\batadtuk\s+a\s+futarnak\b/i,
-  /\bmegbizast\s+a\s+futar\s+elfogadta\b/i,
-  /\barufelvetel\s+statusza\s+megvaltozott\b/i,
   /\bdinamikus\s+csomagkovetes\b/i,
 ];
 
