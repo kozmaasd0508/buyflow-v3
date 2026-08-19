@@ -13,3 +13,5 @@ Do not modify v4 ground truth while implementing v6; v4 remains regression-only 
 Implementation targets from v4: FOXPOST arrival/warehouse/return, MPL/Posta posted/out-for-delivery/pickup, Packeta accepted-for-transport, Gate order/shipment, explicit payment_failed, support/reply guardrail.
 
 No generic keyword broadening is allowed unless backed by a noise regression case.
+
+Provider adapters must require an exact trusted sender domain plus lifecycle evidence; generic promotion remains fallback-only.
