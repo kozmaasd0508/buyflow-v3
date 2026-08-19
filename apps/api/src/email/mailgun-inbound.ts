@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
+import { planNormalizedInboundEmail } from '../pipeline/normalized-inbound-pipeline.js';
 import type { EmailAddress, EmailAttachmentMetadata, EmailHeader, NormalizedEmail } from './types.js';
 
 export interface MailgunSignatureFields {
@@ -67,7 +68,9 @@ function parseHeaders(raw: string | undefined): EmailHeader[] {
       const value = String(entry[1] ?? '');
       return name ? [{ name, value }] : [];
     });
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 function headerValue(headers: EmailHeader[], name: string): string | undefined {
@@ -80,66 +83,141 @@ function normalizedReceivedAt(timestamp: string | undefined): string {
   return new Date().toISOString();
 }
 
-export function normalizeMailgunInbound(fields: MailgunInboundFields, attachments: EmailAttachmentMetadata[] = []): MailgunShadowEnvelope {
+export function normalizeMailgunInbound(
+  fields: MailgunInboundFields,
+  attachments: EmailAttachmentMetadata[] = [],
+): MailgunShadowEnvelope {
   const recipient = fields.recipient?.trim().toLowerCase();
   const sender = fields.sender?.trim().toLowerCase();
   if (!recipient) throw new Error('Mailgun inbound payload is missing recipient');
   if (!sender) throw new Error('Mailgun inbound payload is missing sender');
+
   const headers = parseHeaders(fields['message-headers']);
   const from = parseAddress(fields.from) ?? parseAddress(sender);
   const to = parseAddress(recipient);
   const providerMessageId = headerValue(headers, 'Message-Id')?.trim()
     || `mailgun-${crypto.createHash('sha256').update(`${recipient}\n${sender}\n${fields.timestamp ?? ''}\n${fields.subject ?? ''}`).digest('hex')}`;
+
   return {
-    recipient, sender, attachments,
+    recipient,
+    sender,
+    attachments,
     normalizedEmail: {
-      provider: 'mailgun', providerMessageId,
+      provider: 'mailgun',
+      providerMessageId,
       ...(fields.subject ? { subject: fields.subject } : {}),
-      from: from ? [from] : [], to: to ? [to] : [], cc: [], bcc: [],
+      from: from ? [from] : [],
+      to: to ? [to] : [],
+      cc: [],
+      bcc: [],
       receivedAt: normalizedReceivedAt(fields.timestamp),
-      ...(fields['stripped-text'] || fields['body-plain'] ? { snippet: fields['stripped-text'] || fields['body-plain'] } : {}),
+      ...(fields['stripped-text'] || fields['body-plain']
+        ? { snippet: fields['stripped-text'] || fields['body-plain'] }
+        : {}),
       ...(fields['body-html'] ? { bodyHtml: fields['body-html'] } : {}),
-      headers, folders: ['inbound', 'mailgun-shadow'], attachments,
+      headers,
+      folders: ['inbound', 'mailgun-shadow'],
+      attachments,
     },
   };
 }
 
 function bodyToFields(body: unknown): MailgunInboundFields {
   if (!body || typeof body !== 'object') return {};
-  return Object.fromEntries(Object.entries(body as Record<string, unknown>).map(([key, value]) => [key, String(value ?? '')])) as MailgunInboundFields;
+  return Object.fromEntries(
+    Object.entries(body as Record<string, unknown>).map(([key, value]) => [key, String(value ?? '')]),
+  ) as MailgunInboundFields;
 }
 
 export async function registerMailgunInboundRoutes(app: FastifyInstance) {
   await app.register(async (scope) => {
-    await scope.register(multipart, { limits: { fields: 100, files: 20, fileSize: 25 * 1024 * 1024, parts: 150 } });
-    scope.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
-      try {
-        const encodedBody = typeof body === 'string' ? body : body.toString('utf8');
-        done(null, Object.fromEntries(new URLSearchParams(encodedBody)));
-      } catch (error) { done(error as Error, undefined); }
+    await scope.register(multipart, {
+      limits: { fields: 100, files: 20, fileSize: 25 * 1024 * 1024, parts: 150 },
     });
+
+    scope.addContentTypeParser(
+      'application/x-www-form-urlencoded',
+      { parseAs: 'string' },
+      (_request, body, done) => {
+        try {
+          const encodedBody = typeof body === 'string' ? body : body.toString('utf8');
+          done(null, Object.fromEntries(new URLSearchParams(encodedBody)));
+        } catch (error) {
+          done(error as Error, undefined);
+        }
+      },
+    );
+
     scope.post('/api/email/mailgun/inbound', async (request, reply) => {
       const signingKey = process.env.MAILGUN_WEBHOOK_SIGNING_KEY?.trim();
-      if (!signingKey) return reply.code(503).send({ ok: false, error: 'mailgun_not_configured' });
+      if (!signingKey) {
+        return reply.code(503).send({ ok: false, error: 'mailgun_not_configured' });
+      }
+
       let fields: MailgunInboundFields = {};
       const attachments: EmailAttachmentMetadata[] = [];
+
       if (request.isMultipart()) {
         let attachmentIndex = 0;
         for await (const part of request.parts()) {
           if (part.type === 'file') {
             let size = 0;
             for await (const chunk of part.file) size += Buffer.byteLength(chunk);
-            attachments.push({ id: `mailgun-attachment-${attachmentIndex}`, filename: part.filename || `attachment-${attachmentIndex}`, contentType: part.mimetype || 'application/octet-stream', size });
+            attachments.push({
+              id: `mailgun-attachment-${attachmentIndex}`,
+              filename: part.filename || `attachment-${attachmentIndex}`,
+              contentType: part.mimetype || 'application/octet-stream',
+              size,
+            });
             attachmentIndex += 1;
-          } else fields[part.fieldname as keyof MailgunInboundFields] = String(part.value ?? '');
+          } else {
+            fields[part.fieldname as keyof MailgunInboundFields] = String(part.value ?? '');
+          }
         }
-      } else fields = bodyToFields(request.body);
-      if (!verifyMailgunSignature(fields, signingKey)) return reply.code(401).send({ ok: false, error: 'invalid_signature' });
+      } else {
+        fields = bodyToFields(request.body);
+      }
+
+      if (!verifyMailgunSignature(fields, signingKey)) {
+        return reply.code(401).send({ ok: false, error: 'invalid_signature' });
+      }
+
       let envelope: MailgunShadowEnvelope;
-      try { envelope = normalizeMailgunInbound(fields, attachments); }
-      catch { return reply.code(400).send({ ok: false, error: 'invalid_payload' }); }
-      request.log.info({ provider: 'mailgun', mode: 'shadow', recipient: envelope.recipient, sender: envelope.sender, providerMessageId: envelope.normalizedEmail.providerMessageId, attachmentCount: envelope.attachments.length }, 'Mailgun inbound message accepted in shadow mode; no production writes performed');
-      return reply.code(200).send({ ok: true, mode: 'shadow', provider: 'mailgun', accepted: true, productionWrites: 0, attachmentCount: envelope.attachments.length });
+      try {
+        envelope = normalizeMailgunInbound(fields, attachments);
+      } catch {
+        return reply.code(400).send({ ok: false, error: 'invalid_payload' });
+      }
+
+      const plan = planNormalizedInboundEmail({ email: envelope.normalizedEmail });
+
+      request.log.info({
+        provider: 'mailgun',
+        mode: 'shadow',
+        recipient: envelope.recipient,
+        sender: envelope.sender,
+        providerMessageId: envelope.normalizedEmail.providerMessageId,
+        attachmentCount: envelope.attachments.length,
+        recognitionStatus: plan.status,
+        classification: plan.classification,
+        parserVersion: plan.parserVersion,
+        validationStatus: plan.validationStatus,
+      }, 'Mailgun inbound message evaluated by deterministic pipeline in shadow mode; no production writes performed');
+
+      return reply.code(200).send({
+        ok: true,
+        mode: 'shadow',
+        provider: 'mailgun',
+        accepted: true,
+        productionWrites: 0,
+        attachmentCount: envelope.attachments.length,
+        recognition: {
+          status: plan.status,
+          classification: plan.classification,
+          parserVersion: plan.parserVersion,
+          validationStatus: plan.validationStatus,
+        },
+      });
     });
   });
 }
