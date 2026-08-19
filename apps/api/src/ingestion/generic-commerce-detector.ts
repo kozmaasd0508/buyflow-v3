@@ -1,7 +1,7 @@
 import type { BuyFlowEmailEventType } from '../ai/openai-email-extractor.js';
 import type { EmailDocumentProductCandidate, EmailDocumentV1 } from './email-document.js';
 
-export const GENERIC_COMMERCE_SHADOW_VERSION = 'generic-commerce-v2-shadow';
+export const GENERIC_COMMERCE_SHADOW_VERSION = 'generic-commerce-v3-shadow';
 
 export interface GenericCommerceShadowResult {
   eventType: BuyFlowEmailEventType;
@@ -33,6 +33,9 @@ const ORDER_CONFIRMATION_PATTERNS = [
   /\b(?:automata\s+)?megrendeles\s+visszaigazolas\b/i,
   /\b(?:sikeres\s+)?rendeles\s+megerosites(?:e|et)?\b/i,
   /\brendeles\s+megerositese\b/i,
+  /\bmegrendelesi\s+szam\s*:\s*#?[a-z0-9-]{5,}\b/i,
+  /#?[a-z0-9-]{5,}\s+szamu\s+(?:rendelese|megrendelese)\s+letrejott\b/i,
+  /\bkoszonjuk\s+megrendeleset.{0,120}\brogzitettuk\b.{0,80}#?\d{5,}\b/i,
   /\b(?:rendeles|megrendeles|order)\s*(?:#|no\.?|nr\.?|szam(?:u)?|azonosito)?\s*[:-]?\s*(?:[a-z]{1,8}-\d[\w-]{2,}|#?\d{5,})\b/i,
   /\bkoszonjuk!?\s*(?:megkaptuk|hogy leadtad)?[^\n.]{0,80}\b(?:rendelesed|megrendelesed)\b/i,
   /\bmegkaptuk\s+(?:a\s+)?(?:rendelesedet|megrendelesedet)\b/i,
@@ -42,23 +45,33 @@ const ORDER_CONFIRMATION_PATTERNS = [
 
 const SHIPMENT_PATTERNS = [
   /\b(?:rendelesed|megrendelesed)\s+(?:uton van|elkuldve|feladasra kerult)\b/i,
+  /\b(?:rendelest|megrendelest)\s+elkuldtek\b/i,
+  /\b(?:rendelesedet|megrendelesedet)\s+csomagoljak\b/i,
+  /\b(?:rendelesed|megrendelesed)\s+keszen\s+all\s+a\s+szallitasra\b/i,
   /\b(?:csomag|kuldemeny).{0,60}\b(?:kezbesites ma|mai kezbesites|futar.*kezbesit|szallitas alatt)\b/i,
   /\b(?:futar|courier).{0,40}\b(?:ma erkezik|kezbesit|atvette)\b/i,
   /\b(?:shipment|parcel).{0,50}\b(?:shipped|in transit|out for delivery)\b/i,
   /\b(?:feldolgozasa|feldolgozasat)\s+megkezd(?:odott|tuk)\b/i,
   /\batadtuk\s+a\s+futarszolgalat\b/i,
+  /\batadtuk\s+a\s+futarnak\b/i,
+  /\bmegbizast\s+a\s+futar\s+elfogadta\b/i,
+  /\barufelvetel\s+statusza\s+megvaltozott\b/i,
+  /\bdinamikus\s+csomagkovetes\b/i,
 ];
 
 const DELIVERY_PATTERNS = [
   /\bkuldemeny\s+kezbesitve\b/i,
   /\brendeles\s+kezbesitve\b/i,
   /\bcsomag\s+kezbesitve\b/i,
+  /\bsikeres\s+kezbesites(?:erol|e)?\b/i,
+  /\bsikeresen\s+kezbesitett(?:uk|e)?\b/i,
   /\batadasra\s+kerult\b/i,
   /\b(?:delivered|delivery completed)\b/i,
 ];
 
 const INVOICE_PATTERNS = [
   /\bszamla(?:d)?\s+elkeszult\b/i,
+  /\bszamlaja\s+erkezett\b/i,
   /\brendelesedhez\s+tartozo\s+szamla\b/i,
   /\b(?:invoice|receipt|nyugta)\b/i,
   /\brendeles.{0,50}\bnyugtaja\b/i,
@@ -66,7 +79,9 @@ const INVOICE_PATTERNS = [
 
 const PAYMENT_PATTERNS = [
   /\bsikeres\s+bankkartyas\s+fizetes\b/i,
+  /\bsikeres\s+fizetes\b/i,
   /\bfizetes\s+sikeres\b/i,
+  /\bfizetes\s+megerositese\b/i,
   /\bpayment\s+(?:completed|successful|received)\b/i,
 ];
 
@@ -125,13 +140,18 @@ function chooseEventType(document: EmailDocumentV1, subject: string, context: st
     reasons.push('generic_return_language');
     return { eventType: 'return', score: hasAny(RETURN_PATTERNS, subject) ? 5 : 4 };
   }
+  // A payment-specific subject outranks receipt language that may only appear in the body.
+  if (hasAny(PAYMENT_PATTERNS, subject)) {
+    reasons.push('generic_payment_completed_language');
+    return { eventType: 'payment_completed', score: 5 };
+  }
   if (hasAny(INVOICE_PATTERNS, subject) || hasAny(INVOICE_PATTERNS, context)) {
     reasons.push('generic_invoice_language');
     return { eventType: 'invoice_or_receipt', score: hasAny(INVOICE_PATTERNS, subject) ? 5 : 4 };
   }
-  if (hasAny(PAYMENT_PATTERNS, subject) || hasAny(PAYMENT_PATTERNS, context)) {
+  if (hasAny(PAYMENT_PATTERNS, context)) {
     reasons.push('generic_payment_completed_language');
-    return { eventType: 'payment_completed', score: hasAny(PAYMENT_PATTERNS, subject) ? 5 : 4 };
+    return { eventType: 'payment_completed', score: 4 };
   }
   if (hasAny(SHIPMENT_PATTERNS, subject) || hasAny(SHIPMENT_PATTERNS, context)) {
     const strong = hasAny(SHIPMENT_PATTERNS, subject);
