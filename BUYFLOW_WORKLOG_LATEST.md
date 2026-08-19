@@ -17,3 +17,5 @@ No generic keyword broadening is allowed unless backed by a noise regression cas
 Provider adapters must require an exact trusted sender domain plus lifecycle evidence; generic promotion remains fallback-only.
 
 Semantic invariant: failed/declined/unsuccessful payment evidence must never map to payment_completed.
+
+Support/reply messages without deterministic purchase lifecycle evidence stay review/ignored; no sender-only promotion.
