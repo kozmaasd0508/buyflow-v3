@@ -10,7 +10,7 @@ function email(input: { subject: string; sender: string; name?: string; snippet?
     provider: 'mailgun',
     providerMessageId: `<${Math.random()}@example.com>`,
     subject: input.subject,
-    from: [{ email: input.sender, name: input.name ?? null }],
+    from: [{ email: input.sender, ...(input.name ? { name: input.name } : {}) }],
     to: [{ email: 'buyer@example.com' }],
     cc: [],
     bcc: [],
