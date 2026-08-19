@@ -21,3 +21,5 @@ Semantic invariant: failed/declined/unsuccessful payment evidence must never map
 Support/reply messages without deterministic purchase lifecycle evidence stay review/ignored; no sender-only promotion.
 
 Implementation should preserve 0 production writes and 0 AI calls until regression and fresh holdout gates pass.
+
+Branch tip is ready for code changes.
