@@ -1,7 +1,7 @@
 import type { BuyFlowEmailEventType } from '../ai/openai-email-extractor.js';
 import type { EmailDocumentProductCandidate, EmailDocumentV1 } from './email-document.js';
 
-export const GENERIC_COMMERCE_SHADOW_VERSION = 'generic-commerce-v3-shadow';
+export const GENERIC_COMMERCE_SHADOW_VERSION = 'generic-commerce-v4-shadow';
 
 export interface GenericCommerceShadowResult {
   eventType: BuyFlowEmailEventType;
@@ -31,6 +31,8 @@ const ORDER_CONFIRMATION_PATTERNS = [
   /\byour order (?:is )?confirmed\b/i,
   /\border confirmation\b/i,
   /\b(?:automata\s+)?megrendeles\s+visszaigazolas\b/i,
+  /\bmegrendeles\s+visszaigazolasa\s*#?[a-z0-9-]{4,}\b/i,
+  /\brendeles\s*\/\s*foglalas\s+visszaigazolas\b/i,
   /\b(?:sikeres\s+)?rendeles\s+megerosites(?:e|et)?\b/i,
   /\brendeles\s+megerositese\b/i,
   /\bmegrendelesi\s+szam\s*:\s*#?[a-z0-9-]{5,}\b/i,
@@ -40,7 +42,21 @@ const ORDER_CONFIRMATION_PATTERNS = [
   /\bkoszonjuk!?\s*(?:megkaptuk|hogy leadtad)?[^\n.]{0,80}\b(?:rendelesed|megrendelesed)\b/i,
   /\bmegkaptuk\s+(?:a\s+)?(?:rendelesedet|megrendelesedet)\b/i,
   /\b(?:rendelesed|megrendelesed)\s+(?:feldolgozas alatt|mar keszul)\b/i,
+  /\b(?:rendelesedet|megrendelesedet)\s+elfogadtuk\b/i,
   /\brendelesi osszesito\b/i,
+];
+
+const ORDER_UPDATE_PATTERNS = [
+  /\belkezdtuk\s+(?:a\s+)?(?:rendelesed|megrendelesed)\s+osszekesziteset\b/i,
+  /\b(?:rendelesed|megrendelesed).{0,60}\bosszekeszites(?:et|e)\b/i,
+  /\b(?:rendeles|megrendeles).{0,80}\b(?:keses|kesik|keshet)\b/i,
+];
+
+const PAYMENT_ISSUE_PATTERNS = [
+  /\bsikertelen\s+bankkartyas\s+fizetes\b/i,
+  /\bbankkartyas\s+fizetes\s+link\b/i,
+  /\bnem\s+sikerult.{0,40}\b(?:kifizetni|befizetni|fizetni)\b/i,
+  /\bfizetes.{0,30}\bsikertelen\b/i,
 ];
 
 const SHIPMENT_PATTERNS = [
@@ -48,12 +64,17 @@ const SHIPMENT_PATTERNS = [
   /\b(?:rendelest|megrendelest)\s+elkuldtek\b/i,
   /\b(?:rendelesedet|megrendelesedet)\s+csomagoljak\b/i,
   /\b(?:rendelesed|megrendelesed)\s+keszen\s+all\s+a\s+szallitasra\b/i,
+  /\b(?:rendelese|rendelesed|megrendelesed)\s+szallitas\s+alatt\b/i,
+  /\bkesik\s+a\s+kezbesites\b/i,
   /\b(?:csomag|kuldemeny).{0,60}\b(?:kezbesites ma|mai kezbesites|futar.*kezbesit|szallitas alatt)\b/i,
+  /\b(?:csomag|kuldemeny).{0,70}\b(?:automata|csomagautomata).{0,30}\bhelyezeserol\b/i,
+  /\belhelyeztuk.{0,60}\b(?:automatankban|csomagautomataban|automataba)\b/i,
   /\b(?:futar|courier).{0,40}\b(?:ma erkezik|kezbesit|atvette)\b/i,
   /\b(?:shipment|parcel).{0,50}\b(?:shipped|in transit|out for delivery)\b/i,
   /\b(?:feldolgozasa|feldolgozasat)\s+megkezd(?:odott|tuk)\b/i,
   /\batadtuk\s+a\s+futarszolgalat\b/i,
   /\batadtuk\s+a\s+futarnak\b/i,
+  /\batadjuk.{0,40}\ba\s+futarszolgalatnak\b/i,
   /\bdinamikus\s+csomagkovetes\b/i,
 ];
 
@@ -70,6 +91,9 @@ const DELIVERY_PATTERNS = [
 const INVOICE_PATTERNS = [
   /\bszamla(?:d)?\s+elkeszult\b/i,
   /\bszamlaja\s+erkezett\b/i,
+  /\be-?szamla\s+erkezett\b/i,
+  /\bertesito\s*:\s*szamla\s+erkezett\b/i,
+  /^szamla\s+[a-z0-9][a-z0-9/-]{4,}$/i,
   /\brendelesedhez\s+tartozo\s+szamla\b/i,
   /\b(?:invoice|receipt|nyugta)\b/i,
   /\brendeles.{0,50}\bnyugtaja\b/i,
@@ -80,11 +104,13 @@ const PAYMENT_PATTERNS = [
   /\bsikeres\s+fizetes\b/i,
   /\bfizetes\s+sikeres\b/i,
   /\bfizetes\s+megerositese\b/i,
+  /\butanvetes\s+fizetes\s+visszaigazolas\b/i,
   /\bpayment\s+(?:completed|successful|received)\b/i,
 ];
 
 const REFUND_PATTERNS = [
   /\bvisszaterites(?:ed)?\s+(?:elindult|megtortent|sikeres)\b/i,
+  /\brefund\s+request\b/i,
   /\brefund(?:ed)?\b/i,
 ];
 
@@ -123,9 +149,24 @@ function hasAny(patterns: RegExp[], value: string): boolean {
   return patterns.some((pattern) => pattern.test(value));
 }
 
+function isAdministrativeDocumentNoise(document: EmailDocumentV1, context: string): boolean {
+  const domain = document.sender.primaryDomain ?? '';
+  const governmentDomain = /(?:^|\.)gov\.hu$/i.test(domain);
+  const governmentMailboxLanguage = /\btarhelyedre\s+kuldemeny\s+erkezett\b/i.test(context)
+    && /\bdokumentum\s+tipusa\b/i.test(context);
+  const administrativeReceipt = /\belfogado\s+nyugta\b/i.test(context)
+    && /\b(?:nav|nemzeti\s+ado|hatosag|dokumentum)\b/i.test(context);
+  const commerceEvidence = /\b(?:rendeles|megrendeles|vasarlas|webshop|bankkartyas\s+fizetes|order\s+number)\b/i.test(context);
+  return !commerceEvidence && (governmentMailboxLanguage || (governmentDomain && administrativeReceipt));
+}
+
 function chooseEventType(document: EmailDocumentV1, subject: string, context: string, reasons: string[]): { eventType: BuyFlowEmailEventType; score: number } | null {
   const courierSender = COURIER_DOMAIN_TOKENS.some((token) => document.sender.primaryDomain?.includes(token));
 
+  if (isAdministrativeDocumentNoise(document, context)) {
+    reasons.push('generic_administrative_document_noise');
+    return null;
+  }
   if (hasAny(DELIVERY_PATTERNS, subject) || hasAny(DELIVERY_PATTERNS, context)) {
     reasons.push('generic_delivery_language');
     return { eventType: 'delivery', score: hasAny(DELIVERY_PATTERNS, subject) ? 5 : 4 };
@@ -137,6 +178,10 @@ function chooseEventType(document: EmailDocumentV1, subject: string, context: st
   if (hasAny(RETURN_PATTERNS, subject) || hasAny(RETURN_PATTERNS, context)) {
     reasons.push('generic_return_language');
     return { eventType: 'return', score: hasAny(RETURN_PATTERNS, subject) ? 5 : 4 };
+  }
+  if (hasAny(PAYMENT_ISSUE_PATTERNS, subject) || hasAny(PAYMENT_ISSUE_PATTERNS, context)) {
+    reasons.push('generic_payment_issue_language');
+    return { eventType: 'order_updated', score: hasAny(PAYMENT_ISSUE_PATTERNS, subject) ? 5 : 4 };
   }
   // A payment-specific subject outranks receipt language that may only appear in the body.
   if (hasAny(PAYMENT_PATTERNS, subject)) {
@@ -162,6 +207,10 @@ function chooseEventType(document: EmailDocumentV1, subject: string, context: st
   if (hasAny(ORDER_CONFIRMATION_PATTERNS, subject) || hasAny(ORDER_CONFIRMATION_PATTERNS, context)) {
     reasons.push('generic_order_confirmation_language');
     return { eventType: 'order_created', score: hasAny(ORDER_CONFIRMATION_PATTERNS, subject) ? 5 : 3 };
+  }
+  if (hasAny(ORDER_UPDATE_PATTERNS, subject) || hasAny(ORDER_UPDATE_PATTERNS, context)) {
+    reasons.push('generic_order_update_language');
+    return { eventType: 'order_updated', score: hasAny(ORDER_UPDATE_PATTERNS, subject) ? 5 : 4 };
   }
   return null;
 }
