@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { registerCuratedMailboxAuditV2 } from './api/curated-mailbox-audit-v2.js';
 import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
 
 const mobileDistDir = fileURLToPath(new URL('../../mobile/dist/', import.meta.url));
@@ -37,6 +38,7 @@ async function sendFile(reply: FastifyReply, filePath: string) {
 
 export async function registerWebPreview(app: FastifyInstance) {
   await registerRawEmailAuditRoutes(app);
+  await registerCuratedMailboxAuditV2(app);
 
   app.get('/app', async (_request, reply) => reply.redirect('/app/'));
 
@@ -60,8 +62,6 @@ export async function registerWebPreview(app: FastifyInstance) {
     try {
       return await sendFile(reply, candidate);
     } catch {
-      // The mobile app currently uses in-memory navigation, so unknown browser
-      // paths can safely fall back to the app shell. Missing asset files do not.
       if (extname(safeRelativePath)) {
         return reply.code(404).send();
       }
