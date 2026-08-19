@@ -42,10 +42,20 @@ test('EmailDocument v1 extracts generic GymBeam order signals', () => {
   assert.ok(document.signals.couriers.includes('Express One'));
   assert.equal(document.signals.paymentMethods[0], 'Utánvéttel');
   assert.match(document.signals.shippingMethods[0] ?? '', /Express One/);
+  assert.equal(document.signals.shippingAmounts[0]?.amount, 1190);
+  assert.equal(document.signals.shippingAmounts[0]?.currency, 'HUF');
+  assert.equal(document.signals.codAmounts[0]?.amount, 300);
+  assert.equal(document.signals.codAmounts[0]?.currency, 'HUF');
   assert.ok(document.sections.some((section) => section.type === 'order_summary'));
-  assert.deepEqual(document.signals.products.map(({ name, quantity }) => ({ name, quantity })), [
-    { name: 'Arginin A.K.G - GymBeam', quantity: 1 },
-    { name: 'Gurtni Camo - GymBeam', quantity: 1 },
+  assert.deepEqual(document.signals.products.map(({ name, quantity, unitPrice, totalPrice, currency }) => ({
+    name,
+    quantity,
+    unitPrice,
+    totalPrice,
+    currency,
+  })), [
+    { name: 'Arginin A.K.G - GymBeam', quantity: 1, unitPrice: 3790, totalPrice: 3790, currency: 'HUF' },
+    { name: 'Gurtni Camo - GymBeam', quantity: 1, unitPrice: 1890, totalPrice: 1890, currency: 'HUF' },
   ]);
 
   const generic = detectGenericCommerceV1(document);
@@ -54,6 +64,8 @@ test('EmailDocument v1 extracts generic GymBeam order signals', () => {
   assert.equal(generic.orderNumber, '3010410391');
   assert.equal(generic.carrier, 'Express One');
   assert.deepEqual(generic.total, { amount: 7170, currency: 'HUF' });
+  assert.deepEqual(generic.shippingAmount, { amount: 1190, currency: 'HUF' });
+  assert.deepEqual(generic.codAmount, { amount: 300, currency: 'HUF' });
   assert.equal(generic.products.length, 2);
 });
 
@@ -65,12 +77,21 @@ test('normalized deterministic pipeline falls back to generic-commerce-v1 shadow
   assert.equal(parsed.extraction.order_number, '3010410391');
   assert.equal(parsed.extraction.total, 7170);
   assert.equal(parsed.extraction.currency, 'HUF');
+  assert.equal(parsed.extraction.shipping_amount, 1190);
+  assert.equal(parsed.extraction.cod_amount, 300);
+  assert.equal(parsed.extraction.cod_currency, 'HUF');
   assert.equal(parsed.extraction.carrier, 'Express One');
   assert.equal(parsed.extraction.payment_status, 'cash_on_delivery');
   assert.equal(parsed.extraction.payment_method, 'Utánvéttel');
   assert.match(parsed.extraction.shipping_method ?? '', /Express One/);
-  assert.deepEqual(parsed.extraction.products.map(({ name, quantity }) => ({ name, quantity })), [
-    { name: 'Arginin A.K.G - GymBeam', quantity: 1 },
-    { name: 'Gurtni Camo - GymBeam', quantity: 1 },
+  assert.deepEqual(parsed.extraction.products.map(({ name, quantity, unit_price, total_price, currency }) => ({
+    name,
+    quantity,
+    unit_price,
+    total_price,
+    currency,
+  })), [
+    { name: 'Arginin A.K.G - GymBeam', quantity: 1, unit_price: 3790, total_price: 3790, currency: 'HUF' },
+    { name: 'Gurtni Camo - GymBeam', quantity: 1, unit_price: 1890, total_price: 1890, currency: 'HUF' },
   ]);
 });
