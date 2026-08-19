@@ -1,5 +1,5 @@
 import type { BuyFlowEmailEventType } from '../ai/openai-email-extractor.js';
-import type { EmailDocumentV1 } from './email-document.js';
+import type { EmailDocumentProductCandidate, EmailDocumentV1 } from './email-document.js';
 
 export const GENERIC_COMMERCE_SHADOW_VERSION = 'generic-commerce-v1-shadow';
 
@@ -12,6 +12,7 @@ export interface GenericCommerceShadowResult {
   carrier: string | null;
   paymentMethod: string | null;
   shippingMethod: string | null;
+  products: EmailDocumentProductCandidate[];
 }
 
 function normalizeText(value: string): string {
@@ -83,6 +84,10 @@ export function detectGenericCommerceV1(document: EmailDocumentV1): GenericComme
     score += 1;
     reasons.push('generic_total_label');
   }
+  if (document.signals.products.length > 0) {
+    score += 1;
+    reasons.push('generic_product_line_candidates');
+  }
 
   if (score < 5) return null;
 
@@ -97,5 +102,6 @@ export function detectGenericCommerceV1(document: EmailDocumentV1): GenericComme
     carrier: document.signals.couriers[0] ?? null,
     paymentMethod: document.signals.paymentMethods[0] ?? null,
     shippingMethod: document.signals.shippingMethods[0] ?? null,
+    products: document.signals.products,
   };
 }
