@@ -4,6 +4,7 @@ import { extname, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerCuratedMailboxAuditV2Frozen } from './api/curated-mailbox-audit-v2-frozen.js';
 import { registerCuratedMailboxAuditV3 } from './api/curated-mailbox-audit-v3.js';
+import { registerCuratedMailboxAuditV4 } from './api/curated-mailbox-audit-v4.js';
 import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
 
 const mobileDistDir = fileURLToPath(new URL('../../mobile/dist/', import.meta.url));
@@ -41,6 +42,7 @@ export async function registerWebPreview(app: FastifyInstance) {
   await registerRawEmailAuditRoutes(app);
   await registerCuratedMailboxAuditV2Frozen(app);
   await registerCuratedMailboxAuditV3(app);
+  await registerCuratedMailboxAuditV4(app);
 
   app.get('/app', async (_request, reply) => reply.redirect('/app/'));
 
