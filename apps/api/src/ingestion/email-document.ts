@@ -7,6 +7,12 @@ export interface EmailDocumentMoneyCandidate {
   raw: string;
 }
 
+export interface EmailDocumentProductCandidate {
+  name: string;
+  quantity: number;
+  raw: string;
+}
+
 export interface EmailDocumentSection {
   type: 'order_summary' | 'shipping' | 'payment' | 'invoice' | 'other';
   text: string;
@@ -38,6 +44,7 @@ export interface EmailDocumentV1 {
   signals: {
     orderNumbers: string[];
     amounts: EmailDocumentMoneyCandidate[];
+    products: EmailDocumentProductCandidate[];
     couriers: string[];
     paymentMethods: string[];
     shippingMethods: string[];
@@ -107,6 +114,27 @@ function amountCandidates(text: string): EmailDocumentMoneyCandidate[] {
     if (amount !== null) results.push({ amount, currency, raw: match[0] ?? '' });
   }
   return results.slice(0, 50);
+}
+
+function productCandidates(text: string): EmailDocumentProductCandidate[] {
+  const results: EmailDocumentProductCandidate[] = [];
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = line.match(/^\s*(\d{1,3})\s*[x×]\s+(.+?)\s*$/i);
+    if (!match?.[1] || !match[2]) continue;
+    const quantity = Number(match[1]);
+    const name = match[2].trim().replace(/\s{2,}/g, ' ');
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 100 || name.length < 2 || name.length > 240) continue;
+    if (/^(?:szallitas|shipping|utanvet|payment|fizetes|kedvezmeny|discount)\b/i.test(normalizeText(name))) continue;
+    results.push({ name, quantity, raw: line });
+  }
+  const deduped = new Map<string, EmailDocumentProductCandidate>();
+  for (const result of results) {
+    const key = `${result.quantity}:${normalizeText(result.name).toLowerCase()}`;
+    if (!deduped.has(key)) deduped.set(key, result);
+  }
+  return [...deduped.values()].slice(0, 50);
 }
 
 function extractLabelValue(text: string, labels: string[]): string[] {
@@ -193,6 +221,7 @@ export function buildEmailDocumentV1(email: NormalizedEmail): EmailDocumentV1 {
     signals: {
       orderNumbers,
       amounts: amountCandidates(normalized),
+      products: productCandidates(text),
       couriers: detectCouriers(normalized),
       paymentMethods: extractLabelValue(text, ['Fizetési mód', 'Fizetesi mod', 'Payment method']),
       shippingMethods: extractLabelValue(text, ['Szállítási mód', 'Szallitasi mod', 'Shipping method', 'Delivery method']),
