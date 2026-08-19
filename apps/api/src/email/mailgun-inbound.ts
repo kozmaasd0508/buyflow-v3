@@ -202,6 +202,31 @@ function isEmlAttachment(filename: string | undefined, mimetype: string | undefi
     || Boolean(filename?.toLowerCase().endsWith('.eml'));
 }
 
+function shadowExtractionSnapshot(structuredResult: Record<string, unknown>) {
+  const products = Array.isArray(structuredResult.products)
+    ? structuredResult.products.flatMap((value) => {
+      if (!value || typeof value !== 'object') return [];
+      const row = value as Record<string, unknown>;
+      const name = typeof row.name === 'string' ? row.name : null;
+      const quantity = typeof row.quantity === 'number' ? row.quantity : null;
+      return name ? [{ name, quantity }] : [];
+    })
+    : [];
+
+  return {
+    merchant: typeof structuredResult.merchant === 'string' ? structuredResult.merchant : null,
+    orderNumber: typeof structuredResult.order_number === 'string' ? structuredResult.order_number : null,
+    total: typeof structuredResult.total === 'number' ? structuredResult.total : null,
+    currency: typeof structuredResult.currency === 'string' ? structuredResult.currency : null,
+    carrier: typeof structuredResult.carrier === 'string' ? structuredResult.carrier : null,
+    paymentStatus: typeof structuredResult.payment_status === 'string' ? structuredResult.payment_status : null,
+    paymentMethod: typeof structuredResult.payment_method === 'string' ? structuredResult.payment_method : null,
+    shippingMethod: typeof structuredResult.shipping_method === 'string' ? structuredResult.shipping_method : null,
+    trackingNumber: typeof structuredResult.tracking_number === 'string' ? structuredResult.tracking_number : null,
+    products,
+  };
+}
+
 export async function registerMailgunInboundRoutes(app: FastifyInstance) {
   await app.register(async (scope) => {
     await scope.register(multipart, {
@@ -296,6 +321,7 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
       }
 
       const plan = planNormalizedInboundEmail({ email: effectiveEmail });
+      const extraction = shadowExtractionSnapshot(plan.structuredResult);
 
       request.log.info({
         provider: 'mailgun',
@@ -312,6 +338,7 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
         classification: plan.classification,
         parserVersion: plan.parserVersion,
         validationStatus: plan.validationStatus,
+        extraction,
       }, 'Mailgun inbound message evaluated by deterministic pipeline in shadow mode; no production writes performed');
 
       return reply.code(200).send({
@@ -327,6 +354,7 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
           classification: plan.classification,
           parserVersion: plan.parserVersion,
           validationStatus: plan.validationStatus,
+          extraction,
         },
       });
     });
