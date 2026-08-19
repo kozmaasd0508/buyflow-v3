@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
+import { simpleParser } from 'mailparser';
 import { planNormalizedInboundEmail } from '../pipeline/normalized-inbound-pipeline.js';
 import type { EmailAddress, EmailAttachmentMetadata, EmailHeader, NormalizedEmail } from './types.js';
 
@@ -26,6 +27,12 @@ export interface MailgunShadowEnvelope {
   sender: string;
   normalizedEmail: NormalizedEmail;
   attachments: EmailAttachmentMetadata[];
+}
+
+interface RawEmlAttachment {
+  filename: string;
+  contentType: string;
+  content: Buffer;
 }
 
 function safeEqualHex(left: string, right: string): boolean {
@@ -83,6 +90,67 @@ function normalizedReceivedAt(timestamp: string | undefined): string {
   return new Date().toISOString();
 }
 
+function parsedAddressList(value: { value?: Array<{ address?: string; name?: string }> } | undefined): EmailAddress[] {
+  return (value?.value ?? []).flatMap((entry) => {
+    const email = entry.address?.trim().toLowerCase();
+    if (!email) return [];
+    const name = entry.name?.trim();
+    return [{ email, ...(name ? { name } : {}) }];
+  });
+}
+
+function parsedHeaders(headers: Map<string, unknown>): EmailHeader[] {
+  return [...headers.entries()].flatMap(([name, value]) => {
+    if (!name.trim()) return [];
+    if (Array.isArray(value)) {
+      return value.map((item) => ({ name, value: String(item ?? '') }));
+    }
+    if (value instanceof Date) return [{ name, value: value.toISOString() }];
+    if (value && typeof value === 'object') return [{ name, value: JSON.stringify(value) }];
+    return [{ name, value: String(value ?? '') }];
+  });
+}
+
+export async function normalizeForwardedEml(
+  raw: Buffer,
+  fallbackProviderMessageId: string,
+): Promise<NormalizedEmail> {
+  const parsed = await simpleParser(raw, {
+    skipHtmlToText: true,
+    skipTextToHtml: true,
+  });
+
+  const attachments: EmailAttachmentMetadata[] = parsed.attachments.map((attachment, index) => ({
+    id: attachment.contentId || `eml-attachment-${index}`,
+    filename: attachment.filename || `attachment-${index}`,
+    contentType: attachment.contentType || 'application/octet-stream',
+    size: attachment.size,
+    ...(attachment.contentDisposition === 'inline' ? { isInline: true } : {}),
+    ...(attachment.cid ? { contentId: attachment.cid } : {}),
+  }));
+
+  const bodyHtml = typeof parsed.html === 'string' ? parsed.html : undefined;
+  const receivedAt = parsed.date && !Number.isNaN(parsed.date.getTime())
+    ? parsed.date.toISOString()
+    : new Date().toISOString();
+
+  return {
+    provider: 'mailgun',
+    providerMessageId: parsed.messageId?.trim() || fallbackProviderMessageId,
+    ...(parsed.subject ? { subject: parsed.subject } : {}),
+    from: parsedAddressList(parsed.from),
+    to: parsedAddressList(Array.isArray(parsed.to) ? parsed.to[0] : parsed.to),
+    cc: parsedAddressList(Array.isArray(parsed.cc) ? parsed.cc[0] : parsed.cc),
+    bcc: parsedAddressList(Array.isArray(parsed.bcc) ? parsed.bcc[0] : parsed.bcc),
+    receivedAt,
+    ...(parsed.text ? { snippet: parsed.text } : {}),
+    ...(bodyHtml ? { bodyHtml } : {}),
+    headers: parsedHeaders(parsed.headers as Map<string, unknown>),
+    folders: ['inbound', 'mailgun-shadow', 'eml-expanded'],
+    attachments,
+  };
+}
+
 export function normalizeMailgunInbound(
   fields: MailgunInboundFields,
   attachments: EmailAttachmentMetadata[] = [],
@@ -129,6 +197,11 @@ function bodyToFields(body: unknown): MailgunInboundFields {
   ) as MailgunInboundFields;
 }
 
+function isEmlAttachment(filename: string | undefined, mimetype: string | undefined): boolean {
+  return mimetype?.toLowerCase() === 'message/rfc822'
+    || Boolean(filename?.toLowerCase().endsWith('.eml'));
+}
+
 export async function registerMailgunInboundRoutes(app: FastifyInstance) {
   await app.register(async (scope) => {
     await scope.register(multipart, {
@@ -156,19 +229,31 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
 
       let fields: MailgunInboundFields = {};
       const attachments: EmailAttachmentMetadata[] = [];
+      const emlCandidates: RawEmlAttachment[] = [];
 
       if (request.isMultipart()) {
         let attachmentIndex = 0;
         for await (const part of request.parts()) {
           if (part.type === 'file') {
+            const chunks: Buffer[] = [];
             let size = 0;
-            for await (const chunk of part.file) size += Buffer.byteLength(chunk);
+            const captureEml = isEmlAttachment(part.filename, part.mimetype);
+            for await (const chunk of part.file) {
+              const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              size += buffer.length;
+              if (captureEml) chunks.push(buffer);
+            }
+            const filename = part.filename || `attachment-${attachmentIndex}`;
+            const contentType = part.mimetype || 'application/octet-stream';
             attachments.push({
               id: `mailgun-attachment-${attachmentIndex}`,
-              filename: part.filename || `attachment-${attachmentIndex}`,
-              contentType: part.mimetype || 'application/octet-stream',
+              filename,
+              contentType,
               size,
             });
+            if (captureEml) {
+              emlCandidates.push({ filename, contentType, content: Buffer.concat(chunks) });
+            }
             attachmentIndex += 1;
           } else {
             fields[part.fieldname as keyof MailgunInboundFields] = String(part.value ?? '');
@@ -189,15 +274,40 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
         return reply.code(400).send({ ok: false, error: 'invalid_payload' });
       }
 
-      const plan = planNormalizedInboundEmail({ email: envelope.normalizedEmail });
+      let effectiveEmail = envelope.normalizedEmail;
+      let emlExpanded = false;
+      let emlFilename: string | null = null;
+
+      if (emlCandidates.length > 0) {
+        try {
+          const candidate = emlCandidates[0]!;
+          effectiveEmail = await normalizeForwardedEml(
+            candidate.content,
+            envelope.normalizedEmail.providerMessageId,
+          );
+          emlExpanded = true;
+          emlFilename = candidate.filename;
+        } catch (error) {
+          request.log.warn({
+            errorType: error instanceof Error ? error.name : 'UnknownError',
+            filename: emlCandidates[0]?.filename,
+          }, 'Forwarded EML attachment could not be expanded; falling back to outer Mailgun message');
+        }
+      }
+
+      const plan = planNormalizedInboundEmail({ email: effectiveEmail });
 
       request.log.info({
         provider: 'mailgun',
         mode: 'shadow',
         recipient: envelope.recipient,
         sender: envelope.sender,
-        providerMessageId: envelope.normalizedEmail.providerMessageId,
+        effectiveSender: effectiveEmail.from[0]?.email ?? null,
+        providerMessageId: effectiveEmail.providerMessageId,
         attachmentCount: envelope.attachments.length,
+        effectiveAttachmentCount: effectiveEmail.attachments.length,
+        emlExpanded,
+        emlFilename,
         recognitionStatus: plan.status,
         classification: plan.classification,
         parserVersion: plan.parserVersion,
@@ -211,6 +321,7 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
         accepted: true,
         productionWrites: 0,
         attachmentCount: envelope.attachments.length,
+        emlExpanded,
         recognition: {
           status: plan.status,
           classification: plan.classification,
