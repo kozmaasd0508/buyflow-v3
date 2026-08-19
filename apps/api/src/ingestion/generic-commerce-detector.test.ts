@@ -2,8 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NormalizedEmail } from '../email/types.js';
 import { buildEmailDocumentV1 } from './email-document.js';
-import { detectGenericCommerceV1, GENERIC_COMMERCE_SHADOW_VERSION } from './generic-commerce-detector.js';
+import { detectGenericCommerceV1, detectGenericCommerceV2, GENERIC_COMMERCE_SHADOW_VERSION } from './generic-commerce-detector.js';
 import { parseNormalizedDeterministicEmail } from './normalized-email-deterministic.js';
+
+function email(input: { subject: string; sender: string; name?: string; snippet?: string }): NormalizedEmail {
+  return {
+    provider: 'mailgun',
+    providerMessageId: `<${Math.random()}@example.com>`,
+    subject: input.subject,
+    from: [{ email: input.sender, name: input.name ?? null }],
+    to: [{ email: 'buyer@example.com' }],
+    cc: [],
+    bcc: [],
+    receivedAt: '2026-08-19T20:00:00.000Z',
+    snippet: input.snippet ?? input.subject,
+    folders: ['inbound', 'mailgun-shadow'],
+    attachments: [],
+  };
+}
 
 function gymBeamEmail(): NormalizedEmail {
   return {
@@ -69,7 +85,7 @@ test('EmailDocument v1 extracts generic GymBeam order signals', () => {
   assert.equal(generic.products.length, 2);
 });
 
-test('normalized deterministic pipeline falls back to generic-commerce-v1 shadow with structured fields', () => {
+test('normalized deterministic pipeline falls back to generic-commerce-v2 shadow with structured fields', () => {
   const parsed = parseNormalizedDeterministicEmail(gymBeamEmail());
   assert.ok(parsed);
   assert.equal(parsed.parserVersion, GENERIC_COMMERCE_SHADOW_VERSION);
@@ -94,4 +110,34 @@ test('normalized deterministic pipeline falls back to generic-commerce-v1 shadow
     { name: 'Arginin A.K.G - GymBeam', quantity: 1, unit_price: 3790, total_price: 3790, currency: 'HUF' },
     { name: 'Gurtni Camo - GymBeam', quantity: 1, unit_price: 1890, total_price: 1890, currency: 'HUF' },
   ]);
+});
+
+test('generic-commerce-v2 recognizes strong lifecycle subjects missed by v1 audit', () => {
+  const cases: Array<[NormalizedEmail, string]> = [
+    [email({ subject: 'Csomag kézbesítés ma – ETA és módosítás', sender: 'ertesites@expressone.hu' }), 'shipment'],
+    [email({ subject: 'Küldemény feldolgozása megkezdődött', sender: 'ertesites@expressone.hu' }), 'shipment'],
+    [email({ subject: 'Google Play-rendelés (2026. aug. 16.) nyugtája', sender: 'googleplay-noreply@google.com' }), 'invoice_or_receipt'],
+    [email({ subject: 'Parfümök online a Limone.hu-n - Automata megrendelés visszaigazolás - 98691-106627', sender: 'info@limone.hu' }), 'order_created'],
+    [email({ subject: 'FNP Products - Sikeres rendelés megerősítése 🥳', sender: 'info@fnp.hu' }), 'order_created'],
+    [email({ subject: 'Elkészült a rendelésedhez tartozó számla', sender: 'info@jatekbolt.hu' }), 'invoice_or_receipt'],
+  ];
+
+  for (const [message, expectedEvent] of cases) {
+    const result = detectGenericCommerceV2(buildEmailDocumentV1(message));
+    assert.ok(result, message.subject ?? 'missing subject');
+    assert.equal(result.eventType, expectedEvent, message.subject ?? 'missing subject');
+  }
+});
+
+test('generic-commerce-v2 keeps representative promotional noise unmatched', () => {
+  const noise = [
+    email({ subject: '🎀 FINAL SUMMER SALE: akár –35% VASÁRNAP ÉJFÉLIG!🎀', sender: 'store+85580841304@g.shopifyemail.com' }),
+    email({ subject: 'Hoztunk egy hűsítő kedvezményt ❄️', sender: 'meki@m.mcdonalds.hu' }),
+    email({ subject: '📸 200 db 10x15 cm-es Prémium Fénykép 11800 Ft', sender: 'info@xxlfoto.hu' }),
+    email({ subject: 'Elégedett volt Kartonshop.hu webáruházban történt vásárlással?', sender: 'megbizhatobolt@arukereso.hu' }),
+  ];
+
+  for (const message of noise) {
+    assert.equal(detectGenericCommerceV2(buildEmailDocumentV1(message)), null, message.subject ?? 'missing subject');
+  }
 });
