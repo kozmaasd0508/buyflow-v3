@@ -120,6 +120,7 @@ test('generic-commerce-v2 recognizes strong lifecycle subjects missed by v1 audi
     [email({ subject: 'Parfümök online a Limone.hu-n - Automata megrendelés visszaigazolás - 98691-106627', sender: 'info@limone.hu' }), 'order_created'],
     [email({ subject: 'FNP Products - Sikeres rendelés megerősítése 🥳', sender: 'info@fnp.hu' }), 'order_created'],
     [email({ subject: 'Elkészült a rendelésedhez tartozó számla', sender: 'info@jatekbolt.hu' }), 'invoice_or_receipt'],
+    [email({ subject: 'Szidibox Karton Kft. Webáruház - Rendelés SO-2024-30411', sender: 'szidibox@gmail.com' }), 'order_created'],
   ];
 
   for (const [message, expectedEvent] of cases) {
@@ -135,6 +136,7 @@ test('generic-commerce-v2 keeps representative promotional noise unmatched', () 
     email({ subject: 'Hoztunk egy hűsítő kedvezményt ❄️', sender: 'meki@m.mcdonalds.hu' }),
     email({ subject: '📸 200 db 10x15 cm-es Prémium Fénykép 11800 Ft', sender: 'info@xxlfoto.hu' }),
     email({ subject: 'Elégedett volt Kartonshop.hu webáruházban történt vásárlással?', sender: 'megbizhatobolt@arukereso.hu' }),
+    email({ subject: 'Rendelés most 20% kedvezménnyel!', sender: 'newsletter@example-shop.hu' }),
   ];
 
   for (const message of noise) {
