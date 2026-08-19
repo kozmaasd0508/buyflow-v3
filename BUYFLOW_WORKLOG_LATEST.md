@@ -9,3 +9,5 @@ Next implementation step: wire provider-specific lifecycle adapters into the nor
 Status: branch is isolated and safe for implementation; no production path has been promoted or enabled.
 
 Do not modify v4 ground truth while implementing v6; v4 remains regression-only evidence.
+
+Implementation targets from v4: FOXPOST arrival/warehouse/return, MPL/Posta posted/out-for-delivery/pickup, Packeta accepted-for-transport, Gate order/shipment, explicit payment_failed, support/reply guardrail.
