@@ -12,14 +12,16 @@
 
 ## CURRENT SHADOW AUDIT STATE — 2026-08-20
 
-- Shadow branch head: `6399522a6a806ebc39db8cbbb9cf80078e064c9b` (PR #188).
-- Frozen Gmail v5 holdout: 50 commerce + 50 hard noise, locked before tuning.
-- First blind run: TP 40 / FN 10 / FP 3 / TN 47; precision 93%, recall 80%.
-- PR #188 added only provider/domain + explicit lifecycle-evidence rules for the 10 FN cases and three provider-scoped non-commerce guards.
-- Verification: 864/864 API tests PASS; API typecheck PASS.
-- Live Render v5 regression after merge: TP 50 / FN 0 / FP 0 / TN 50; precision 100%, recall 100%, 100/100 coverage.
+- Shadow branch head: `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce` (PR #191).
+- Frozen Gmail v6 holdout: 50 commerce + 50 hard noise, excluding the prior v4/v5 sets and locked before v6 audit code or tuning.
+- PR #190 added the Gmail-label-locked `/audit-v6` harness; detector/parser runtime was unchanged.
+- First v6 blind run: TP 42 / FN 8 / FP 0 / TN 50; precision 100%, recall 84%, 100/100 coverage.
+- The eight false negatives were two Express One payment receipts, three Google Play subscription lifecycle notices, two MPL/Posta out-for-delivery notices (one via Allegro mail relay), and one Shopbuilder shipped notice.
+- PR #191 added only exact sender/domain + explicit subject/body lifecycle-evidence rules, plus positive and fail-closed negative regression tests. Broad generic matching and the frozen v6 fixtures were unchanged.
+- Live Render v6 regression on `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce`: TP 50 / FN 0 / FP 0 / TN 50; precision 100%, recall 100%, 100/100 coverage.
 - Audit remained read-only: 0 production writes and 0 AI calls.
-- The v5 set is now regression evidence, not a fresh blind set. The next generalization decision requires a new frozen holdout.
+- GitHub Actions did not publish checks for PRs #190/#191; live Render commit verification and the read-only audit are the recorded runtime proof.
+- The v4, v5 and v6 sets are regression evidence, not fresh blind sets. Any further generalization claim requires another newly frozen holdout.
 
 ## RESUME CONTRACT
 
