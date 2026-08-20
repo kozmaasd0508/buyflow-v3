@@ -8,6 +8,7 @@ import { registerCuratedMailboxAuditV4 } from './api/curated-mailbox-audit-v4.js
 import { registerCuratedMailboxAuditV5 } from './api/curated-mailbox-audit-v5.js';
 import { registerCuratedMailboxAuditV6 } from './api/curated-mailbox-audit-v6.js';
 import { registerCuratedMailboxAuditV7 } from './api/curated-mailbox-audit-v7.js';
+import { registerFieldAccuracyAuditV1 } from './api/field-accuracy-audit-v1.js';
 import { registerLifecycleCorrelationAuditV1 } from './api/lifecycle-correlation-audit-v1.js';
 import { registerLifecycleCorrelationAuditV11 } from './api/lifecycle-correlation-audit-v1-1.js';
 import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
@@ -51,6 +52,7 @@ export async function registerWebPreview(app: FastifyInstance) {
   await registerCuratedMailboxAuditV5(app);
   await registerCuratedMailboxAuditV6(app);
   await registerCuratedMailboxAuditV7(app);
+  await registerFieldAccuracyAuditV1(app);
   await registerLifecycleCorrelationAuditV1(app);
   await registerLifecycleCorrelationAuditV11(app);
 
