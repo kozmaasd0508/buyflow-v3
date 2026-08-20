@@ -16,7 +16,7 @@ This is intentionally conservative, but it means a webshop order email and a car
 
 ## Frozen blind-set design
 
-Use 20–30 real purchases selected before correlation changes are made. For each purchase, collect all available lifecycle emails such as:
+Use 20 real purchases selected before correlation changes are made. For each purchase, collect all available lifecycle emails such as:
 
 - order_created
 - order_updated
@@ -27,6 +27,14 @@ Use 20–30 real purchases selected before correlation changes are made. For eac
 - return
 - refund
 - cancellation when present
+
+Ground truth is stored only in Gmail labels:
+
+- `BuyFlow Lifecycle Audit/v1/P01` … `P20`
+- `BuyFlow Lifecycle Audit/v1/Holdout`
+- `BuyFlow Lifecycle Audit/v1/Noise`
+
+No sender, subject, order number, tracking number, or other blind-set metadata is copied into repository fixtures.
 
 Include difficult cases:
 
@@ -75,17 +83,17 @@ If more than one purchase remains plausible, decision must be REVIEW. No automat
 
 ## Metrics
 
-Report at least:
+The `/audit-lifecycle-v1` route reports:
 
 - correlation precision
 - correlation recall
-- exact purchase timeline accuracy
 - merge errors
 - split errors
 - orphan lifecycle events
 - REVIEW count
-- cross-provider match accuracy
-- lifecycle ordering correctness
+- groups without an `order_created` anchor
+- hard-noise false positives
+- assignment reason for every message
 
 ## Initial acceptance gate
 
@@ -93,16 +101,23 @@ Report at least:
 - merge errors: 0
 - unsafe auto-merges: 0
 - split errors: 0, or all unresolved splits explicitly REVIEW
+- hard-noise false positives: 0
 - production writes: 0
 - AI calls: 0
 
 Recall is reported separately. Do not improve recall by weakening precision safeguards.
 
-## Implementation order
+## Implemented shadow flow
 
-1. Add a shadow-only correlation audit model and result types.
-2. Build deterministic candidate scoring/reason reporting without writes.
-3. Add frozen fixtures / mailbox ground truth for 20–30 purchases.
-4. Add `/audit-lifecycle-v1` and a shadow API endpoint.
-5. Run first blind audit before changing correlation rules.
-6. Fix only evidenced failure classes, then rerun as regression.
+1. Seed purchase groups only from `order_created` + exact order number.
+2. Link cross-provider events by exact normalized order number when unique.
+3. Learn tracking numbers only from already safely linked purchase evidence.
+4. Link later carrier lifecycle messages by exact tracking number.
+5. Keep ambiguous order/tracking matches in REVIEW.
+6. Keep lifecycle-only events without a safe anchor in REVIEW.
+7. Scan the frozen Gmail labels from `/audit-lifecycle-v1` without production writes or AI calls.
+8. Compare the engine assignment against the Gmail P01–P20 ground truth and report merge/split/orphan errors.
+
+## Next step
+
+Freeze and label 20 real purchase histories in Gmail, add hard noise, then run the first blind correlation audit before changing the correlation rules again.
