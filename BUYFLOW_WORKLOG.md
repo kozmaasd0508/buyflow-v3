@@ -2,6 +2,18 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-20 — Frozen v6 blind holdout and scoped provider fixes
+
+- Gmail v6 holdout frozen before audit implementation: 50 commerce + 50 hard noise; prior v4/v5 labels excluded.
+- PR #190 added the label-locked `/audit-v6` harness without changing the detector/parser engine.
+- First blind result: 100/100 coverage, TP 42 / FN 8 / FP 0 / TN 50, precision 100%, recall 84%, 0 production writes, 0 AI calls.
+- The eight misses were limited to Express One receipts, Google Play subscription lifecycle, MPL/Posta out-for-delivery (direct and Allegro relay), and Shopbuilder shipping.
+- PR #191 added five provider-scoped rules requiring exact sender/domain plus explicit lifecycle evidence, with positive and fail-closed negative tests. Frozen fixtures and broad generic matching were unchanged.
+- Exact merged shadow head and live Render commit: `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce`.
+- Live v6 regression: **TP 50 / FN 0 / FP 0 / TN 50**, precision 100%, recall 100%, 100/100 coverage, 0 writes, 0 AI.
+- GitHub Actions did not publish checks for PRs #190/#191; exact Render commit verification plus the read-only live audit are recorded.
+- The v6 set is now regression evidence; use a newly frozen holdout for any next unbiased generalization gate.
+
 ## 2026-08-20 — Frozen v5 blind holdout and scoped provider fixes
 
 - PR #187 added the Gmail-label-locked `/audit-v5` harness for a frozen 50 commerce + 50 hard-noise set; the detector was untouched before the first run.
