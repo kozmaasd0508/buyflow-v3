@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { NormalizedEmail } from '../email/types.js';
 import { parseProviderLifecycleV6, PROVIDER_LIFECYCLE_V6_VERSION } from './provider-lifecycle-v6-adapter.js';
 
-function email(subject: string, from: string): NormalizedEmail {
+function email(subject: string, from: string, snippet = subject): NormalizedEmail {
   return {
     provider: 'nylas',
     providerMessageId: `${from}:${subject}`,
@@ -13,7 +13,7 @@ function email(subject: string, from: string): NormalizedEmail {
     cc: [],
     bcc: [],
     receivedAt: '2026-08-19T20:00:00.000Z',
-    snippet: subject,
+    snippet,
     folders: ['inbox'],
     attachments: [],
   };
@@ -73,7 +73,29 @@ test('failed payment wording cannot become payment_completed', () => {
   assert.equal(parsed?.extraction.payment_status, 'failed');
 });
 
-test('marketing and support-style subjects do not match provider v6', () => {
+test('trusted support reply with order anchor and explicit delivery delay is shipment evidence', () => {
+  const parsed = parseProviderLifecycleV6(email(
+    'Re: 605855685055000013605231 - 3010206178 - [FKN-HKKTL-917]',
+    'info@support.gymbeam.hu',
+    'Kedves Vásárló, csomagja kézbesítésében logisztikai okok miatt egy napos csúszás várható az Express One szolgáltatásában.',
+  ));
+
+  assert.equal(parsed?.parserVersion, PROVIDER_LIFECYCLE_V6_VERSION);
+  assert.equal(parsed?.extraction.event_type, 'shipment');
+  assert.equal(parsed?.shipmentPhase, 'in_transit');
+  assert.equal(parsed?.extraction.carrier, 'Express One');
+});
+
+test('support reply exception requires domain, order anchor and explicit lifecycle evidence together', () => {
+  const subject = 'Re: 605855685055000013605231 - 3010206178 - [FKN-HKKTL-917]';
+  const delay = 'Csomagja kézbesítésében logisztikai okok miatt egy napos csúszás várható az Express One szolgáltatásában.';
+
+  assert.equal(parseProviderLifecycleV6(email(subject, 'support@example.com', delay)), null);
+  assert.equal(parseProviderLifecycleV6(email('Re: Általános kérdés', 'info@support.gymbeam.hu', delay)), null);
+  assert.equal(parseProviderLifecycleV6(email(subject, 'info@support.gymbeam.hu', 'Köszönjük megkeresését, hamarosan válaszolunk.')), null);
+});
+
+test('marketing and unrelated support-style subjects do not match provider v6', () => {
   assert.equal(parseProviderLifecycleV6(email('Ingyenes szállítás MINDENRE 🚚', 'message@message.sinsay.com')), null);
   assert.equal(parseProviderLifecycleV6(email('Re: 605855685055000013605231 - 3010206178 - [FKN-HKKTL-917]', 'info@support.gymbeam.hu')), null);
   assert.equal(parseProviderLifecycleV6(email('Változás Általános Szerződési Feltételeinkben', 'info@hirek.packeta.hu')), null);
