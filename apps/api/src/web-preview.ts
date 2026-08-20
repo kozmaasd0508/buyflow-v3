@@ -7,6 +7,7 @@ import { registerCuratedMailboxAuditV3 } from './api/curated-mailbox-audit-v3.js
 import { registerCuratedMailboxAuditV4 } from './api/curated-mailbox-audit-v4.js';
 import { registerCuratedMailboxAuditV5 } from './api/curated-mailbox-audit-v5.js';
 import { registerCuratedMailboxAuditV6 } from './api/curated-mailbox-audit-v6.js';
+import { registerCuratedMailboxAuditV7 } from './api/curated-mailbox-audit-v7.js';
 import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
 
 const mobileDistDir = fileURLToPath(new URL('../../mobile/dist/', import.meta.url));
@@ -47,6 +48,7 @@ export async function registerWebPreview(app: FastifyInstance) {
   await registerCuratedMailboxAuditV4(app);
   await registerCuratedMailboxAuditV5(app);
   await registerCuratedMailboxAuditV6(app);
+  await registerCuratedMailboxAuditV7(app);
 
   app.get('/app', async (_request, reply) => reply.redirect('/app/'));
 
