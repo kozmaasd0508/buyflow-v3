@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NormalizedEmail } from '../email/types.js';
-import { parseProviderLifecycleV6, PROVIDER_LIFECYCLE_V6_VERSION } from './provider-lifecycle-v6-adapter.js';
+import {
+  isProviderLifecycleV6Noise,
+  parseProviderLifecycleV6,
+  PROVIDER_LIFECYCLE_V6_VERSION,
+} from './provider-lifecycle-v6-adapter.js';
 
 function email(subject: string, from: string, snippet = subject): NormalizedEmail {
   return {
@@ -99,4 +103,73 @@ test('marketing and unrelated support-style subjects do not match provider v6', 
   assert.equal(parseProviderLifecycleV6(email('Ingyenes szállítás MINDENRE 🚚', 'message@message.sinsay.com')), null);
   assert.equal(parseProviderLifecycleV6(email('Re: 605855685055000013605231 - 3010206178 - [FKN-HKKTL-917]', 'info@support.gymbeam.hu')), null);
   assert.equal(parseProviderLifecycleV6(email('Változás Általános Szerződési Feltételeinkben', 'info@hirek.packeta.hu')), null);
+});
+
+
+test('v5 blind commerce misses require trusted provider and explicit lifecycle evidence', () => {
+  const cases: Array<[string, string, string, string]> = [
+    ['Csomag átvételének fontossága – automatikus értesítés', 'info@limone.hu', 'A megrendelt csomag hamarosan átadásra kerül a futárszolgálatnak.', 'shipment'],
+    ['[famafutar.hu] Értesítés csomag érkezéséről', 'noreply@famafutar.hu', 'Partnerünk küldeményét futárunk a mai napon kézbesítésre átvette.', 'shipment'],
+    ['Re: KomPhone.hu webshop - Megrendelés érkezett - 36236-103374', 'info@komphone.hu', 'Rendelését a mai napon átadjuk a futárnak.', 'shipment'],
+    ['#1000891562 számú rendeléshez tartozó számla🧾', 'noreply@fizz.hu', 'Legutóbbi megrendelésedhez tartozó számlát csatoltuk.', 'invoice_or_receipt'],
+    ['Értesítés a csomag feladásáról', 'noreply@gyujtoszallitas.hu', 'Feladó: KomPhone. Csomagazonosító: 243961932650381013605231', 'shipment'],
+    ['KomPhone.hu webshop - Fizetés sikeresen lezárult', 'info@komphone.hu', 'A fizetés sikeresen lezárult!', 'payment_completed'],
+    ['Megrendelés folyamatban', 'ertesitesek@allegro.com', 'Átvesszük a megrendelésedet az eladótól. Vásárlásod részletei.', 'order_created'],
+    ['Visszaigazolt rendelés - Rendelési azonosító: PE7968048', 'pepita@pepita.hu', 'Logisztikai központunk visszaigazolta a rendelésedet.', 'order_updated'],
+    ['Sikertelen kézbesítés', 'kozponti.ertesites@posta.hu', 'Sikertelen kézbesítési értesítő. Kézbesítőnk nem járt sikerrel csomagjának kézbesítésével.', 'shipment'],
+    ['Megrendelés visszaigazolása: 2026/8420/001', 'e.varkonyi@utteurope.com', 'Webáruházunkban leadott megrendelését ezennel visszaigazoljuk.', 'order_created'],
+  ];
+
+  for (const [subject, sender, snippet, eventType] of cases) {
+    const parsed = parseProviderLifecycleV6(email(subject, sender, snippet));
+    assert.equal(parsed?.parserVersion, PROVIDER_LIFECYCLE_V6_VERSION, subject);
+    assert.equal(parsed?.extraction.event_type, eventType, subject);
+  }
+});
+
+test('v5 blind provider rules fail closed on wrong domains or missing body evidence', () => {
+  assert.equal(parseProviderLifecycleV6(email(
+    'Csomag átvételének fontossága – automatikus értesítés',
+    'newsletter@example.com',
+    'A megrendelt csomag hamarosan átadásra kerül a futárszolgálatnak.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Re: KomPhone.hu webshop - Megrendelés érkezett - 36236-103374',
+    'info@komphone.hu',
+    'Köszönjük megkeresését.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Megrendelés folyamatban',
+    'ertesitesek@allegro.com',
+    'Nézd meg az aktuális ajánlatainkat.',
+  )), null);
+});
+
+test('v5 blind false positives are provider-scoped non-commerce noise', () => {
+  assert.equal(isProviderLifecycleV6Noise(email(
+    'SimplePay - Sikeres fizetés - https://www.intrum.hu/ados-ugyfeleknek',
+    'noreply@simplepay.hu',
+    'Az intrum.hu/ados-ugyfeleknek elfogadóhelyen a tranzakciót sikeresen rendezte.',
+  )), true);
+  assert.equal(isProviderLifecycleV6Noise(email(
+    'Sikeres fizetés visszaigazolás',
+    'kozponti.ertesites@posta.hu',
+    'Az OTP Mobilalkalmazásból kezdeményezett bankkártyás csekkfizetési tranzakciója sikeres volt.',
+  )), true);
+  assert.equal(isProviderLifecycleV6Noise(email(
+    'Rendelés azonosító: 1000891562',
+    'autoreply@fizz.hu',
+    'Köszönjük, hogy felvetted velünk a kapcsolatot. Megkeresésedet sikeresen rögzítettük.',
+  )), true);
+
+  assert.equal(isProviderLifecycleV6Noise(email(
+    'SimplePay - Sikeres fizetés',
+    'noreply@simplepay.hu',
+    'Webshop rendelés fizetése sikeres.',
+  )), false);
+  assert.equal(isProviderLifecycleV6Noise(email(
+    'Rendelés azonosító: 1000891562',
+    'orders@example.com',
+    'Megkeresésedet sikeresen rögzítettük.',
+  )), false);
 });

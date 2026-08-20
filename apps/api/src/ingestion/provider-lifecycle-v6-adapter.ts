@@ -26,6 +26,36 @@ function domainMatches(domain: string, expected: string): boolean {
   return domain === expected || domain.endsWith(`.${expected}`);
 }
 
+export function isProviderLifecycleV6Noise(email: NormalizedEmail): boolean {
+  const domain = primaryDomain(email);
+  const subject = normalize(email.subject ?? '');
+  const body = normalize(email.snippet ?? '');
+
+  // Payments to debt collectors and utility/postal bill payments are not
+  // consumer purchase lifecycle events, even when the PSP says "successful".
+  if (
+    domainMatches(domain, 'simplepay.hu')
+    && /\bsikeres fizetes\b/.test(subject)
+    && /\bintrum\.hu\b/.test(`${subject} ${body}`)
+  ) return true;
+
+  if (
+    domainMatches(domain, 'posta.hu')
+    && /^sikeres fizetes visszaigazolas$/.test(subject)
+    && /\bcsekkfizetesi tranzakcio\w*\b/.test(body)
+  ) return true;
+
+  // A support acknowledgement can mention an order ID without representing a
+  // new order or lifecycle transition.
+  if (
+    domainMatches(domain, 'fizz.hu')
+    && /^rendeles azonosito:\s*\d+\b/.test(subject)
+    && /\bmegkeresesedet sikeresen rogzitettuk\b/.test(body)
+  ) return true;
+
+  return false;
+}
+
 function baseExtraction(email: NormalizedEmail, eventType: EmailExtraction['event_type']): EmailExtraction {
   const document = buildEmailDocumentV1(email);
   return {
@@ -103,6 +133,108 @@ export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicC
       shipmentPhase: 'in_transit',
       carrier: /express one/.test(body) ? 'Express One' : undefined,
     });
+  }
+
+  // Fresh v5 blind-holdout fixes. Each rule requires a trusted sender domain
+  // plus provider-specific subject/body evidence; broad generic matching stays
+  // unchanged.
+  if (
+    domainMatches(domain, 'limone.hu')
+    && /^csomag atvetelenek fontossaga - automatikus ertesites$/.test(subject)
+    && /\bmegrendelt csomag\b/.test(body)
+    && /\bfutarszolgalatnak\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_limone_handoff', {
+      shipmentPhase: 'shipped',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'famafutar.hu')
+    && /^\[famafutar\.hu\] ertesites csomag erkezeserol$/.test(subject)
+    && /\bkezbesitesre atvette\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_famafutar_out_for_delivery', {
+      shipmentPhase: 'out_for_delivery',
+      carrier: 'FamaFutár',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'komphone.hu')
+    && /^re:\s*komphone\.hu webshop - megrendeles erkezett - \d+-\d+$/.test(subject)
+    && /\brendeleset\b/.test(body)
+    && /\batadjuk a futarnak\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_komphone_support_handoff', {
+      shipmentPhase: 'shipped',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'fizz.hu')
+    && /^#\d+ szamu rendeleshez tartozo szamla/.test(subject)
+    && /\bmegrendelesedhez tartozo\b/.test(body)
+    && /\bszamlat\b/.test(body)
+  ) {
+    return result(email, 'invoice_or_receipt', 'provider_v6_fizz_invoice');
+  }
+
+  if (
+    domainMatches(domain, 'gyujtoszallitas.hu')
+    && /^ertesites a csomag feladasarol$/.test(subject)
+    && /\bcsomagazonosito\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_gyujtoszallitas_shipped', {
+      shipmentPhase: 'shipped',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'komphone.hu')
+    && /^komphone\.hu webshop - fizetes sikeresen lezarult$/.test(subject)
+    && /\bfizetes sikeresen lezarult\b/.test(body)
+  ) {
+    return result(email, 'payment_completed', 'provider_v6_komphone_payment_completed', {
+      paymentStatus: 'paid',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'allegro.com')
+    && /^megrendeles folyamatban$/.test(subject)
+    && /\bvasarlasod\b/.test(body)
+    && /\bmegrendelesedet\b/.test(body)
+  ) {
+    return result(email, 'order_created', 'provider_v6_allegro_order_in_progress');
+  }
+
+  if (
+    domainMatches(domain, 'pepita.hu')
+    && /^visszaigazolt rendeles - rendelesi azonosito:\s*pe\d+\b/.test(subject)
+    && /\blogisztikai kozpontunk visszaigazolta a rendelesedet\b/.test(body)
+  ) {
+    return result(email, 'order_updated', 'provider_v6_pepita_order_confirmed');
+  }
+
+  if (
+    domainMatches(domain, 'posta.hu')
+    && /^sikertelen kezbesites$/.test(subject)
+    && /\bsikertelen kezbesitesi ertesito\b/.test(body)
+    && /\bcsomagjanak kezbesitesevel\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_mpl_delivery_failed', {
+      carrier: 'MPL',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'utteurope.com')
+    && /^megrendeles visszaigazolasa:\s*\d{4}\/\d+\/\d+$/.test(subject)
+    && /\bwebaruhazunkban leadott\b/.test(body)
+    && /\bmegrendeleset ezennel\b/.test(body)
+  ) {
+    return result(email, 'order_created', 'provider_v6_utt_order_confirmed');
   }
 
   if (domainMatches(domain, 'foxpost.hu')) {
