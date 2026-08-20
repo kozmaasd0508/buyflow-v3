@@ -43,6 +43,28 @@ test('links carrier events by exact tracking after a safe order-number bridge', 
   assert.equal(result.assignments.find((a) => a.sourceEmailId === 'carrier-delivery')?.reason, 'exact_tracking_number');
 });
 
+test('canonicalizes cosmetic merchant domain suffixes without relaxing order identity', () => {
+  const result = correlateLifecycleShadow([
+    row({ sourceEmailId: 'a', eventType: 'order_created', merchant: 'gyerekjatekbolt.com', senderDomain: 'gyerekjatekbolt.com', orderNumber: '535574' }),
+    row({ sourceEmailId: 'b', eventType: 'order_created', merchant: 'gyerekjatekbolt', senderDomain: 'gyerekjatekbolt.com', orderNumber: '535574' }),
+  ]);
+
+  assert.equal(result.groups.length, 1);
+  assert.deepEqual(result.groups[0]?.sourceEmailIds.sort(), ['a', 'b']);
+});
+
+test('canonicalizes known same-storefront aliases only when the exact order number matches', () => {
+  const result = correlateLifecycleShadow([
+    row({ sourceEmailId: 'forpro', eventType: 'order_created', merchant: 'Forproshop', senderDomain: 'sport8.hu', orderNumber: '21690' }),
+    row({ sourceEmailId: 'sport8', eventType: 'order_created', merchant: 'Sport8', senderDomain: 'sport8.hu', orderNumber: '21690' }),
+    row({ sourceEmailId: 'different-order', eventType: 'order_created', merchant: 'Sport8', senderDomain: 'sport8.hu', orderNumber: '21691' }),
+  ]);
+
+  assert.equal(result.groups.length, 2);
+  assert.equal(result.assignments.find((a) => a.sourceEmailId === 'sport8')?.purchaseKey, result.assignments.find((a) => a.sourceEmailId === 'forpro')?.purchaseKey);
+  assert.notEqual(result.assignments.find((a) => a.sourceEmailId === 'different-order')?.purchaseKey, result.assignments.find((a) => a.sourceEmailId === 'forpro')?.purchaseKey);
+});
+
 test('never auto-merges ambiguous order numbers', () => {
   const result = correlateLifecycleShadow([
     row({ sourceEmailId: 'a', eventType: 'order_created', senderDomain: 'shop-a.hu', merchant: 'A', orderNumber: '12345' }),
