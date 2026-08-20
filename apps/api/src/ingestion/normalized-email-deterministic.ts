@@ -57,6 +57,61 @@ export function normalizedEmailToDeterministicInput(
   };
 }
 
+function authoredReplyPrefix(email: NormalizedEmail): string {
+  const body = normalizedEmailToDeterministicInput(email).bodyText;
+  const lines = body.split(/\r?\n/);
+  const kept: string[] = [];
+
+  for (const line of lines) {
+    const normalized = normalizeText(line).trim();
+    if (
+      /^>/.test(line.trim())
+      || /-----\s*original message\s*-----/i.test(line)
+      || /^(?:from|felado)\s*:/i.test(normalized)
+      || /\bezt irta\s*\(idopont\s*:/i.test(normalized)
+      || /\bwrote\s*:\s*$/i.test(normalized)
+    ) {
+      break;
+    }
+    kept.push(line);
+  }
+
+  return kept.join('\n').trim();
+}
+
+function isReplyOrForwardSubject(subject: string | null | undefined): boolean {
+  return /^\s*(?:(?:re|fw|fwd)\s*:\s*)+/i.test(subject ?? '');
+}
+
+function hasExplicitNewOrderEvidence(text: string): boolean {
+  const normalized = normalizeText(text);
+  return [
+    /\bmegrendeles\s+visszaigazolasa\b/i,
+    /\b(?:rendeles|megrendeles).{0,50}\b(?:letrejott|rogzitettuk|elfogadtuk)\b/i,
+    /\b(?:koszonjuk|thank you).{0,80}\b(?:rendelesed|megrendelesed|your order)\b/i,
+    /\b(?:order confirmation|your order is confirmed|we received your order)\b/i,
+    /\b(?:megrendelesi|rendelesi)\s+(?:szam|azonosito)\s*[:#-]\s*[a-z0-9][a-z0-9./_-]{3,30}\b/i,
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function guardReplyThreadOrderCreation(
+  email: NormalizedEmail,
+  parsed: DeterministicCommerceParseResult,
+): DeterministicCommerceParseResult | null {
+  if (parsed.extraction.event_type !== 'order_created') return parsed;
+  if (!isReplyOrForwardSubject(email.subject)) return parsed;
+
+  const authoredPrefix = authoredReplyPrefix(email);
+  if (authoredPrefix && hasExplicitNewOrderEvidence(authoredPrefix)) {
+    return {
+      ...parsed,
+      reasons: [...new Set([...parsed.reasons, 'reply_thread_explicit_new_order_evidence'])],
+    };
+  }
+
+  return null;
+}
+
 function genericShadowExtraction(email: NormalizedEmail): DeterministicCommerceParseResult | null {
   const document = buildEmailDocumentV1(email);
   const generic = detectGenericCommerceV1(document);
@@ -128,7 +183,12 @@ export function parseNormalizedDeterministicEmail(
   if (isProviderLifecycleV6Noise(email)) return null;
 
   const providerLifecycle = parseProviderLifecycleV6(email);
-  if (providerLifecycle) return enrichProviderFieldsV1(email, providerLifecycle);
+  if (providerLifecycle) {
+    return guardReplyThreadOrderCreation(
+      email,
+      enrichProviderFieldsV1(email, providerLifecycle),
+    );
+  }
 
   const deterministic = parseDeterministicCommerceEmail(
     normalizedEmailToDeterministicInput(email),
@@ -137,5 +197,9 @@ export function parseNormalizedDeterministicEmail(
     ?? genericShadowExtraction(email)
     ?? parseGenericCommerceV5SubjectFallback(email);
 
-  return parsed ? enrichProviderFieldsV1(email, parsed) : null;
+  if (!parsed) return null;
+  return guardReplyThreadOrderCreation(
+    email,
+    enrichProviderFieldsV1(email, parsed),
+  );
 }

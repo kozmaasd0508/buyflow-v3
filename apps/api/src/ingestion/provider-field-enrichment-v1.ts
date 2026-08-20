@@ -26,11 +26,50 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+function parseAmount(value: string): number | null {
+  const normalized = value
+    .replace(/[\u00a0\s.]/g, '')
+    .replace(',', '.');
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function normalizeCurrency(value: string): string | null {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'FT' || normalized === 'HUF') return 'HUF';
+  if (normalized === '€' || normalized === 'EUR') return 'EUR';
+  if (normalized === '$' || normalized === 'USD') return 'USD';
+  return null;
+}
+
+function explicitTotal(text: string): { amount: number; currency: string } | null {
+  const match = text.match(/(?:^|\n)\s*(?:összesen|fizetendő|fizetendő összeg|grand total|order total|total)\s*:?\s*([0-9][0-9\s.,\u00a0]*)\s*(Ft|HUF|EUR|€|USD|\$)\b/im);
+  if (!match?.[1] || !match[2]) return null;
+  const amount = parseAmount(match[1]);
+  const currency = normalizeCurrency(match[2]);
+  return amount !== null && currency ? { amount, currency } : null;
+}
+
+function hasExplicitPaidEvidence(subject: string, text: string): boolean {
+  const source = `${subject}\n${text}`;
+  return /\b(?:sikeres fizet[eé]s|sikeresen fizett[eé]l|sikeresen rendezte|fizet[eé]s megerős[ií]t[eé]se|payment successful|payment confirmed|successfully paid)\b/i.test(source);
+}
+
+function hasExplicitCodEvidence(text: string): boolean {
+  return /(?:fizet[eé]si\s+m[oó]d|payment\s+method)\s*:?\s*(?:ut[aá]nv[eé]t(?:el|tel|es)?|cash on delivery|cod)\b/i.test(text);
+}
+
+function genericOrderNumber(subject: string, text: string): string | null {
+  return firstMatch(`${subject}\n${text}`, [
+    /(?:megrendel[eé]s|rendel[eé]s)\s+(?:visszaigazol[aá]sa|visszaigazol[aá]s)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{4,30})\b/i,
+    /(?:megrendel[eé]s|rendel[eé]s)(?:i)?\s+(?:sz[aá]m|azonos[ií]t[oó])\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{4,30})\b/i,
+  ]);
+}
+
 /**
  * Conservative field-only enrichment for already-recognized commerce events.
  * This layer never changes event_type and never creates a match on its own.
- * It only fills fields that are currently null, and only behind trusted
- * provider domains plus provider-specific identifier shapes.
+ * It only fills or repairs fields when there is explicit source evidence.
  */
 export function enrichProviderFieldsV1(
   email: NormalizedEmail,
@@ -45,18 +84,25 @@ export function enrichProviderFieldsV1(
 
   if (domainMatches(senderDomain, 'dpd.hu')) {
     if (!extraction.carrier) extraction.carrier = 'DPD';
-    if (!extraction.tracking_number) {
-      extraction.tracking_number = firstMatch(subject, [
+    const currentTracking = extraction.tracking_number?.trim() ?? '';
+    const validCurrentTracking = /^\d{10,18}$/.test(currentTracking);
+    if (!validCurrentTracking) {
+      const candidate = firstMatch(subject, [
         /(?:Értesítés|Ertesites)\s+(\d{10,18})\b/i,
       ]);
+      if (candidate) {
+        extraction.tracking_number = candidate;
+        reasons.push('field_enrichment_v1_dpd_tracking_repaired');
+      }
     }
-    if (extraction.tracking_number) reasons.push('field_enrichment_v1_dpd_tracking');
+    if (extraction.tracking_number && validCurrentTracking) reasons.push('field_enrichment_v1_dpd_tracking');
   }
 
   if (domainMatches(senderDomain, 'gls-hungary.com')) {
     if (!extraction.carrier) extraction.carrier = 'GLS';
     if (!extraction.tracking_number) {
-      extraction.tracking_number = firstMatch(subject, [
+      extraction.tracking_number = firstMatch(text, [
+        /\b(?:CSOMAGSZ[AÁ]M|parcel\s+number)\s*:?\s*(\d{9,14})\b/i,
         /\b(\d{9,14})\s+sz[aá]m[uú]\s+csomag\b/i,
         /\bGLS\s+(\d{9,14})\b/i,
       ]);
@@ -94,6 +140,36 @@ export function enrichProviderFieldsV1(
       ]);
     }
     if (extraction.order_number) reasons.push('field_enrichment_v1_epic_order_number');
+  }
+
+  if (extraction.event_type === 'order_created' && !extraction.order_number) {
+    const candidate = genericOrderNumber(subject, body);
+    if (candidate) {
+      extraction.order_number = candidate;
+      reasons.push('field_enrichment_v1_explicit_order_number');
+    }
+  }
+
+  if ((extraction.event_type === 'order_created' || extraction.event_type === 'invoice_or_receipt')
+      && (extraction.total == null || !extraction.currency)) {
+    const total = explicitTotal(body);
+    if (total) {
+      if (extraction.total == null) extraction.total = total.amount;
+      if (!extraction.currency) extraction.currency = total.currency;
+      reasons.push('field_enrichment_v1_explicit_total');
+    }
+  }
+
+  if (extraction.event_type === 'payment_completed' && !extraction.payment_status
+      && hasExplicitPaidEvidence(subject, body)) {
+    extraction.payment_status = 'paid';
+    reasons.push('field_enrichment_v1_explicit_paid_status');
+  }
+
+  if (extraction.event_type === 'order_created' && !extraction.payment_status
+      && hasExplicitCodEvidence(body)) {
+    extraction.payment_status = 'cash_on_delivery';
+    reasons.push('field_enrichment_v1_explicit_cod_status');
   }
 
   return {
