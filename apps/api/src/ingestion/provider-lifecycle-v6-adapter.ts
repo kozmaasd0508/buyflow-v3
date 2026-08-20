@@ -81,7 +81,7 @@ export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicC
   const body = normalize(email.snippet ?? '');
 
   // Semantic safety: a failed transaction is never a completed payment.
-  if (/\b(?:tranzakcio|fizetes)\b.{0,60}\b(?:sikertelen|elutasitott|meghiúsult|meghiusult)\b/.test(subject)) {
+  if (/\b(?:tranzakcio|fizetes)\b.{0,60}\b(?:sikertelen|elutasitott|meghiusult)\b/.test(subject)) {
     return result(email, 'order_updated', 'provider_v6_payment_failed', {
       paymentStatus: 'failed',
     });
@@ -96,8 +96,8 @@ export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicC
     domainMatches(domain, 'gymbeam.hu')
     && /^re:\s*/.test(subject)
     && /\b\d{8,}\b/.test(subject)
-    && /\b(?:csomag|kezbesites)\b/.test(body)
-    && /\b(?:csuszas|keses|kesik|kesedelmes|logisztikai ok)\b/.test(body)
+    && /\b(?:csomag\w*|kezbesites\w*)\b/.test(body)
+    && /\b(?:csuszas\w*|keses\w*|kesik|kesedelmes\w*|logisztikai ok)\b/.test(body)
   ) {
     return result(email, 'shipment', 'provider_v6_support_delivery_delay', {
       shipmentPhase: 'in_transit',
