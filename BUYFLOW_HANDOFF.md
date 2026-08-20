@@ -2,13 +2,24 @@
 
 > Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile with current GitHub/Supabase/Render state before changing runtime code.
 
-**Last updated:** 2026-08-17 Europe/Budapest  
+**Last updated:** 2026-08-20 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current released main:** `73fe594d281df31307547585f6204f34d92a4039` — Generic Lifecycle v1.2  
 **Current release candidate:** PR #156 — Generic Lifecycle v1.3 multi-observation shadow  
 **Final temporary audit:** PR #157 — closed without merge  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
+
+## CURRENT SHADOW AUDIT STATE — 2026-08-20
+
+- Shadow branch head: `6399522a6a806ebc39db8cbbb9cf80078e064c9b` (PR #188).
+- Frozen Gmail v5 holdout: 50 commerce + 50 hard noise, locked before tuning.
+- First blind run: TP 40 / FN 10 / FP 3 / TN 47; precision 93%, recall 80%.
+- PR #188 added only provider/domain + explicit lifecycle-evidence rules for the 10 FN cases and three provider-scoped non-commerce guards.
+- Verification: 864/864 API tests PASS; API typecheck PASS.
+- Live Render v5 regression after merge: TP 50 / FN 0 / FP 0 / TN 50; precision 100%, recall 100%, 100/100 coverage.
+- Audit remained read-only: 0 production writes and 0 AI calls.
+- The v5 set is now regression evidence, not a fresh blind set. The next generalization decision requires a new frozen holdout.
 
 ## RESUME CONTRACT
 

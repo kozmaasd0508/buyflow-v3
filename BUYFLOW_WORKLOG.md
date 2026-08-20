@@ -2,6 +2,16 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-20 — Frozen v5 blind holdout and scoped provider fixes
+
+- PR #187 added the Gmail-label-locked `/audit-v5` harness for a frozen 50 commerce + 50 hard-noise set; the detector was untouched before the first run.
+- First blind result: 100/100 coverage, TP 40 / FN 10 / FP 3 / TN 47, precision 93%, recall 80%, 0 production writes, 0 AI calls.
+- PR #188 added ten sender-domain + explicit lifecycle-evidence rules and three provider-scoped non-commerce guards. Broad generic matching and the frozen fixtures were unchanged.
+- Local verification: API typecheck PASS and **864/864 tests PASS**.
+- Exact merged shadow head: `6399522a6a806ebc39db8cbbb9cf80078e064c9b`.
+- Live Render regression: **TP 50 / FN 0 / FP 0 / TN 50**, precision 100%, recall 100%, 100/100 coverage, 0 writes, 0 AI.
+- The v5 set is now a regression set; use a new frozen holdout for the next unbiased generalization gate.
+
 ## 2026-08-17 — Unknown Merchant generic order v1.4
 
 - PR #147 hardens `generic-order-confirmation-v1.4` from the real v1.3 mailbox findings: explicit contract/order-offer non-acceptance now blocks generic order creation, and recognized reply/forward quoted history cannot create a second `ORDER_CREATED` candidate.
