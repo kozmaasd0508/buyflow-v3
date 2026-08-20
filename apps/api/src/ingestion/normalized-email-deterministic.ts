@@ -15,6 +15,7 @@ import {
   isProviderLifecycleV6Noise,
   parseProviderLifecycleV6,
 } from './provider-lifecycle-v6-adapter.js';
+import { enrichProviderFieldsV1 } from './provider-field-enrichment-v1.js';
 
 const DEFAULT_BODY_MAX_CHARS = 80_000;
 
@@ -123,28 +124,18 @@ function genericShadowExtraction(email: NormalizedEmail): DeterministicCommerceP
 export function parseNormalizedDeterministicEmail(
   email: NormalizedEmail,
 ): DeterministicCommerceParseResult | null {
-  // Courier pickup bookings made by the mailbox owner are outbound logistics
-  // service events, not lifecycle evidence for a consumer purchase. Apply the
-  // same exclusion used by the inbox relevance filter before any parser can
-  // reinterpret generic "order" or courier language as BuyFlow commerce.
   if (isExpressOneOutboundPickupNoise(email)) return null;
-
-  // Provider-scoped non-commerce guards run before broad parsers so payment
-  // confirmations for debt/bill settlement and support acknowledgements cannot
-  // be reinterpreted as purchase lifecycle events.
   if (isProviderLifecycleV6Noise(email)) return null;
 
-  // Provider-scoped v6 rules run before broad deterministic/generic parsing.
-  // They exist for lifecycle states that are safe only when both sender-domain
-  // and exact provider wording agree, and for semantic corrections such as
-  // failed payments that must never become payment_completed.
   const providerLifecycle = parseProviderLifecycleV6(email);
-  if (providerLifecycle) return providerLifecycle;
+  if (providerLifecycle) return enrichProviderFieldsV1(email, providerLifecycle);
 
   const deterministic = parseDeterministicCommerceEmail(
     normalizedEmailToDeterministicInput(email),
   );
-  return deterministic
+  const parsed = deterministic
     ?? genericShadowExtraction(email)
     ?? parseGenericCommerceV5SubjectFallback(email);
+
+  return parsed ? enrichProviderFieldsV1(email, parsed) : null;
 }
