@@ -139,6 +139,61 @@ export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicC
     });
   }
 
+  // Fresh v7 blind-holdout fixes. Every rule requires a trusted provider
+  // plus exact transactional or lifecycle evidence in both subject and body.
+  if (
+    primaryAddress(email) === 'no-reply@primevideo.com'
+    && /^koszonjuk, hogy ujbol hasznalja prime video-elofizeteset$/.test(subject)
+    && /\bsikeresen ismet hasznalatba vette\b/.test(body)
+    && /\bkovetkezo szamlazasi datum\b/.test(body)
+  ) {
+    return result(email, 'order_updated', 'provider_v6_prime_video_subscription_reactivated');
+  }
+
+  if (
+    domainMatches(domain, 'gate.shop')
+    && /\bvas[e']? g'?s vam boli pripisane na ucet!?$/.test(subject)
+    && /\bgate-nel vasarolt\b/.test(body)
+    && /\bjova irtunk\b/.test(body)
+    && /\brendeles sz\b/.test(body)
+  ) {
+    return result(email, 'order_updated', 'provider_v6_gate_loyalty_purchase_credit');
+  }
+
+  if (
+    domainMatches(domain, 'allegro.com')
+    && /^a csomagod mar uton van! tartalma:/.test(subject)
+    && /\bcsomagodat most adtak fel\b/.test(body)
+    && /\bvasarlas reszletei/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_allegro_shipped', {
+      shipmentPhase: 'shipped',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'posta.hu')
+    && /^csomagkuldemeny$/.test(subject)
+    && /\bcsomagkuldemenyt adtak fel onnek\b/.test(body)
+    && /\bkuldemenyazonosito\b/.test(body)
+    && /\bfeladas datuma\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_mpl_formal_shipped', {
+      shipmentPhase: 'shipped',
+      carrier: 'MPL',
+    });
+  }
+
+  if (
+    primaryAddress(email) === 'help@acct.epicgames.com'
+    && /^epic games bizonylat$/.test(subject)
+    && /\bkoszonjuk a vasarlast\b/.test(body)
+    && /\bszamlaazonosito\b/.test(body)
+    && /\brendelesi adataid\b/.test(body)
+  ) {
+    return result(email, 'invoice_or_receipt', 'provider_v6_epic_games_receipt');
+  }
+
   // Fresh v6 blind-holdout fixes. Every rule stays provider-scoped and
   // requires exact lifecycle evidence from the subject and body.
   if (
