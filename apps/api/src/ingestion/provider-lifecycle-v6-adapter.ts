@@ -78,11 +78,30 @@ function result(
 export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicCommerceParseResult | null {
   const domain = primaryDomain(email);
   const subject = normalize(email.subject ?? '');
+  const body = normalize(email.snippet ?? '');
 
   // Semantic safety: a failed transaction is never a completed payment.
   if (/\b(?:tranzakcio|fizetes)\b.{0,60}\b(?:sikertelen|elutasitott|meghiúsult|meghiusult)\b/.test(subject)) {
     return result(email, 'order_updated', 'provider_v6_payment_failed', {
       paymentStatus: 'failed',
+    });
+  }
+
+  // Narrow support/reply exception. A reply is lifecycle evidence only when all
+  // three anchors are present: trusted GymBeam support domain, an order-like
+  // numeric identifier in the subject, and explicit delivery-delay wording in
+  // the message body. This path is shipment-only and remains shadow-gated, so
+  // it must never be used as evidence to create a new purchase.
+  if (
+    domainMatches(domain, 'gymbeam.hu')
+    && /^re:\s*/.test(subject)
+    && /\b\d{8,}\b/.test(subject)
+    && /\b(?:csomag|kezbesites)\b/.test(body)
+    && /\b(?:csuszas|keses|kesik|kesedelmes|logisztikai ok)\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_support_delivery_delay', {
+      shipmentPhase: 'in_transit',
+      carrier: /express one/.test(body) ? 'Express One' : undefined,
     });
   }
 
