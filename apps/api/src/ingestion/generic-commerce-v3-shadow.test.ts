@@ -42,7 +42,7 @@ const positiveCases = [
     sender: 'info@pelda-shop.hu',
     subject: 'Megrendelési szám: #12247833',
     body: 'Megrendelésed köszönjük, a csomagod átadtuk a DPD futárszolgálatnak.',
-    event: 'shipment',
+    event: 'order_created',
   },
   {
     sender: 'noreply@gls-hungary.com',
