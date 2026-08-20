@@ -11,8 +11,9 @@ const NOISE_LABEL='BuyFlow Field Blind/v1 Noise';
 const FIELDS=['eventType','merchant','orderNumber','total','currency','carrier','trackingNumber','paymentStatus','products'] as const;
 type FieldName=typeof FIELDS[number];
 
-function norm(v: unknown){return typeof v==='string'?v.normalize('NFKC').trim().toLowerCase():v;}
-function same(a:unknown,b:unknown){return JSON.stringify(norm(a))===JSON.stringify(norm(b));}
+function normString(v:string|null|undefined){return (v??'').normalize('NFKC').trim().toLowerCase();}
+function normValue(v:unknown){return typeof v==='string'?normString(v):v;}
+function same(a:unknown,b:unknown){return JSON.stringify(normValue(a))===JSON.stringify(normValue(b));}
 function text(email:NormalizedEmail){return `${email.subject??''}\n${email.snippet??''}\n${email.bodyHtml??''}`;}
 function actualFields(plan:ReturnType<typeof planNormalizedInboundEmail>){const r=plan.validatedResult??plan.structuredResult;return {eventType:r.event_type??plan.classification??null,merchant:r.merchant??r.merchant_legal_name??null,orderNumber:r.order_number??null,total:r.total??null,currency:r.currency??null,carrier:r.carrier??null,trackingNumber:r.tracking_number??null,paymentStatus:r.payment_status??null,products:Array.isArray(r.products)?r.products:[]} as Record<FieldName,unknown>;}
 function evaluate(expected:BlindExpectation<unknown>,actual:unknown){if(expected.state==='not_asserted')return{asserted:false,pass:true,expected:'not_asserted',actual};if(expected.state==='null')return{asserted:true,pass:actual==null||(Array.isArray(actual)&&actual.length===0),expected:null,actual};return{asserted:true,pass:same(expected.value,actual),expected:expected.value,actual};}
@@ -29,7 +30,7 @@ async function run(userId:string){
   const [commerce,noise]=await Promise.all([loadLabel(provider,COMMERCE_LABEL),loadLabel(provider,NOISE_LABEL)]);
 
   const commerceRows=FIELD_BLIND_GROUND_TRUTH_V1.map(truth=>{
-    const email=commerce.find(m=>norm(m.from[0]?.email??'')===norm(truth.selector.sender)&&norm(m.subject??'')===norm(truth.selector.subject)&&(!truth.selector.contains||norm(text(m)).includes(norm(truth.selector.contains) as string)));
+    const email=commerce.find(m=>normString(m.from[0]?.email)===normString(truth.selector.sender)&&normString(m.subject)===normString(truth.selector.subject)&&(!truth.selector.contains||normString(text(m)).includes(normString(truth.selector.contains))));
     if(!email)return{id:truth.id,found:false,recognized:false,criticalMismatch:true,fields:[]};
     const plan=planNormalizedInboundEmail({email});const actual=actualFields(plan);
     const fields=FIELDS.map(name=>({name,...evaluate(truth[name] as BlindExpectation<unknown>,actual[name])}));
