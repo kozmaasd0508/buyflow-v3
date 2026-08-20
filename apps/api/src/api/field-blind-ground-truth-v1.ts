@@ -32,23 +32,21 @@ export const FIELD_BLIND_GROUND_TRUTH_V1: FieldBlindTruthV1[] = [
   { id:'expressone-103365121467000013605231', selector:{sender:'ertesites@expressone.hu',subject:'Küldemény kézbesítve – kérdőív',contains:'103365121467000013605231'}, eventType:value('delivery'),merchant:NA,orderNumber:NA,total:NA,currency:NA,carrier:value('Express One'),trackingNumber:value('103365121467000013605231'),paymentStatus:NA,products:NA },
   { id:'sinsay-15709862007', selector:{sender:'noreply@sinsay.com',subject:'A 15709862007 rendelés megerősítése.'}, eventType:value('order_created'),merchant:NA,orderNumber:value('15709862007'),total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
   { id:'utt-order-2026-8420-002', selector:{sender:'e.varkonyi@utteurope.com',subject:'Megrendelés visszaigazolása: 2026/8420/002'}, eventType:value('order_created'),merchant:NA,orderNumber:value('2026/8420/002'),total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
+  { id:'utt-invoice-H26-17796', selector:{sender:'utteurope@szamlabefogadas.hu',subject:'számla | invoice',contains:'H26-17796'}, eventType:value('invoice_or_receipt'),merchant:value('UTT Europe Kft.'),orderNumber:NA,total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
   { id:'ipon-3091626', selector:{sender:'info@ipon.hu',subject:'iPon - Rendelés #3091626'}, eventType:value('order_created'),merchant:value('iPon Computer'),orderNumber:value('3091626'),total:value(257429),currency:value('HUF'),carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
   { id:'szidibox-SO-2024-27135', selector:{sender:'szidibox@gmail.com',subject:'Szidibox Karton Kft. Webáruház - Rendelés SO-2024-27135'}, eventType:value('order_created'),merchant:value('Szidibox Karton Kft. Webáruház'),orderNumber:value('SO-2024-27135'),total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:value('cash_on_delivery'),products:NA },
   { id:'jatektenger-26083-131173', selector:{sender:'webrendeles@jatektenger.hu',subject:'Játéktenger - Megrendelés státusz módosítás'}, eventType:value('shipment'),merchant:value('Játéktenger'),orderNumber:value('26083-131173'),total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
+  { id:'playersroom-invoice-E2026-49-0930-0313', selector:{sender:'webszamla@playersroom.hu',subject:'E-számla érkezett ( E2026/49/0930/0313 )'}, eventType:value('invoice_or_receipt'),merchant:NA,orderNumber:NA,total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
   { id:'googleplay-2026-04-24', selector:{sender:'googleplay-noreply@google.com',subject:'Google Play-rendelés (2026. ápr. 24.) nyugtája'}, eventType:value('invoice_or_receipt'),merchant:NA,orderNumber:NA,total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:NA,products:NA },
   { id:'mcdonalds-2026-04-03', selector:{sender:'DoNotReply@mcdonalds.com',subject:'Fizetés megerősítése',contains:'03/04/26 12:04'}, eventType:value('payment_completed'),merchant:NA,orderNumber:NA,total:NA,currency:NA,carrier:NA,trackingNumber:NA,paymentStatus:value('paid'),products:NA },
 ];
 
-export const FIELD_BLIND_NOISE_V1 = [
-  { sender:'ugyfelszolgalat@dijnet.hu', subject:'Díjnet számla érkezett' },
-  { sender:'info@fogyasztobarat.hu', subject:'Fogyasztó Barát - Kiegyenlítetlen számla 1. értesítő' },
-  { sender:'info@fogyasztobarat.hu', subject:'Fogyasztó Barát - Kiegyenlítetlen számla 2. értesítő' },
-  { sender:'info@fogyasztobarat.hu', subject:'Fogyasztó Barát - Számla' },
-  { sender:'info@ipon.hu', subject:'Re: iPon - Rendelés #3091626' },
-  { sender:'noreply@simplepay.hu', subject:'SimplePay - Sikeres fizetés - https://www.netfone.hu' },
-] as const;
-
 export const FIELD_BLIND_META_V1 = {
-  version:'field-blind-holdout-v1', frozenBeforeFirstEngineRun:true, parserOutputUsedAsTruth:false,
-  source:'gmail-human-selected-unseen-messages', policy:'no parser changes until first result is recorded',
+  version:'field-blind-holdout-v1',
+  frozenBeforeFirstEngineRun:true,
+  parserOutputUsedAsTruth:false,
+  source:'gmail-human-selected-unseen-messages',
+  commerceLabel:'BuyFlow Field Blind/v1 Commerce',
+  noiseLabel:'BuyFlow Field Blind/v1 Noise',
+  policy:'no parser changes until first result is recorded',
 } as const;
