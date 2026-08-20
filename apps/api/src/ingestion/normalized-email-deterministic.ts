@@ -11,7 +11,10 @@ import {
   GENERIC_COMMERCE_SHADOW_VERSION,
 } from './generic-commerce-detector.js';
 import { parseGenericCommerceV5SubjectFallback } from './generic-commerce-v5-subject-fallback.js';
-import { parseProviderLifecycleV6 } from './provider-lifecycle-v6-adapter.js';
+import {
+  isProviderLifecycleV6Noise,
+  parseProviderLifecycleV6,
+} from './provider-lifecycle-v6-adapter.js';
 
 const DEFAULT_BODY_MAX_CHARS = 80_000;
 
@@ -125,6 +128,11 @@ export function parseNormalizedDeterministicEmail(
   // same exclusion used by the inbox relevance filter before any parser can
   // reinterpret generic "order" or courier language as BuyFlow commerce.
   if (isExpressOneOutboundPickupNoise(email)) return null;
+
+  // Provider-scoped non-commerce guards run before broad parsers so payment
+  // confirmations for debt/bill settlement and support acknowledgements cannot
+  // be reinterpreted as purchase lifecycle events.
+  if (isProviderLifecycleV6Noise(email)) return null;
 
   // Provider-scoped v6 rules run before broad deterministic/generic parsing.
   // They exist for lifecycle states that are safe only when both sender-domain
