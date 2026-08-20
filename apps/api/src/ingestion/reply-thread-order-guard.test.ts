@@ -13,7 +13,6 @@ function email(overrides: Partial<NormalizedEmail> = {}): NormalizedEmail {
     cc: [],
     bcc: [],
     receivedAt: '2026-04-22T19:10:04.000Z',
-    bodyHtml: null,
     snippet: '',
     folders: ['inbox'],
     attachments: [],
