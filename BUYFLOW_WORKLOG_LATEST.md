@@ -1,25 +1,44 @@
 # BuyFlow worklog latest
 
-Provider adapters v6 branch created for FOXPOST, MPL/Posta, Packeta and Gate lifecycle coverage plus explicit payment_failed semantics and support/reply safety guardrails. This branch starts from codex/mailgun-inbound-shadow-v3 and keeps v4 holdout frozen for regression only.
+Current shadow branch: `codex/mailgun-inbound-shadow-v3`
 
-Planned v6 release gate: precision 100%, recall >=95%, false positives 0, semantic-critical errors 0.
+Current shadow head: `d9c6a05c217836e1759dd43002d2114ce9b78c1b`
 
-Next implementation step: wire provider-specific lifecycle adapters into the normalized inbound pipeline before generic fallback, with strict sender-domain gating and no production writes during validation.
+CI for this exact head is green (`CI` run #799, conclusion: success).
 
-Status: branch is isolated and safe for implementation; no production path has been promoted or enabled.
+## Blind audit progression
 
-Do not modify v4 ground truth while implementing v6; v4 remains regression-only evidence.
+- v5 first blind run: TP 40 / FN 10 / FP 3 / TN 47; precision 93%, recall 80%.
+- PR #188 added narrowly scoped provider fixes only; broad generic matching stayed unchanged.
+- v5 live regression reached 100/100 and was documented by PR #189.
+- v6 first blind run: TP 42 / FN 8 / FP 0 / TN 50; precision 100%, recall 84%.
+- PR #191 added narrowly scoped provider fixes only.
+- v6 live regression reached 100/100 and was documented by PR #192.
+- v7 fresh blind audit was added by PR #193 using separate Gmail Commerce/Noise labels and a metadata-free repository fixture design.
+- v7 first blind run: TP 45 / FN 5 / FP 0 / TN 50; precision 100%, recall 90%.
+- PR #194 added scoped fixes for exactly those five false negatives: Prime Video subscription reactivation, Gate loyalty credit, Allegro shipped notice, MPL/Posta formal Csomagküldemény, and Epic Games receipt.
+- PR #194 is merged into the shadow branch.
 
-Implementation targets from v4: FOXPOST arrival/warehouse/return, MPL/Posta posted/out-for-delivery/pickup, Packeta accepted-for-transport, Gate order/shipment, explicit payment_failed, support/reply guardrail.
+## Safety status
 
-No generic keyword broadening is allowed unless backed by a noise regression case.
+- provider fixes remain `provider-lifecycle-v6-shadow`.
+- broad generic detector is not loosened for blind-audit fixes.
+- frozen v5/v6/v7 ground truth is not edited after the first blind run.
+- audit paths perform 0 production writes and 0 AI calls.
+- automatic production promotion remains blocked.
 
-Provider adapters must require an exact trusted sender domain plus lifecycle evidence; generic promotion remains fallback-only.
+## Next gate
 
-Semantic invariant: failed/declined/unsuccessful payment evidence must never map to payment_completed.
+Run `/audit-v7` on the live dev deployment after `d9c6a05c217836e1759dd43002d2114ce9b78c1b` is deployed.
 
-Support/reply messages without deterministic purchase lifecycle evidence stay review/ignored; no sender-only promotion.
+Expected regression gate before moving on:
+- 100/100 matched
+- precision 100%
+- recall 100%
+- FP 0
+- FN 0
+- 0 semantic-critical classification errors
+- 0 production writes
+- 0 AI calls
 
-Implementation should preserve 0 production writes and 0 AI calls until regression and fresh holdout gates pass.
-
-Branch tip is ready for code changes.
+Do not create new detector rules from v7 unless the regression still exposes a real error. If v7 is 100/100, document the live regression and then freeze a completely fresh v8 blind holdout before any further parser changes.
