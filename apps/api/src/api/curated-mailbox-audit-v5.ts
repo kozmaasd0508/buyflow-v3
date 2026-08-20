@@ -205,7 +205,7 @@ async function runAuditV5(userId: string) {
   let cursor: string | undefined;
   do {
     const page = await provider.searchMessages({
-      query: 'newer_than:365d -in:spam -in:trash',
+      query: 'label:"BuyFlow EML Audit/v5 Holdout" -in:spam -in:trash',
       limit: PAGE_SIZE,
       ...(cursor ? { cursor } : {}),
     });
