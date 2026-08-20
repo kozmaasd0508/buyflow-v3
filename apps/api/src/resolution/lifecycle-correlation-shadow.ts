@@ -58,10 +58,25 @@ function normalizeText(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
 
+function canonicalMerchant(value: string | null | undefined): string {
+  let merchant = normalizeText(value)
+    .replace(/^www\./, '')
+    .replace(/\.(hu|com|eu|net|shop)$/i, '')
+    .trim();
+
+  // Same storefront/merchant identity observed in real lifecycle data.
+  // This mapping only canonicalizes identity; an exact normalized order
+  // number is still required before any automatic correlation occurs.
+  if (merchant === 'sport8') merchant = 'forproshop';
+
+  return merchant;
+}
+
 function anchorKey(evidence: CorrelationEvidence): string | null {
   const order = normalizeId(evidence.orderNumber);
   if (!evidence.userId || !order) return null;
-  return `${evidence.userId}::${normalizeText(evidence.merchant) || normalizeText(evidence.senderDomain)}::${order}`;
+  const merchant = canonicalMerchant(evidence.merchant) || canonicalMerchant(evidence.senderDomain);
+  return `${evidence.userId}::${merchant}::${order}`;
 }
 
 export function correlateLifecycleShadow(
@@ -78,16 +93,23 @@ export function correlateLifecycleShadow(
   for (const anchor of orderAnchors) {
     const key = anchorKey(anchor);
     if (!key) continue;
-    groups.set(key, {
-      purchaseKey: key,
-      userId: anchor.userId,
-      merchant: anchor.merchant,
-      orderNumber: anchor.orderNumber!.trim(),
-      sourceEmailIds: [anchor.sourceEmailId],
-    });
+    const existing = groups.get(key);
+    if (existing) {
+      if (!existing.sourceEmailIds.includes(anchor.sourceEmailId)) existing.sourceEmailIds.push(anchor.sourceEmailId);
+    } else {
+      groups.set(key, {
+        purchaseKey: key,
+        userId: anchor.userId,
+        merchant: anchor.merchant,
+        orderNumber: anchor.orderNumber!.trim(),
+        sourceEmailIds: [anchor.sourceEmailId],
+      });
+    }
     const order = normalizeId(anchor.orderNumber);
     const orderKey = `${anchor.userId}::${order}`;
-    anchorByOrder.set(orderKey, [...(anchorByOrder.get(orderKey) ?? []), key]);
+    const keys = new Set(anchorByOrder.get(orderKey) ?? []);
+    keys.add(key);
+    anchorByOrder.set(orderKey, [...keys]);
     const tracking = normalizeId(anchor.trackingNumber);
     if (tracking) {
       const set = trackingToKeys.get(`${anchor.userId}::${tracking}`) ?? new Set<string>();
@@ -115,7 +137,8 @@ export function correlateLifecycleShadow(
       const matches = anchorByOrder.get(`${row.userId}::${order}`) ?? [];
       if (matches.length === 1) {
         const key = matches[0]!;
-        groups.get(key)?.sourceEmailIds.push(row.sourceEmailId);
+        const group = groups.get(key);
+        if (group && !group.sourceEmailIds.includes(row.sourceEmailId)) group.sourceEmailIds.push(row.sourceEmailId);
         const tracking = normalizeId(row.trackingNumber);
         if (tracking) {
           const set = trackingToKeys.get(`${row.userId}::${tracking}`) ?? new Set<string>();
@@ -146,7 +169,8 @@ export function correlateLifecycleShadow(
       const matches = [...(trackingToKeys.get(`${row.userId}::${tracking}`) ?? new Set<string>())];
       if (matches.length === 1) {
         const key = matches[0]!;
-        groups.get(key)?.sourceEmailIds.push(row.sourceEmailId);
+        const group = groups.get(key);
+        if (group && !group.sourceEmailIds.includes(row.sourceEmailId)) group.sourceEmailIds.push(row.sourceEmailId);
         assignments.push({
           sourceEmailId: row.sourceEmailId,
           purchaseKey: key,
