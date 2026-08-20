@@ -39,7 +39,7 @@ const positiveCases = [
     event: 'payment_completed',
   },
   {
-    sender: 'info@jatekbolt.hu',
+    sender: 'info@pelda-shop.hu',
     subject: 'Megrendelési szám: #12247833',
     body: 'Megrendelésed köszönjük, a csomagod átadtuk a DPD futárszolgálatnak.',
     event: 'shipment',
