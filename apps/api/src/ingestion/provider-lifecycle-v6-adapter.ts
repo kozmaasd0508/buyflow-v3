@@ -154,7 +154,7 @@ export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicC
     domainMatches(domain, 'gate.shop')
     && /\bvas[e']? g'?s vam boli pripisane na ucet!?$/.test(subject)
     && /\bgate-nel vasarolt\b/.test(body)
-    && /\bjo va irtunk\b|\bjovairtunk\b/.test(body)
+    && /\bjova irtunk\b/.test(body)
     && /\brendeles sz\b/.test(body)
   ) {
     return result(email, 'order_updated', 'provider_v6_gate_loyalty_purchase_credit');
