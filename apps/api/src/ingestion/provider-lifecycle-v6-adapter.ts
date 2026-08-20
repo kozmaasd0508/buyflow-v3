@@ -16,8 +16,12 @@ function normalize(value: string): string {
     .toLowerCase();
 }
 
+function primaryAddress(email: NormalizedEmail): string {
+  return email.from[0]?.email?.trim().toLowerCase() ?? '';
+}
+
 function primaryDomain(email: NormalizedEmail): string {
-  const address = email.from[0]?.email?.trim().toLowerCase() ?? '';
+  const address = primaryAddress(email);
   const at = address.lastIndexOf('@');
   return at >= 0 ? address.slice(at + 1) : '';
 }
@@ -132,6 +136,60 @@ export function parseProviderLifecycleV6(email: NormalizedEmail): DeterministicC
     return result(email, 'shipment', 'provider_v6_support_delivery_delay', {
       shipmentPhase: 'in_transit',
       carrier: /express one/.test(body) ? 'Express One' : undefined,
+    });
+  }
+
+  // Fresh v6 blind-holdout fixes. Every rule stays provider-scoped and
+  // requires exact lifecycle evidence from the subject and body.
+  if (
+    domainMatches(domain, 'expressone.hu')
+    && /^fizetesi bizonylat$/.test(subject)
+    && /\bfizetesi bizonylat\b/.test(body)
+    && /\bexpress one hungary kft\b/.test(body)
+  ) {
+    return result(email, 'invoice_or_receipt', 'provider_v6_expressone_payment_receipt');
+  }
+
+  if (
+    primaryAddress(email) === 'googleplay-noreply@google.com'
+    && /-elofizetesedet toroljuk$/.test(subject)
+    && /\bgoogle commerce limited\b/.test(body)
+    && /\bgoogle playen\b/.test(body)
+    && /\btorlodik\b/.test(body)
+  ) {
+    return result(email, 'order_updated', 'provider_v6_google_play_subscription_cancelled');
+  }
+
+  if (
+    primaryAddress(email) === 'googleplay-noreply@google.com'
+    && /^elofizetesed \(.+\) elonyei hamarosan veget er$/.test(subject)
+    && /\belofizetesed\b/.test(body)
+    && /\bveget er\b/.test(body)
+  ) {
+    return result(email, 'order_updated', 'provider_v6_google_play_subscription_expiring');
+  }
+
+  if (
+    (domainMatches(domain, 'posta.hu') || domainMatches(domain, 'allegromail.com'))
+    && /^csomagja a kezbesitonel van$/.test(subject)
+    && /\bkezbesitonk atvette\b/.test(body)
+    && /\bmai napon megkisereljuk\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_mpl_out_for_delivery_formal', {
+      shipmentPhase: 'out_for_delivery',
+      carrier: 'MPL',
+    });
+  }
+
+  if (
+    domainMatches(domain, 'shopbuilder.hu')
+    && /^csomagod uton$/.test(subject)
+    && /\brendelt csomagot\b/.test(body)
+    && /\bfeladtuk\b/.test(body)
+    && /\bnyomkovetesi\b/.test(body)
+  ) {
+    return result(email, 'shipment', 'provider_v6_shopbuilder_shipped', {
+      shipmentPhase: 'shipped',
     });
   }
 

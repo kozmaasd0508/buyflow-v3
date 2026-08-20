@@ -145,6 +145,47 @@ test('v5 blind provider rules fail closed on wrong domains or missing body evide
   )), null);
 });
 
+test('v6 blind commerce misses require trusted providers and exact lifecycle evidence', () => {
+  const cases: Array<[string, string, string, string, string | undefined]> = [
+    ['Fizetési bizonylat', 'slip@expressone.hu', 'FIZETÉSI BIZONYLAT Express One Hungary Kft.', 'invoice_or_receipt', undefined],
+    ['Előfizetésed (Yazio: Kalóriaszámláló) előnyei hamarosan véget ér', 'googleplay-noreply@google.com', 'Az előfizetésed aug. 2. dátummal véget ér.', 'order_updated', undefined],
+    ['Yazio: Kalóriaszámláló-előfizetésedet töröljük', 'googleplay-noreply@google.com', 'Az előfizetésed a Google Commerce Limited kiadótól a Google Playen törlődik.', 'order_updated', undefined],
+    ['Csomagja a kézbesítőnél van', 'ertesitesek@allegromail.com', 'Nemzetközi küldeményét kézbesítőnk átvette, így azt a mai napon megkíséreljük kézbesíteni.', 'shipment', 'out_for_delivery'],
+    ['Csomagja a kézbesítőnél van', 'kozponti.ertesites@posta.hu', 'Csomagját kézbesítőnk átvette, így azt a mai napon megkíséreljük kézbesíteni.', 'shipment', 'out_for_delivery'],
+    ['Csomagod úton', 'shop@shopbuilder.hu', 'Az általad rendelt csomagot feladtuk. Használhatod a csomag nyomkövetési szolgáltatást.', 'shipment', 'shipped'],
+  ];
+
+  for (const [subject, sender, snippet, eventType, phase] of cases) {
+    const parsed = parseProviderLifecycleV6(email(subject, sender, snippet));
+    assert.equal(parsed?.parserVersion, PROVIDER_LIFECYCLE_V6_VERSION, subject);
+    assert.equal(parsed?.extraction.event_type, eventType, subject);
+    if (phase) assert.equal(parsed?.shipmentPhase, phase, subject);
+  }
+});
+
+test('v6 blind provider rules fail closed on wrong domain or missing lifecycle evidence', () => {
+  assert.equal(parseProviderLifecycleV6(email(
+    'Fizetési bizonylat',
+    'newsletter@example.com',
+    'FIZETÉSI BIZONYLAT Express One Hungary Kft.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Yazio: Kalóriaszámláló-előfizetésedet töröljük',
+    'newsletter@google.com',
+    'Az előfizetésed a Google Commerce Limited kiadótól a Google Playen törlődik.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Csomagja a kézbesítőnél van',
+    'kozponti.ertesites@posta.hu',
+    'Tekintse meg aktuális szolgáltatásainkat.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Csomagod úton',
+    'shop@shopbuilder.hu',
+    'Nyári akció és ingyenes szállítás.',
+  )), null);
+});
+
 test('v5 blind false positives are provider-scoped non-commerce noise', () => {
   assert.equal(isProviderLifecycleV6Noise(email(
     'SimplePay - Sikeres fizetés - https://www.intrum.hu/ados-ugyfeleknek',
