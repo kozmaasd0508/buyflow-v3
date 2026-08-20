@@ -42,7 +42,7 @@ export function isProviderLifecycleV6Noise(email: NormalizedEmail): boolean {
   if (
     domainMatches(domain, 'posta.hu')
     && /^sikeres fizetes visszaigazolas$/.test(subject)
-    && /\bcsekkfizetesi tranzakcio\b/.test(body)
+    && /\bcsekkfizetesi tranzakcio\w*\b/.test(body)
   ) return true;
 
   // A support acknowledgement can mention an order ID without representing a
