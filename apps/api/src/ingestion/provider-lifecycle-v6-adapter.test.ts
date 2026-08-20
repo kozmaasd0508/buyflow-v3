@@ -186,6 +186,51 @@ test('v6 blind provider rules fail closed on wrong domain or missing lifecycle e
   )), null);
 });
 
+test('v7 blind commerce misses require trusted providers and exact lifecycle evidence', () => {
+  const cases: Array<[string, string, string, string, string | undefined]> = [
+    ['Köszönjük, hogy újból használja Prime Video-előfizetését', 'no-reply@primevideo.com', 'Sikeresen ismét használatba vette Prime Video-előfizetését. A következő számlázási dátum szeptember 05.', 'order_updated', undefined],
+    ["Kozma, Vaše G's Vám boli pripísané na účet!", 'noreply@gate.shop', 'Köszönjük, hogy a GATE-nél vásárolt. Az ügyfélfiókjában jóvá írtunk 38 G-ket. Rendelés sz.: 86551076.', 'order_updated', undefined],
+    ['A csomagod már úton van! Tartalma: BROS KÉT KOMPONENSŰ SZER LÉGY ELLEN', 'ertesitesek@allegro.com', 'A csomagodat most adták fel. Kövesd nyomon a Vásárlás részleteiben.', 'shipment', 'shipped'],
+    ['Csomagküldemény', 'kozponti.ertesites@posta.hu', 'Csomagküldeményt adtak fel Önnek. Küldeményazonosító: PB9S650295555. Feladás dátuma: 2026.06.10.', 'shipment', 'shipped'],
+    ['Epic Games bizonylat', 'help@acct.epicgames.com', 'Köszönjük a vásárlást! SZÁMLAAZONOSÍTÓ: A1115185289. RENDELÉSI ADATAID.', 'invoice_or_receipt', undefined],
+  ];
+
+  for (const [subject, sender, snippet, eventType, phase] of cases) {
+    const parsed = parseProviderLifecycleV6(email(subject, sender, snippet));
+    assert.equal(parsed?.parserVersion, PROVIDER_LIFECYCLE_V6_VERSION, subject);
+    assert.equal(parsed?.extraction.event_type, eventType, subject);
+    if (phase) assert.equal(parsed?.shipmentPhase, phase, subject);
+  }
+});
+
+test('v7 blind provider rules fail closed on wrong domain or missing lifecycle evidence', () => {
+  assert.equal(parseProviderLifecycleV6(email(
+    'Köszönjük, hogy újból használja Prime Video-előfizetését',
+    'newsletter@primevideo.com',
+    'Sikeresen ismét használatba vette Prime Video-előfizetését. A következő számlázási dátum szeptember 05.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    "Kozma, Vaše G's Vám boli pripísané na účet!",
+    'noreply@gate.shop',
+    'Új kedvezmények várnak rád.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'A csomagod már úton van! Tartalma: Termék',
+    'newsletter@example.com',
+    'A csomagodat most adták fel. Kövesd nyomon a Vásárlás részleteiben.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Csomagküldemény',
+    'kozponti.ertesites@posta.hu',
+    'Tekintse meg aktuális szolgáltatásainkat.',
+  )), null);
+  assert.equal(parseProviderLifecycleV6(email(
+    'Epic Games bizonylat',
+    'newsletter@acct.epicgames.com',
+    'Köszönjük a vásárlást! SZÁMLAAZONOSÍTÓ: A1115185289. RENDELÉSI ADATAID.',
+  )), null);
+});
+
 test('v5 blind false positives are provider-scoped non-commerce noise', () => {
   assert.equal(isProviderLifecycleV6Noise(email(
     'SimplePay - Sikeres fizetés - https://www.intrum.hu/ados-ugyfeleknek',
