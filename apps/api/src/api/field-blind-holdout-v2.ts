@@ -4,6 +4,7 @@ import { createEmailProvider } from '../email/factory.js';
 import type { NormalizedEmail } from '../email/types.js';
 import { planNormalizedInboundEmail } from '../pipeline/normalized-inbound-pipeline.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
+import { registerBlindHoldoutV3Annotation } from './blind-holdout-v3-annotation.js';
 import { registerExtractionV2ShadowAudit } from './extraction-v2-shadow-audit.js';
 import { BLIND_V2_COMMERCE, BLIND_V2_NOISE } from './field-blind-holdout-v2-truth.js';
 import type { GroundTruthExpectation } from './field-ground-truth-v1.js';
@@ -266,6 +267,7 @@ o.innerHTML='<h2>Detection: '+p(d.detection.precision)+' precision · '+p(d.dete
 
 export async function registerFieldBlindHoldoutV2(app: FastifyInstance) {
   await registerExtractionV2ShadowAudit(app);
+  await registerBlindHoldoutV3Annotation(app);
 
   app.get('/audit-fields-blind-v2', async (_request, reply) => reply
     .type('text/html; charset=utf-8')
