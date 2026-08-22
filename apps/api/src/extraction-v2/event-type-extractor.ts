@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v2';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v3';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -78,7 +78,8 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.995,
     patterns: [
       /\bvisszaterites\s+(?:megtortent|sikeres|teljesitve|elinditva)\b/i,
-      /\b(?:refund|reimbursement)(?!\s+request\b)\b.{0,96}\b(?:has\s+been\s+|was\s+)?(?:completed|successful|issued|processed)\b/i,
+      /\b(?:refund|reimbursement)\s+(?:completed|successful|issued|processed)\b/i,
+      /\b(?:refund|reimbursement)\b(?:(?!\brequest\b)[^.!?\n]){0,64}\b(?:has\s+been|was)\s+(?:successfully\s+)?(?:completed|issued|processed)\b/i,
       /\bwe\s+(?:have\s+)?refunded\b/i,
     ],
   },
