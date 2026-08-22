@@ -172,9 +172,19 @@ function snapshotFieldForEvidence(field: EvidenceField): keyof CanonicalFieldSna
 }
 
 function evidenceDiagnostics(engine: ExtractionEngineV2Result): Record<keyof CanonicalFieldSnapshot, V2EvidenceDiagnostic[]> {
-  const result = Object.fromEntries(
-    (Object.keys(v2Snapshot(engine)) as Array<keyof CanonicalFieldSnapshot>).map((field) => [field, []]),
-  ) as Record<keyof CanonicalFieldSnapshot, V2EvidenceDiagnostic[]>;
+  const result: Record<keyof CanonicalFieldSnapshot, V2EvidenceDiagnostic[]> = {
+    eventType: [],
+    merchant: [],
+    orderNumber: [],
+    total: [],
+    currency: [],
+    carrier: [],
+    trackingNumber: [],
+    paymentStatus: [],
+    invoiceNumber: [],
+    paymentReference: [],
+    products: [],
+  };
 
   for (const claim of engine.evidence.bundle.claims) {
     const field = snapshotFieldForEvidence(claim.field);
