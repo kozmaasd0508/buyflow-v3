@@ -2,7 +2,7 @@ import type { EmailDocumentMoneyCandidate, EmailDocumentProductCandidate, EmailD
 import type { EvidenceClaim, EvidenceProduct } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_PRODUCT_EXTRACTOR_VERSION = 'universal-product-v1';
+export const UNIVERSAL_PRODUCT_EXTRACTOR_VERSION = 'universal-product-v2';
 
 type Currency = EmailDocumentMoneyCandidate['currency'];
 
@@ -70,6 +70,15 @@ function stripTrailingMoney(value: string): string {
 
 const NOISE_PREFIX = /^(?:szallitas|shipping|delivery|utanvet|cash on delivery|cod|fizetes|payment|kedvezmeny|discount|kupon|coupon|afa|vat|ado|tax|dij|fee|subtotal|reszosszeg|osszesen|total|vegosszeg|grand total|fizetendo)\b/i;
 
+function isMoneyOnlyLabel(value: string): boolean {
+  const remainder = normalizeText(value)
+    .replace(/\b(?:huf|ft|eur|usd|gbp)\b/gi, '')
+    .replace(/[€$£]/g, '')
+    .replace(/[0-9\s.,'’+\-–—:;()]/g, '')
+    .trim();
+  return remainder.length === 0;
+}
+
 function cleanName(value: string): string | null {
   const cleaned = value
     .replace(/\s{2,}/g, ' ')
@@ -79,6 +88,7 @@ function cleanName(value: string): string | null {
   const normalized = normalizeText(cleaned).toLowerCase();
   if (cleaned.length < 2 || cleaned.length > 240) return null;
   if (!/[\p{L}]/u.test(cleaned)) return null;
+  if (isMoneyOnlyLabel(cleaned)) return null;
   if (NOISE_PREFIX.test(normalized)) return null;
   if (/^(?:https?:\/\/|www\.|mailto:)/i.test(cleaned)) return null;
   return cleaned;
