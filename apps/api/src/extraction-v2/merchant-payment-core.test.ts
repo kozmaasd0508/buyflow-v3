@@ -91,13 +91,13 @@ test('invoice/payment reference extractor rejects label text without a stable id
   assert.equal(claims.length, 0);
 });
 
-test('universal core collector runs all seven evidence extractors without short-circuiting', () => {
+test('universal core collector runs all six evidence extractors without short-circuiting', () => {
   const result = collectUniversalCoreEvidence(buildEmailDocumentV1(email({
     subject: 'Rendelés #AB-12345 sikeres fizetés',
     snippet: 'Eladó: Example Store\nVégösszeg: 12 990 Ft\nTracking number: 123456789012\nInvoice number: INV-2026-1234',
     name: 'Example Store',
   })));
-  assert.equal(result.ranExtractors.length, 7);
+  assert.equal(result.ranExtractors.length, 6);
   assert.ok(result.bundle.claims.some((claim) => claim.field === 'merchant'));
   assert.ok(result.bundle.claims.some((claim) => claim.field === 'payment_status'));
   assert.ok(result.bundle.claims.some((claim) => claim.field === 'invoice_number'));
