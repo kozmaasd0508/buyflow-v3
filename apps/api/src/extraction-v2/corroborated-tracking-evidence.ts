@@ -2,14 +2,19 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { currentMessageLines } from './event-type-extractor.js';
 import type { EvidenceBundle, EvidenceClaim } from './types.js';
 
-export const CORROBORATED_TRACKING_EVIDENCE_VERSION = 'corroborated-tracking-evidence-v2';
+export const CORROBORATED_TRACKING_EVIDENCE_VERSION = 'corroborated-tracking-evidence-v3';
 
 const TRANSPORT_CONTEXT = /\b(?:csomag|kuldemeny|kezbesit|szallitas|szallitmany|futar|futarszolgalat|nyomkovet|tracking|shipment|parcel|package|delivery|courier|carrier)\w*\b/i;
 const TRACKING_LABEL_CONTEXT = /\b(?:tracking|nyomkovet|kuldemeny\s*(?:szam|azonosito)|fuvarlevel\s*szam|csomag\s*szam|parcel\s*(?:number|id)|shipment\s*(?:number|id))\w*\b/i;
 const NUMERIC_IDENTIFIER = /\b\d{10,30}\b/g;
+const LONG_NUMERIC_IDENTIFIER = /\b\d{20,30}\b/g;
 
 function normalized(value: unknown): string {
   return String(value ?? '').trim().toUpperCase();
+}
+
+function normalizeText(value: string): string {
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\u00a0/g, ' ');
 }
 
 function isStrongShipmentOrDeliveryClaim(claim: EvidenceClaim): boolean {
@@ -40,20 +45,19 @@ function numericIdentifiersNearTrackingContext(document: EmailDocumentV1): strin
   const candidates: string[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? '';
-    const normalizedLine = line.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\u00a0/g, ' ');
+    const line = normalizeText(lines[index] ?? '');
     const isSubject = index === 0;
     const hasRelevantContext = isSubject
-      ? TRANSPORT_CONTEXT.test(normalizedLine)
-      : TRACKING_LABEL_CONTEXT.test(normalizedLine);
+      ? TRANSPORT_CONTEXT.test(line)
+      : TRACKING_LABEL_CONTEXT.test(line);
     if (!hasRelevantContext) continue;
 
-    for (const match of normalizedLine.matchAll(NUMERIC_IDENTIFIER)) {
+    for (const match of line.matchAll(NUMERIC_IDENTIFIER)) {
       candidates.push(normalized(match[0]));
     }
 
-    if (!isSubject && TRACKING_LABEL_CONTEXT.test(normalizedLine)) {
-      const nextLine = lines[index + 1] ?? '';
+    if (!isSubject && TRACKING_LABEL_CONTEXT.test(line)) {
+      const nextLine = normalizeText(lines[index + 1] ?? '');
       for (const match of nextLine.matchAll(NUMERIC_IDENTIFIER)) {
         candidates.push(normalized(match[0]));
       }
@@ -63,12 +67,26 @@ function numericIdentifiersNearTrackingContext(document: EmailDocumentV1): strin
   return [...new Set(candidates.filter(Boolean))];
 }
 
+function longNumericIdentifiersInTransportMessage(document: EmailDocumentV1): string[] {
+  const currentText = normalizeText([
+    document.subject ?? '',
+    ...currentMessageLines(document.text),
+  ].join('\n'));
+  if (!TRANSPORT_CONTEXT.test(currentText)) return [];
+  return [...new Set(
+    [...currentText.matchAll(LONG_NUMERIC_IDENTIFIER)]
+      .map((match) => normalized(match[0]))
+      .filter(Boolean),
+  )];
+}
+
 /**
- * A numeric identifier is not tracking evidence by itself. It becomes eligible
- * only when independent v2 evidence already proves shipment/delivery context and
- * carrier identity, and the number is located in a transport subject or next to
- * an explicit tracking/parcel label. This avoids accidentally promoting phone,
- * date, invoice or account numbers from the rest of the message.
+ * Numeric identifiers are never tracking evidence by themselves. Shorter carrier
+ * ids (10-19 digits) require local subject/label context. Very long ids (20-30
+ * digits) may also be corroborated from the current transport message as a whole,
+ * preserving the earlier conservative rule for long airwaybill-style identities.
+ * In every case shipment/delivery + carrier evidence is mandatory and known
+ * order/invoice/payment identifiers are excluded before resolving exactly one id.
  */
 export function deriveCorroboratedTrackingEvidence(
   document: EmailDocumentV1,
@@ -78,8 +96,10 @@ export function deriveCorroboratedTrackingEvidence(
   if (!bundle.claims.some(isCarrierEvidence)) return [];
 
   const protectedIds = claimedNonTrackingIdentifiers(bundle);
-  const candidates = numericIdentifiersNearTrackingContext(document)
-    .filter((value) => !protectedIds.has(value));
+  const candidates = [...new Set([
+    ...numericIdentifiersNearTrackingContext(document),
+    ...longNumericIdentifiersInTransportMessage(document),
+  ])].filter((value) => !protectedIds.has(value));
 
   if (candidates.length !== 1) return [];
 
