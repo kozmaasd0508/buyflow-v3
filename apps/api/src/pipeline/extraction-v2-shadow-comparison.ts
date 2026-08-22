@@ -1,6 +1,6 @@
 import type { NormalizedEmail } from '../email/types.js';
 import { runExtractionEngineV2, type ExtractionEngineV2Result } from '../extraction-v2/engine-v2.js';
-import type { ResolvedField } from '../extraction-v2/types.js';
+import type { EvidenceField, ResolvedField } from '../extraction-v2/types.js';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
 import { planNormalizedInboundEmail, type NormalizedInboundPlan } from './normalized-inbound-pipeline.js';
 
@@ -33,6 +33,14 @@ export interface ShadowFieldComparison {
   v2: unknown;
 }
 
+export interface V2EvidenceDiagnostic {
+  value: unknown;
+  confidence: number;
+  source: string;
+  extractorId: string;
+  qualifiers: string[];
+}
+
 export interface ExtractionV2ShadowComparison {
   mode: 'shadow';
   productionWrites: 0;
@@ -47,6 +55,7 @@ export interface ExtractionV2ShadowComparison {
   v2ReviewRequired: boolean;
   v2ConflictFields: string[];
   v2ValidationIssueCodes: string[];
+  v2EvidenceDiagnostics: Record<keyof CanonicalFieldSnapshot, V2EvidenceDiagnostic[]>;
 }
 
 function firstDefined(object: Record<string, unknown>, keys: string[]): unknown {
@@ -140,6 +149,47 @@ function isMissing(value: unknown): boolean {
   return value === null || value === undefined || value === '';
 }
 
+function evidenceFieldForSnapshot(field: keyof CanonicalFieldSnapshot): EvidenceField {
+  if (field === 'eventType') return 'event_type';
+  if (field === 'orderNumber') return 'order_number';
+  if (field === 'trackingNumber') return 'tracking_number';
+  if (field === 'paymentStatus') return 'payment_status';
+  if (field === 'invoiceNumber') return 'invoice_number';
+  if (field === 'paymentReference') return 'payment_reference';
+  if (field === 'products') return 'product';
+  return field;
+}
+
+function snapshotFieldForEvidence(field: EvidenceField): keyof CanonicalFieldSnapshot {
+  if (field === 'event_type') return 'eventType';
+  if (field === 'order_number') return 'orderNumber';
+  if (field === 'tracking_number') return 'trackingNumber';
+  if (field === 'payment_status') return 'paymentStatus';
+  if (field === 'invoice_number') return 'invoiceNumber';
+  if (field === 'payment_reference') return 'paymentReference';
+  if (field === 'product') return 'products';
+  return field;
+}
+
+function evidenceDiagnostics(engine: ExtractionEngineV2Result): Record<keyof CanonicalFieldSnapshot, V2EvidenceDiagnostic[]> {
+  const result = Object.fromEntries(
+    (Object.keys(v2Snapshot(engine)) as Array<keyof CanonicalFieldSnapshot>).map((field) => [field, []]),
+  ) as Record<keyof CanonicalFieldSnapshot, V2EvidenceDiagnostic[]>;
+
+  for (const claim of engine.evidence.bundle.claims) {
+    const field = snapshotFieldForEvidence(claim.field);
+    result[field].push({
+      value: claim.value,
+      confidence: claim.confidence,
+      source: claim.source,
+      extractorId: claim.extractorId,
+      qualifiers: claim.qualifiers ?? [],
+    });
+  }
+
+  return result;
+}
+
 export function compareCanonicalSnapshots(input: {
   legacy: CanonicalFieldSnapshot;
   v2: CanonicalFieldSnapshot;
@@ -149,21 +199,7 @@ export function compareCanonicalSnapshots(input: {
   return fields.map((field) => {
     const legacy = input.legacy[field];
     const v2 = input.v2[field];
-    const evidenceField = field === 'eventType'
-      ? 'event_type'
-      : field === 'orderNumber'
-        ? 'order_number'
-        : field === 'trackingNumber'
-          ? 'tracking_number'
-          : field === 'paymentStatus'
-            ? 'payment_status'
-            : field === 'invoiceNumber'
-              ? 'invoice_number'
-              : field === 'paymentReference'
-                ? 'payment_reference'
-                : field === 'products'
-                  ? 'product'
-                  : field;
+    const evidenceField = evidenceFieldForSnapshot(field);
 
     if (input.v2ConflictFields?.includes(evidenceField)) {
       return { field, status: 'v2_conflict', legacy, v2 };
@@ -220,5 +256,6 @@ export function compareLegacyAndExtractionV2(email: NormalizedEmail): Extraction
     v2ReviewRequired: engine.reviewRequired,
     v2ConflictFields: engine.resolved.conflictFields,
     v2ValidationIssueCodes: engine.validation.issues.map((issue) => issue.code),
+    v2EvidenceDiagnostics: evidenceDiagnostics(engine),
   };
 }
