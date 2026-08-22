@@ -62,4 +62,5 @@ export interface ResolvedCommerceEvent {
   paymentReference: ResolvedField<string>;
   products: ResolvedField<EvidenceProduct[]>;
   reviewRequired: boolean;
+  conflictFields: EvidenceField[];
 }
