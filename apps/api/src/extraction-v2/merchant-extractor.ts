@@ -75,9 +75,12 @@ function hasCommercialIdentityToken(value: string): boolean {
   return /\b(?:kft|zrt|nyrt|bt|ltd|limited|inc|corp|corporation|company|gmbh|srl|shop|store|webshop|market|premium|services|service|billing|payments|orders|official)\b/i.test(normalized);
 }
 
-function looksLikePersonalByline(value: string): boolean {
-  const normalized = normalizeText(value).trim();
-  if (/\b(?:a|az|from|at)\b/i.test(normalized) && normalized.split(/\s+/).length >= 3) return true;
+function hasPersonalBylineConnector(value: string): boolean {
+  const normalized = normalizeText(value).trim().toLowerCase();
+  return normalized.split(/\s+/).length >= 3 && /\b(?:a|az|from|at)\b/i.test(normalized);
+}
+
+function looksLikePersonalName(value: string): boolean {
   const words = value.trim().split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 3) return false;
   return words.every((word) => /^[\p{Lu}][\p{L}'’-]+$/u.test(word));
@@ -86,9 +89,13 @@ function looksLikePersonalByline(value: string): boolean {
 function senderIdentityCanResolveMerchant(document: EmailDocumentV1, displayName: string): boolean {
   if (!hasTransactionalCorroboration(document)) return false;
   if (isCourierIdentity(displayName)) return false;
-  if (looksLikePersonalByline(displayName) && !domainSupportsIdentity(displayName, document.sender.primaryDomain)) return false;
+  if (hasPersonalBylineConnector(displayName)) return false;
+
+  const domainSupported = domainSupportsIdentity(displayName, document.sender.primaryDomain);
+  if (looksLikePersonalName(displayName) && !domainSupported) return false;
+
   return hasCommercialIdentityToken(displayName)
-    || domainSupportsIdentity(displayName, document.sender.primaryDomain)
+    || domainSupported
     || displayName.trim().split(/\s+/).length === 1;
 }
 
