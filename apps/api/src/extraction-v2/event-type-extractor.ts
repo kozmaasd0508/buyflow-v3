@@ -78,7 +78,8 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.995,
     patterns: [
       /\bvisszaterites\s+(?:megtortent|sikeres|teljesitve|elinditva)\b/i,
-      /\b(?:refund|reimbursement)\b(?:(?!\brequest\b)[^.!?\n]){0,96}\b(?:has\s+been\s+|was\s+)?(?:completed|successful|issued|processed)\b/i,
+      /\b(?:refund|reimbursement)\s+(?:completed|successful|issued|processed)\b/i,
+      /\b(?:refund|reimbursement)\b(?:(?!\brequest\b)[^.!?\n]){0,64}\b(?:has\s+been|was)\s+(?:successfully\s+)?(?:completed|issued|processed)\b/i,
       /\bwe\s+(?:have\s+)?refunded\b/i,
     ],
   },
