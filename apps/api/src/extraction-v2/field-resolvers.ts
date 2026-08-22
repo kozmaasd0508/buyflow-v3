@@ -9,6 +9,20 @@ import type {
 } from './types.js';
 
 const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = {
+  event_type: {
+    explicit_delivery_event: 520,
+    explicit_shipment_event: 510,
+    explicit_refund_event: 510,
+    explicit_payment_completed_event: 500,
+    explicit_cancellation_event: 500,
+    explicit_return_event: 500,
+    explicit_invoice_event: 480,
+    explicit_order_created_event: 470,
+  },
+  carrier: {
+    explicit_carrier_label: 500,
+    document_active_carrier_signal: 350,
+  },
   order_number: {
     explicit_order_label: 500,
     explicit_order_hash: 500,
