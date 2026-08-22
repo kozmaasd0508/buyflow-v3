@@ -148,3 +148,68 @@ test('quoted completed refund cannot promote a new current-message refund reques
   assert.notEqual(result.resolved.eventType.value, 'refund');
   assert.notEqual(result.resolved.paymentStatus.value, 'refunded');
 });
+
+test('explicit refund receipt subject is settled refund evidence, not a generic receipt event', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Your refund from Example Shop #3401-6095',
+    snippet: 'Amount refunded $25.40. A receipt is attached for your records.',
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.eventType.value, 'refund');
+  assert.equal(result.resolved.paymentStatus.value, 'refunded');
+});
+
+test('generic Hungarian shipment labels resolve tracking without provider-specific logic', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'A csomagod úton van',
+    snippet: 'Szállítási mód: Express One\nKüldemény száma: 605855689091000013605231',
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.eventType.value, 'shipment');
+  assert.equal(result.resolved.carrier.value, 'Express One');
+  assert.equal(result.resolved.trackingNumber.value, '605855689091000013605231');
+  assert.ok(result.resolved.trackingNumber.provenance.some((claim) => (
+    claim.qualifiers?.includes('explicit_tracking_label')
+  )));
+});
+
+test('unique long identifier may become tracking only after shipment and carrier corroboration', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'A csomagod úton van',
+    snippet: 'A csomagot a futár átvette. Szállítási mód: Express One\n605855689091000013605231',
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.eventType.value, 'shipment');
+  assert.equal(result.resolved.carrier.value, 'Express One');
+  assert.equal(result.resolved.trackingNumber.value, '605855689091000013605231');
+  assert.ok(result.resolved.trackingNumber.provenance.some((claim) => (
+    claim.extractorId === 'corroborated-tracking-evidence'
+  )));
+});
+
+test('bare long identifier is not tracking without shipment and carrier evidence', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Account reference',
+    snippet: 'Administrative identifier: 605855689091000013605231',
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.trackingNumber.value, null);
+});
+
+test('multiple long transport identifiers stay unresolved instead of guessing tracking', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'A csomagod úton van',
+    snippet: [
+      'Szállítási mód: Express One',
+      '605855689091000013605231',
+      '605855689091000013605232',
+    ].join('\n'),
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.trackingNumber.value, null);
+});
