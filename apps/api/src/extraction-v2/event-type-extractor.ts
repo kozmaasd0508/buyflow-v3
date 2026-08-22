@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v3';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v4';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -138,11 +138,26 @@ const EVENT_PATTERNS: EventPattern[] = [
   },
 ];
 
+function eventClaim(eventType: UniversalCommerceEventType, source: 'subject' | 'body'): EvidenceClaim<string> {
+  return {
+    field: 'event_type',
+    value: eventType,
+    confidence: 0.995,
+    source,
+    extractorId: 'universal-event-type',
+    extractorVersion: UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION,
+    qualifiers: ['explicit_refund_event'],
+  };
+}
+
 function scan(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[] {
   const lines = source === 'subject' ? [text] : currentMessageLines(text);
   const claims: EvidenceClaim<string>[] = [];
   for (const rawLine of lines) {
     const line = normalizeText(rawLine);
+    if (source === 'subject' && /^\s*your\s+refund\s+from\b/i.test(line)) {
+      claims.push(eventClaim('refund', 'subject'));
+    }
     for (const item of EVENT_PATTERNS) {
       if (!item.patterns.some((pattern) => pattern.test(line))) continue;
       claims.push({
