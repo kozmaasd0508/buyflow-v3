@@ -87,7 +87,10 @@ export const universalCarrierExtractor: EvidenceExtractor = {
         field: 'carrier',
         value,
         confidence: 0.90,
-        source: 'document_structure',
+        // This signal is derived from the current body. Keeping it at body
+        // precedence prevents a weak document candidate from silently
+        // outranking an explicit carrier label.
+        source: 'body',
         extractorId: 'universal-carrier',
         extractorVersion: UNIVERSAL_CARRIER_EXTRACTOR_VERSION,
         qualifiers: ['document_active_carrier_signal'],
