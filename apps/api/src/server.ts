@@ -4,6 +4,7 @@ import { registerAppApiRoutes } from './api/app-routes.js';
 import { registerEmailAuditRoutes } from './api/email-audit-routes.js';
 import { registerEmailConnectionRoutes } from './api/email-connection-routes.js';
 import { registerEmailScanReviewRoutes } from './api/email-scan-review-routes.js';
+import { registerFieldBlindHoldoutV2 } from './api/field-blind-holdout-v2.js';
 import { registerProductActionRoutes } from './api/product-action-routes.js';
 import { registerPurchaseRecoveryRoutes } from './api/purchase-recovery-routes.js';
 import { registerShoppingEmailRoutes } from './api/shopping-email-routes.js';
@@ -99,6 +100,7 @@ await registerShoppingEmailRoutes(app);
 await registerEmailScanReviewRoutes(app);
 await registerEmailAuditRoutes(app);
 await registerPurchaseRecoveryRoutes(app);
+await registerFieldBlindHoldoutV2(app);
 await registerWebPreview(app);
 
 app.get('/auth/reset-password', async (_request, reply) => reply
