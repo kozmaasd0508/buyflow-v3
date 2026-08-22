@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v5';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v6';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -66,6 +66,7 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.99,
     patterns: [
       /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:feladasra\s+kerult|feladva|uton\s+van)\b/i,
+      /\b(?:rendeles(?:ed|edet|e)?|megrendeles(?:ed|edet|e)?)\s+atadtuk\s+(?:a\s+)?futar(?:nak)?\b/i,
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?|csomag(?:od|ja)?)\w*.*\b(?:atadtuk|atadasra\s+kerult)\b.*\b(?:futar|futarszolgalat)\b/i,
       /\b(?:csomag|kuldemeny)\w*.{0,100}\bkezbesitesre\s+(?:atvette|atvettuk|atadva)\b/i,
       /\b(?:csomag|kuldemeny)\w*\s+feladasarol\b/i,
@@ -132,7 +133,7 @@ const EVENT_PATTERNS: EventPattern[] = [
     qualifier: 'explicit_order_created_event',
     confidence: 0.96,
     patterns: [
-      /\b(?:koszonjuk|koszonjuk),?\s+(?:hogy\s+)?(?:rendeltel|leadta\w*\s+a\s+rendeles)\b/i,
+      /\bkoszonjuk,?\s+(?:hogy\s+)?(?:rendeltel|leadta\w*\s+a\s+rendeles)\b/i,
       /\bkoszonjuk\s+(?:a\s+)?(?:rendeles(?:ed|et)|megrendeles(?:ed|et))\b/i,
       /\b(?:rendelest|megrendelest)\s+megkaptuk\b/i,
       /\b(?:sikeres\s+)?(?:rendeles|megrendeles)\s+megerositese\b/i,
