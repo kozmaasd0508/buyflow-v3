@@ -178,7 +178,11 @@ test('generic Hungarian shipment labels resolve tracking without provider-specif
 test('unique long identifier may become tracking only after shipment and carrier corroboration', () => {
   const document = buildEmailDocumentV1(email({
     subject: 'A csomagod úton van',
-    snippet: 'A csomagot a futár átvette. Szállítási mód: Express One\n605855689091000013605231',
+    snippet: [
+      'A csomagot a futár átvette.',
+      'Szállítási mód: Express One',
+      '605855689091000013605231',
+    ].join('\n'),
   }));
 
   const result = runExtractionEngineV2(document);
