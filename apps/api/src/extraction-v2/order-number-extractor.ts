@@ -37,7 +37,7 @@ function collectExplicit(
       qualifier: 'explicit_order_hash',
     },
     {
-      pattern: /\b([A-Z0-9][A-Z0-9._/-]{3,39})\s+szamu\s+(?:rendeles|megrendeles)\b/gi,
+      pattern: /\b([A-Z0-9][A-Z0-9._/-]{3,39})\s+szamu\s+(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\b/gi,
       qualifier: 'explicit_numbered_order_phrase',
     },
     {
