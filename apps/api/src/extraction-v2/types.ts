@@ -38,7 +38,10 @@ export interface ResolvedField<T = unknown> {
   value: T | null;
   confidence: number | null;
   status: 'resolved' | 'missing' | 'conflict';
-  provenance: EvidenceClaim<T>[];
+  // Provenance is intentionally independent from the resolved value type.
+  // Aggregated values (for example Product[]) are resolved from individual
+  // EvidenceClaim<Product> entries rather than EvidenceClaim<Product[]>.
+  provenance: EvidenceClaim[];
 }
 
 export interface EvidenceProduct {
