@@ -71,17 +71,25 @@ function claimPair(input: {
   confidence: number;
   qualifier: string;
 }): EvidenceClaim[] {
-  const base = {
+  const totalClaim: EvidenceClaim<number> = {
+    field: 'total',
+    value: input.amount,
     confidence: input.confidence,
     source: input.source,
     extractorId: 'universal-money',
     extractorVersion: UNIVERSAL_MONEY_EXTRACTOR_VERSION,
     qualifiers: [input.qualifier],
-  } as const;
-  return [
-    { field: 'total', value: input.amount, ...base },
-    { field: 'currency', value: input.currency, ...base },
-  ];
+  };
+  const currencyClaim: EvidenceClaim<Currency> = {
+    field: 'currency',
+    value: input.currency,
+    confidence: input.confidence,
+    source: input.source,
+    extractorId: 'universal-money',
+    extractorVersion: UNIVERSAL_MONEY_EXTRACTOR_VERSION,
+    qualifiers: [input.qualifier],
+  };
+  return [totalClaim, currencyClaim];
 }
 
 function scanLabeledText(
