@@ -38,8 +38,11 @@ test('reply subject may still pass when the newly authored prefix explicitly con
     providerMessageId: 'reply-2',
     subject: 'Re: rendelési egyeztetés',
     snippet: [
-      'Megrendelés visszaigazolása: 2026/8420/003',
-      'Köszönjük, rendelését rögzítettük.',
+      'Megrendelés visszaigazolás',
+      'Köszönjük rendelését.',
+      'Rendelési szám: 2026/8420/003',
+      'Végösszeg: 14 960 Ft',
+      'Fizetési mód: Bankkártya',
       '-----Original Message-----',
       'Korábbi rendelés: 2026/8420/002',
     ].join('\n'),
@@ -47,5 +50,6 @@ test('reply subject may still pass when the newly authored prefix explicitly con
 
   assert.ok(parsed);
   assert.equal(parsed.extraction.event_type, 'order_created');
+  assert.equal(parsed.extraction.order_number, '2026/8420/003');
   assert.ok(parsed.reasons.includes('reply_thread_explicit_new_order_evidence'));
 });
