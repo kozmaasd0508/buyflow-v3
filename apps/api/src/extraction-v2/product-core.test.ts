@@ -97,7 +97,7 @@ test('product extractor preserves multiple distinct products', () => {
   assert.ok(result.some((product) => product.name === 'Armaf Club de Nuit Intense Man 105 ml' && product.quantity === 2));
 });
 
-test('universal collector now runs seven non-short-circuit evidence extractors', () => {
+test('universal collector keeps product extraction active as additional extractors are added', () => {
   const result = collectUniversalCoreEvidence(buildEmailDocumentV1(email([
     'Rendelésszám: AB-12345',
     'Eladó: Example Shop',
@@ -107,6 +107,7 @@ test('universal collector now runs seven non-short-circuit evidence extractors',
     'Invoice number: INV-2026-1234',
     '1 x Lattafa Khamrah 100 ml',
   ].join('\n'))));
-  assert.equal(result.ranExtractors.length, 7);
+  const ids = new Set(result.ranExtractors.map((item) => item.id));
+  assert.ok(ids.has('universal-product'));
   assert.ok(result.bundle.claims.some((claim) => claim.field === 'product'));
 });
