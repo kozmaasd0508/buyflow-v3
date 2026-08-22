@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_TRACKING_EXTRACTOR_VERSION = 'universal-tracking-number-v1';
+export const UNIVERSAL_TRACKING_EXTRACTOR_VERSION = 'universal-tracking-number-v2';
 
 function normalizeText(value: string): string {
   return value
@@ -26,7 +26,7 @@ function collectExplicit(
   const normalized = normalizeText(text);
   const patterns: Array<{ pattern: RegExp; qualifier: string }> = [
     {
-      pattern: /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|azonosito)|kuldemenyazonosito|csomag(?:szam|azonosito)|parcel(?:\s*(?:number|no\.?|id))|shipment(?:\s*(?:number|no\.?|id)))\s*[:#-]?\s*([A-Z0-9][A-Z0-9-]{7,31})\b/gi,
+      pattern: /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|szama|azonosito|azonositoja)|kuldemeny\s*(?:szam|szama|azonosito|azonositoja)|csomag\s*(?:szam|szama|azonosito|azonositoja)|parcel(?:\s*(?:number|no\.?|id))|shipment(?:\s*(?:number|no\.?|id)))\s*[:#-]?\s*([A-Z0-9][A-Z0-9-]{7,31})\b/gi,
       qualifier: 'explicit_tracking_label',
     },
     {

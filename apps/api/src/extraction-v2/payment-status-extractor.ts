@@ -3,7 +3,7 @@ import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 import { currentMessageLines } from './event-type-extractor.js';
 
-export const UNIVERSAL_PAYMENT_STATUS_EXTRACTOR_VERSION = 'universal-payment-status-v4';
+export const UNIVERSAL_PAYMENT_STATUS_EXTRACTOR_VERSION = 'universal-payment-status-v5';
 
 type PaymentStatusEvidence = 'paid' | 'cash_on_delivery' | 'failed' | 'refunded';
 
@@ -55,6 +55,16 @@ function scan(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[]
   const lines = source === 'body' ? currentMessageLines(text) : [text];
   for (let index = 0; index < lines.length; index += 1) {
     const rawLine = lines[index] ?? '';
+    const normalizedLine = normalizeText(rawLine);
+    if (source === 'subject' && /^\s*your\s+refund\s+from\b/i.test(normalizedLine)) {
+      claims.push(claim({
+        status: 'refunded',
+        confidence: 0.995,
+        source: 'subject',
+        qualifier: 'explicit_refund_completion',
+      }));
+    }
+
     const result = statusForLine(rawLine);
     if (result) {
       claims.push(claim({
@@ -65,7 +75,7 @@ function scan(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[]
       }));
     }
 
-    if (source === 'body' && PAYMENT_METHOD_LABEL.test(normalizeText(rawLine))) {
+    if (source === 'body' && PAYMENT_METHOD_LABEL.test(normalizedLine)) {
       const nextLine = lines.slice(index + 1).find((candidate) => Boolean(candidate.trim())) ?? '';
       if (COD_VALUE.test(normalizeText(nextLine))) {
         claims.push(claim({

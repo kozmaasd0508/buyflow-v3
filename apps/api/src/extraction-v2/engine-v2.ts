@@ -1,6 +1,7 @@
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceCollectionResult } from './collector.js';
 import { CORROBORATED_EVENT_EVIDENCE_VERSION, deriveCorroboratedEventEvidence } from './corroborated-event-evidence.js';
+import { CORROBORATED_TRACKING_EVIDENCE_VERSION, deriveCorroboratedTrackingEvidence } from './corroborated-tracking-evidence.js';
 import { validateResolvedCommerceEvent, type CommerceValidationResult } from './cross-field-validator.js';
 import { resolveCommerceEvent } from './field-resolvers.js';
 import { deriveSourceAdapterEvidence, SOURCE_ADAPTER_EVIDENCE_VERSION } from './source-adapter-evidence.js';
@@ -23,9 +24,10 @@ export interface ExtractionEngineV2Result {
  * No database writes, no AI calls, no mutation of the legacy parser path.
  *
  * Universal extraction always runs first. Additive source adapters may then add
- * independent evidence without suppressing generic claims. Finally, already
- * collected evidence may corroborate lifecycle classification. Neither pass
- * reads legacy parser output.
+ * independent evidence without suppressing generic claims. Collected evidence
+ * can corroborate lifecycle classification, then a final read-only pass may
+ * promote a unique long transport identifier to tracking only when shipment and
+ * carrier evidence already agree. None of these passes reads legacy output.
  */
 export function runExtractionEngineV2(document: EmailDocumentV1): ExtractionEngineV2Result {
   const baseEvidence = collectUniversalCoreEvidence(document);
@@ -34,9 +36,13 @@ export function runExtractionEngineV2(document: EmailDocumentV1): ExtractionEngi
     claims: [...baseEvidence.bundle.claims, ...sourceAdapterClaims],
   };
   const derivedEventClaims = deriveCorroboratedEventEvidence(document, evidenceWithSources);
+  const evidenceWithEvents = {
+    claims: [...evidenceWithSources.claims, ...derivedEventClaims],
+  };
+  const derivedTrackingClaims = deriveCorroboratedTrackingEvidence(document, evidenceWithEvents);
   const evidence: EvidenceCollectionResult = {
     bundle: {
-      claims: [...evidenceWithSources.claims, ...derivedEventClaims],
+      claims: [...evidenceWithEvents.claims, ...derivedTrackingClaims],
     },
     ranExtractors: [
       ...baseEvidence.ranExtractors,
@@ -49,6 +55,11 @@ export function runExtractionEngineV2(document: EmailDocumentV1): ExtractionEngi
         id: 'corroborated-event-evidence',
         version: CORROBORATED_EVENT_EVIDENCE_VERSION,
         claimCount: derivedEventClaims.length,
+      },
+      {
+        id: 'corroborated-tracking-evidence',
+        version: CORROBORATED_TRACKING_EVIDENCE_VERSION,
+        claimCount: derivedTrackingClaims.length,
       },
     ],
   };
