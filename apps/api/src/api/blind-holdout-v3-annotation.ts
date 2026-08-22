@@ -62,6 +62,18 @@ function candidateForUser(userId: string, message: NormalizedEmail) {
   };
 }
 
+function pageReachedCutoffBoundary(messages: NormalizedEmail[], cutoffMs: number): boolean {
+  const timestamps = messages
+    .map((message) => Date.parse(message.receivedAt))
+    .filter((value) => Number.isFinite(value));
+  if (timestamps.length === 0) return false;
+
+  const newestFirst = timestamps.every((value, index) => (
+    index === 0 || timestamps[index - 1]! >= value
+  ));
+  return newestFirst && timestamps.some((value) => value <= cutoffMs);
+}
+
 async function loadCandidates(userId: string, limit: number) {
   const db = getSupabaseAdmin() as any;
   const { data: connection, error } = await db
@@ -86,6 +98,7 @@ async function loadCandidates(userId: string, limit: number) {
   const matches: NormalizedEmail[] = [];
   let cursor: string | undefined;
   let scanned = 0;
+  let reachedCutoffBoundary = false;
 
   do {
     const page = await provider.searchMessages({
@@ -94,15 +107,20 @@ async function loadCandidates(userId: string, limit: number) {
       ...(cursor ? { cursor } : {}),
     });
     if (page.messages.length === 0) break;
+
     for (const message of page.messages) {
       const receivedMs = Date.parse(message.receivedAt);
       if (Number.isFinite(receivedMs) && receivedMs > cutoffMs) matches.push(message);
     }
+
     scanned += page.messages.length;
-    cursor = page.nextCursor;
+    reachedCutoffBoundary = pageReachedCutoffBoundary(page.messages, cutoffMs);
+    cursor = reachedCutoffBoundary ? undefined : page.nextCursor;
   } while (cursor && scanned < MAX_SCAN);
 
-  if (cursor && scanned >= MAX_SCAN) throw new Error('blind_v3_candidate_scan_truncated');
+  if (!reachedCutoffBoundary && cursor && scanned >= MAX_SCAN) {
+    throw new Error('blind_v3_candidate_scan_truncated');
+  }
 
   const candidates = matches
     .sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt))
@@ -113,6 +131,7 @@ async function loadCandidates(userId: string, limit: number) {
     candidates,
     availablePostFreeze: matches.length,
     scanned,
+    reachedCutoffBoundary,
   };
 }
 
@@ -164,7 +183,7 @@ body{font-family:system-ui;background:#071020;color:#fff;max-width:1280px;margin
   list.addEventListener('input',()=>updateProgress());
   list.addEventListener('click',(event)=>{const card=event.target.closest?.('.candidate');if(!card)return;if(event.target.matches('[data-noise]'))markNoise(card);if(event.target.matches('[data-commerce-action]'))markCommerce(card);});
 
-  loadButton.addEventListener('click',async()=>{loadButton.disabled=true;status.textContent=' Betöltés…';list.innerHTML='';try{const token=await auth();const r=await fetch('/api/audit/blind-v3/candidates?limit='+encodeURIComponent(limit.value),{method:'POST',headers:{Authorization:'Bearer '+token}});const d=await r.json();if(!r.ok)throw new Error(d.error||'candidate_load_failed');candidates=d.candidates||[];status.textContent=' '+candidates.length+' jelölt · összes post-freeze: '+d.availablePostFreeze+' · scanned: '+d.scanned;if(!candidates.length){list.innerHTML='<div class="c"><h2>Még nincs post-freeze levél.</h2><p class="muted">Cutoff: '+esc(CUTOFF)+'. A vakteszt integritása miatt régi leveleket nem emelünk be helyettük.</p></div>';return;}list.innerHTML=candidates.map((m,i)=>'<div class="c candidate" data-case-id="'+esc(m.caseId)+'"><h2>C'+(i+1)+' · <code>'+esc(m.caseId.slice(0,16))+'…</code></h2><div class="meta">'+esc(m.receivedAt)+' · '+esc(m.sender.name||'')+' &lt;'+esc(m.sender.address||'')+'&gt; · body: '+esc(m.bodySource)+'</div><h3>'+esc(m.subject)+'</h3><pre class="mail">'+esc(m.bodyText)+'</pre>'+(m.attachments?.length?'<p class="meta">Attachments: '+m.attachments.map(a=>esc(a.filename)+' ('+esc(a.contentType)+')').join(', ')+'</p>':'')+'<p><select data-commerce><option value="">— commerce? —</option><option value="yes">YES · commerce event</option><option value="no">NO · noise/non-commerce</option></select> <button type="button" data-commerce-action>Commerce</button> <button type="button" class="secondary" data-noise>Nem commerce</button></p>'+FIELDS.map(fieldHtml).join('')+'</div>').join('');document.querySelectorAll('.candidate').forEach(card=>{card.querySelectorAll('[data-field]').forEach(toggleValue);applyStored(card);});updateProgress();}catch(error){status.textContent=' Hiba: '+(error?.message||String(error));status.className='bad';}finally{loadButton.disabled=false;}});
+  loadButton.addEventListener('click',async()=>{loadButton.disabled=true;status.className='';status.textContent=' Betöltés…';list.innerHTML='';const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30000);try{const token=await auth();const r=await fetch('/api/audit/blind-v3/candidates?limit='+encodeURIComponent(limit.value),{method:'POST',headers:{Authorization:'Bearer '+token},signal:controller.signal});const d=await r.json();if(!r.ok)throw new Error(d.error||'candidate_load_failed');candidates=d.candidates||[];status.textContent=' '+candidates.length+' jelölt · összes post-freeze: '+d.availablePostFreeze+' · scanned: '+d.scanned;if(!candidates.length){list.innerHTML='<div class="c"><h2>Még nincs post-freeze levél.</h2><p class="muted">Cutoff: '+esc(CUTOFF)+'. A vakteszt integritása miatt régi leveleket nem emelünk be helyettük.</p></div>';return;}list.innerHTML=candidates.map((m,i)=>'<div class="c candidate" data-case-id="'+esc(m.caseId)+'"><h2>C'+(i+1)+' · <code>'+esc(m.caseId.slice(0,16))+'…</code></h2><div class="meta">'+esc(m.receivedAt)+' · '+esc(m.sender.name||'')+' &lt;'+esc(m.sender.address||'')+'&gt; · body: '+esc(m.bodySource)+'</div><h3>'+esc(m.subject)+'</h3><pre class="mail">'+esc(m.bodyText)+'</pre>'+(m.attachments?.length?'<p class="meta">Attachments: '+m.attachments.map(a=>esc(a.filename)+' ('+esc(a.contentType)+')').join(', ')+'</p>':'')+'<p><select data-commerce><option value="">— commerce? —</option><option value="yes">YES · commerce event</option><option value="no">NO · noise/non-commerce</option></select> <button type="button" data-commerce-action>Commerce</button> <button type="button" class="secondary" data-noise>Nem commerce</button></p>'+FIELDS.map(fieldHtml).join('')+'</div>').join('');document.querySelectorAll('.candidate').forEach(card=>{card.querySelectorAll('[data-field]').forEach(toggleValue);applyStored(card);});updateProgress();}catch(error){status.textContent=error?.name==='AbortError'?' Hiba: a levélbetöltés 30 másodperc után megszakadt.':' Hiba: '+(error?.message||String(error));status.className='bad';}finally{clearTimeout(timer);loadButton.disabled=false;}});
 
   const truthFromCards=()=>[...document.querySelectorAll('.candidate')].map(card=>{const item=readCard(card);const fields={};for(const field of FIELDS){const e=item.fields[field];if(e.state==='known'){let value=e.value;if(field==='total')value=Number(value);else if(field==='products')value=JSON.parse(value);fields[field]={state:'known',value};}else fields[field]={state:e.state};}return{caseId:card.dataset.caseId,isCommerceEvent:item.isCommerceEvent,fields};});
 
