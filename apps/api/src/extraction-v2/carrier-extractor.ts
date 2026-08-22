@@ -3,7 +3,7 @@ import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 import { currentMessageLines } from './event-type-extractor.js';
 
-export const UNIVERSAL_CARRIER_EXTRACTOR_VERSION = 'universal-carrier-v3';
+export const UNIVERSAL_CARRIER_EXTRACTOR_VERSION = 'universal-carrier-v4';
 
 function normalizeText(value: string): string {
   return value
@@ -60,9 +60,10 @@ function claim(input: {
 function explicitClaims(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[] {
   const claims: EvidenceClaim<string>[] = [];
   const lines = source === 'subject' ? [text] : currentMessageLines(text);
-  const pattern = /^\s*(?:carrier|courier|delivery\s+service|shipping\s+carrier|shipping\s+method|delivery\s+method|fut[aá]r|fut[aá]rszolg[aá]lat|k[eé]zbes[ií]t[oő]|sz[aá]ll[ií]t[aá]si\s+m[oó]d|sz[aá]ll[ií]t[aá]s\s+m[oó]dja)\s*[:：-]\s*(.+?)\s*$/i;
+  const explicitPattern = /^\s*(?:carrier|courier|delivery\s+service|shipping\s+carrier|fut[aá]r|fut[aá]rszolg[aá]lat|k[eé]zbes[ií]t[oő])\s*[:：-]\s*(.+?)\s*$/i;
+  const shippingMethodPattern = /^\s*(?:shipping\s+method|delivery\s+method|sz[aá]ll[ií]t[aá]si\s+m[oó]d|sz[aá]ll[ií]t[aá]s\s+m[oó]dja)\s*(?:[:：-]\s*|\s+)(.+?)\s*$/i;
   for (const line of lines) {
-    const match = line.match(pattern);
+    const match = line.match(explicitPattern) ?? line.match(shippingMethodPattern);
     const value = cleanCarrier(match?.[1] ?? '');
     if (!value) continue;
     claims.push(claim({
@@ -131,7 +132,7 @@ export const universalCarrierExtractor: EvidenceExtractor = {
       if (!value || !carrierAppearsInTransportContext(value, document.text)) continue;
       claims.push(claim({
         value,
-        confidence: 0.90,
+        confidence: 0.79,
         source: 'body',
         qualifier: 'document_active_carrier_signal',
       }));
