@@ -23,15 +23,6 @@ const FIELD_NAMES = [
 
 type FieldName = typeof FIELD_NAMES[number];
 
-const STATUS_NAMES: ShadowComparisonStatus[] = [
-  'same',
-  'legacy_only',
-  'v2_only',
-  'different',
-  'both_missing',
-  'v2_conflict',
-];
-
 async function resolveUser(request: FastifyRequest, reply: FastifyReply) {
   const user = await resolveAuthenticatedApiUser(request.headers.authorization);
   if (!user) {
