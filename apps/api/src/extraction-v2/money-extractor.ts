@@ -62,7 +62,7 @@ function moneyInText(text: string): { amount: number; currency: Currency } | nul
 }
 
 const STRONG_FINAL_TOTAL_LABEL = /\b(?:fizetendo(?:\s+osszeg)?|brutto\s+osszeg|vegosszeg|grand\s+total|order\s+total|total\s+amount|amount\s+due)\b/i;
-const INTERMEDIATE_TOTAL_LABEL = /\b(?:reszosszeg|subtotal|goods\s+total|items?\s+total|products?\s+total|value\s+of\s+goods|(?:termek(?:ek)?|aru(?:k)?)\s+osszesen)\b/i;
+const INTERMEDIATE_TOTAL_LABEL = /\b(?:reszosszeg|subtotal|goods\s+total|items?\s+total|products?\s+total|value\s+of\s+goods|(?:termek(?:ek)?|aru(?:k)?|products?|items?|goods).{0,32}\bosszesen)\b/i;
 const GENERIC_TOTAL_LABEL = /\bosszesen\b/i;
 const PAYMENT_AMOUNT_LABEL = /\b(?:fizetett\s+osszeg|befizetett\s+osszeg|tranzakcio\s+osszege|fizetes\s+osszege|payment\s+amount|paid\s+amount|amount\s+paid)\b/i;
 
