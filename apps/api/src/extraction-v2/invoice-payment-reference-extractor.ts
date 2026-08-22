@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_INVOICE_PAYMENT_REFERENCE_VERSION = 'universal-invoice-payment-reference-v1';
+export const UNIVERSAL_INVOICE_PAYMENT_REFERENCE_VERSION = 'universal-invoice-payment-reference-v2';
 
 function normalizeText(value: string): string {
   return value
@@ -29,15 +29,27 @@ function collect(text: string, source: 'subject' | 'body'): EvidenceClaim<string
   }> = [
     {
       field: 'invoice_number',
-      pattern: /\b(?:szamlaszam|szamla\s+szama|szamlaazonosito|bizonylatszam|invoice(?:\s+(?:number|no\.?|id))?|receipt(?:\s+(?:number|no\.?|id))?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._:/-]{3,63})\b/gi,
+      pattern: /\b(?:szamlaszam|szamla\s+szama|szamlaazonosito|invoice(?:\s+(?:number|no\.?|id))?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._:/-]{3,63})\b/gi,
       qualifier: 'explicit_invoice_label',
       confidence: 0.99,
+    },
+    {
+      field: 'invoice_number',
+      pattern: /\b(?:bizonylatszam|nyugtaszam|receipt(?:\s+(?:number|no\.?|id))?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._:/-]{3,63})\b/gi,
+      qualifier: 'explicit_receipt_identifier',
+      confidence: 0.965,
     },
     {
       field: 'invoice_number',
       pattern: /\b(?:szamla|invoice)\s+#?([A-Z0-9][A-Z0-9._:/-]{3,63})\b/gi,
       qualifier: 'contextual_invoice_identifier',
       confidence: 0.94,
+    },
+    {
+      field: 'invoice_number',
+      pattern: /\b(?:nyugta|receipt)\s+#?([A-Z0-9][A-Z0-9._:/-]{3,63})\b/gi,
+      qualifier: 'contextual_receipt_identifier',
+      confidence: 0.91,
     },
     {
       field: 'payment_reference',

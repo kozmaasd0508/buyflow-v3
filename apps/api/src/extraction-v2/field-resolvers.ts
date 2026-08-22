@@ -11,16 +11,23 @@ import type {
 const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = {
   event_type: {
     explicit_delivery_event: 520,
+    corroborated_refund_status: 515,
+    direct_carrier_delivery_event: 515,
     explicit_shipment_event: 510,
     explicit_refund_event: 510,
+    direct_carrier_shipment_event: 505,
     explicit_payment_completed_event: 500,
     explicit_cancellation_event: 500,
     explicit_return_event: 500,
     explicit_invoice_event: 480,
+    corroborated_invoice_document: 470,
     explicit_order_created_event: 470,
   },
   carrier: {
     explicit_carrier_label: 500,
+    authenticated_direct_carrier_sender: 490,
+    document_shipping_method_carrier: 480,
+    direct_carrier_sender: 460,
     document_active_carrier_signal: 350,
   },
   order_number: {
@@ -32,6 +39,7 @@ const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = 
   },
   tracking_number: {
     explicit_tracking_label: 500,
+    direct_carrier_tracking_candidate: 470,
     contextual_tracking_identifier: 420,
     document_tracking_candidate: 300,
   },
@@ -61,10 +69,13 @@ const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = 
     explicit_refund_completion: 500,
     explicit_cod_evidence: 500,
     explicit_paid_evidence: 500,
+    document_payment_method_cod: 480,
   },
   invoice_number: {
     explicit_invoice_label: 500,
+    explicit_receipt_identifier: 450,
     contextual_invoice_identifier: 420,
+    contextual_receipt_identifier: 380,
   },
   payment_reference: {
     explicit_payment_reference_label: 500,
@@ -156,7 +167,9 @@ function resolveNumberField(input: {
 function isPaymentAmountEligible(eventType: ResolvedField<string>): boolean {
   if (eventType.status !== 'resolved' || !eventType.value) return false;
   const normalized = normalizeToken(eventType.value);
-  return normalized === 'payment_completed' || normalized === 'refund';
+  return normalized === 'payment_completed'
+    || normalized === 'refund'
+    || normalized === 'invoice_or_receipt';
 }
 
 function filterContextualMoneyClaims<T>(

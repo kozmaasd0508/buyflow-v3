@@ -2,7 +2,7 @@ import type { EmailDocumentMoneyCandidate, EmailDocumentProductCandidate, EmailD
 import type { EvidenceClaim, EvidenceProduct } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_PRODUCT_EXTRACTOR_VERSION = 'universal-product-v2';
+export const UNIVERSAL_PRODUCT_EXTRACTOR_VERSION = 'universal-product-v3';
 
 type Currency = EmailDocumentMoneyCandidate['currency'];
 
@@ -88,6 +88,7 @@ function cleanName(value: string): string | null {
   const normalized = normalizeText(cleaned).toLowerCase();
   if (cleaned.length < 2 || cleaned.length > 240) return null;
   if (!/[\p{L}]/u.test(cleaned)) return null;
+  if (/^\d+\s*(?:=|[+*/×÷])/.test(normalized)) return null;
   if (isMoneyOnlyLabel(cleaned)) return null;
   if (NOISE_PREFIX.test(normalized)) return null;
   if (/^(?:https?:\/\/|www\.|mailto:)/i.test(cleaned)) return null;
