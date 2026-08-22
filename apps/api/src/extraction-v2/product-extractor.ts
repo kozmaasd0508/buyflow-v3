@@ -61,6 +61,13 @@ function moneyInText(text: string): { amount: number; currency: Currency } | nul
   return null;
 }
 
+function stripTrailingMoney(value: string): string {
+  return value
+    .replace(/\s*(?:[-–—|]\s*)?[0-9][0-9 .,'’\u00a0]{0,18}\s*(?:HUF|Ft|EUR|€|USD|\$|GBP|£)\s*$/i, '')
+    .replace(/\s*(?:[-–—|]\s*)?(?:HUF|Ft|EUR|€|USD|\$|GBP|£)\s*[0-9][0-9 .,'’\u00a0]{0,18}\s*$/i, '')
+    .trim();
+}
+
 const NOISE_PREFIX = /^(?:szallitas|shipping|delivery|utanvet|cash on delivery|cod|fizetes|payment|kedvezmeny|discount|kupon|coupon|afa|vat|ado|tax|dij|fee|subtotal|reszosszeg|osszesen|total|vegosszeg|grand total|fizetendo)\b/i;
 
 function cleanName(value: string): string | null {
@@ -168,17 +175,15 @@ function quantityPrefixedRows(text: string): EvidenceClaim<EvidenceProduct>[] {
     if (quantity == null) continue;
 
     const money = moneyInText(match[2]);
-    const namePart = money ? match[2].replace(moneyInText(match[2]) ? /\s*[0-9][0-9 .,'’\u00a0]{0,18}\s*(?:HUF|Ft|EUR|€|USD|\$|GBP|£).*$/i : /$/,'').trim() : match[2];
-    const name = cleanName(namePart);
+    const name = cleanName(stripTrailingMoney(match[2]));
     if (!name) continue;
-    const totalPrice = money?.amount ?? null;
     claims.push(claim({
       name,
       quantity,
-      unitPrice: money && quantity > 0 ? money.amount / quantity : null,
-      totalPrice,
+      unitPrice: null,
+      totalPrice: null,
       currency: money?.currency ?? null,
-    }, money ? 0.97 : 0.95, 'body', 'quantity_prefixed_product_row'));
+    }, money ? 0.96 : 0.95, 'body', 'quantity_prefixed_product_row'));
   }
   return claims;
 }
@@ -187,7 +192,8 @@ function tableProductRows(text: string): EvidenceClaim<EvidenceProduct>[] {
   const claims: EvidenceClaim<EvidenceProduct>[] = [];
   for (const rawLine of text.split(/\r?\n/)) {
     if (!rawLine.includes('|') && !rawLine.includes('\t')) continue;
-    const cells = rawLine.split(rawLine.includes('|') ? '|' : '\t').map((cell) => cell.trim()).filter(Boolean);
+    const separator = rawLine.includes('|') ? '|' : '\t';
+    const cells = rawLine.split(separator).map((cell) => cell.trim()).filter(Boolean);
     if (cells.length < 3 || cells.length > 8) continue;
 
     const quantityIndex = cells.findIndex((cell) => /^\d{1,3}(?:\s*(?:db|pcs?|pieces?))?$/i.test(normalizeText(cell)));
@@ -204,14 +210,15 @@ function tableProductRows(text: string): EvidenceClaim<EvidenceProduct>[] {
     const name = cleanName(nameCell ?? '');
     if (!name) continue;
 
-    const price = moneyEntries[moneyEntries.length - 1]!.money;
+    const firstMoney = moneyEntries[0]!.money;
+    const lastMoney = moneyEntries[moneyEntries.length - 1]!.money;
     claims.push(claim({
       name,
       quantity,
-      unitPrice: quantity > 0 ? price.amount / quantity : null,
-      totalPrice: price.amount,
-      currency: price.currency,
-    }, 0.96, 'body', 'structured_table_product_row'));
+      unitPrice: moneyEntries.length >= 2 ? firstMoney.amount : null,
+      totalPrice: moneyEntries.length >= 2 ? lastMoney.amount : null,
+      currency: lastMoney.currency,
+    }, moneyEntries.length >= 2 ? 0.98 : 0.95, 'body', 'structured_table_product_row'));
   }
   return claims;
 }
