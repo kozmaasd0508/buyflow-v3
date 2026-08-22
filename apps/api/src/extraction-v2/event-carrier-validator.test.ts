@@ -108,10 +108,20 @@ test('engine v2 runs all nine extractors and resolves shipment carrier tracking'
   assert.equal(result.aiCalls, 0);
 });
 
-test('conflicting current carrier evidence becomes REVIEW rather than silent overwrite', () => {
+test('explicit carrier label outranks a weaker incidental carrier mention', () => {
   const document = buildEmailDocumentV1(email({
     subject: 'Csomagértesítő',
-    snippet: 'Futárszolgálat: DPD\nA csomagot a GLS rendszerében is látod.',
+    snippet: 'Futárszolgálat: DPD\nA GLS név egy tájékoztató mondatban is szerepel.',
+  }));
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.carrier.status, 'resolved');
+  assert.equal(result.resolved.carrier.value, 'DPD');
+});
+
+test('two different explicit carrier labels become REVIEW', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Csomagértesítő',
+    snippet: 'Futárszolgálat: DPD\nCarrier: GLS',
   }));
   const result = runExtractionEngineV2(document);
   assert.equal(result.resolved.carrier.status, 'conflict');
@@ -126,13 +136,12 @@ test('shipment without tracking is warning only, not REVIEW', () => {
   assert.equal(result.validation.reviewRequired, false);
 });
 
-test('payment_completed plus COD is a hard semantic contradiction and becomes REVIEW', () => {
+test('contradictory explicit payment status evidence becomes REVIEW before validation can guess', () => {
   const result = runExtractionEngineV2(buildEmailDocumentV1(email({
     subject: 'Sikeres fizetés',
     snippet: 'Sikeres fizetés\nFizetési mód: Utánvét',
   })));
   assert.equal(result.resolved.eventType.value, 'payment_completed');
-  assert.equal(result.resolved.paymentStatus.value, 'cash_on_delivery');
-  assert.ok(result.validation.issues.some((issue) => issue.code === 'payment_completed_status_contradiction'));
+  assert.equal(result.resolved.paymentStatus.status, 'conflict');
   assert.equal(result.reviewRequired, true);
 });
