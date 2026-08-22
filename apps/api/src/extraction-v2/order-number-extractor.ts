@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION = 'universal-order-number-v2';
+export const UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION = 'universal-order-number-v3';
 
 function normalizeText(value: string): string {
   return value
@@ -35,6 +35,10 @@ function collectExplicit(
     {
       pattern: /\b(?:rendelesi|megrendelesi)\s+(?:szam(?:a)?|azonosito(?:ja)?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
       qualifier: 'explicit_order_label',
+    },
+    {
+      pattern: /\b(?:order|rendeles|megrendeles)\s+(?:confirmation|visszaigazolas(?:a)?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
+      qualifier: 'explicit_order_confirmation_label',
     },
     {
       pattern: /\b(?:order|rendeles|megrendeles)\s*#\s*([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
