@@ -151,9 +151,9 @@ test('URL-shaped document candidate cannot become an order number', () => {
 
 test('carrier collection amount is not a purchase total on shipment email', () => {
   const document = buildEmailDocumentV1(email({
-    subject: 'Küldemény feldolgozása megkezdődött',
+    subject: 'A küldemény úton van',
     snippet: [
-      'A küldemény feldolgozását megkezdtük a központi raktárban.',
+      'A küldemény úton van.',
       'Szállítási mód: Express One',
       'A küldemény átvételekor fizetendő összeg: 0 Ft.',
     ].join('\n'),
