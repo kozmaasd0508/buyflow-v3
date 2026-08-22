@@ -94,6 +94,21 @@ function hasExplicitNewOrderEvidence(text: string): boolean {
   ].some((pattern) => pattern.test(normalized));
 }
 
+function explicitNewOrderNumber(text: string): string | null {
+  const normalized = normalizeText(text);
+  const patterns = [
+    /\b(?:megrendelesi|rendelesi)\s+(?:szam|azonosito)\s*[:#-]\s*#?([a-z0-9][a-z0-9./_-]{3,39})\b/i,
+    /\b(?:megrendeles|rendeles)\s+visszaigazolasa?\s*[:#-]\s*#?([a-z0-9][a-z0-9./_-]{3,39})\b/i,
+    /\border\s*(?:number|no\.?|id)\s*[:#-]\s*#?([a-z0-9][a-z0-9./_-]{3,39})\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const candidate = normalized.match(pattern)?.[1]?.trim().replace(/[.,;:)]+$/, '');
+    if (candidate && /\d/.test(candidate)) return candidate;
+  }
+  return null;
+}
+
 function guardReplyThreadOrderCreation(
   email: NormalizedEmail,
   parsed: DeterministicCommerceParseResult,
@@ -103,9 +118,18 @@ function guardReplyThreadOrderCreation(
 
   const authoredPrefix = authoredReplyPrefix(email);
   if (authoredPrefix && hasExplicitNewOrderEvidence(authoredPrefix)) {
+    const freshOrderNumber = explicitNewOrderNumber(authoredPrefix);
     return {
       ...parsed,
-      reasons: [...new Set([...parsed.reasons, 'reply_thread_explicit_new_order_evidence'])],
+      extraction: {
+        ...parsed.extraction,
+        order_number: freshOrderNumber,
+      },
+      reasons: [...new Set([
+        ...parsed.reasons,
+        'reply_thread_explicit_new_order_evidence',
+        ...(freshOrderNumber ? ['reply_thread_order_number_from_authored_prefix'] : []),
+      ])],
     };
   }
 
