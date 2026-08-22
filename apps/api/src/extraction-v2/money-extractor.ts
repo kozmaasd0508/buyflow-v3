@@ -41,7 +41,7 @@ function parseAmount(raw: string, currency: Currency): number | null {
 }
 
 function moneyInText(text: string): { amount: number; currency: Currency } | null {
-  const suffix = text.match(/([0-9][0-9 .,'’\u00a0]{0,18}[0-9]|[0-9])\s*(HUF|Ft|EUR|€|USD|\$|GBP|£)\b/i);
+  const suffix = text.match(/([0-9][0-9 .,'’\u00a0]{0,18}[0-9]|[0-9])\s*(HUF|Ft|EUR|€|USD|\$|GBP|£)(?=\s|$|[.,;:)])/i);
   if (suffix?.[1] && suffix[2]) {
     const currency = normalizeCurrency(suffix[2]);
     if (currency) {
@@ -50,7 +50,7 @@ function moneyInText(text: string): { amount: number; currency: Currency } | nul
     }
   }
 
-  const prefix = text.match(/(?:^|\s)(HUF|Ft|EUR|€|USD|\$|GBP|£)\s*([0-9][0-9 .,'’\u00a0]{0,18}[0-9]|[0-9])\b/i);
+  const prefix = text.match(/(?:^|\s)(HUF|Ft|EUR|€|USD|\$|GBP|£)\s*([0-9][0-9 .,'’\u00a0]{0,18}[0-9]|[0-9])(?=\s|$|[.,;:)])/i);
   if (prefix?.[1] && prefix[2]) {
     const currency = normalizeCurrency(prefix[1]);
     if (currency) {
