@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { NormalizedEmail } from '../email/types.js';
+import type { EmailHeader, NormalizedEmail } from '../email/types.js';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
 import { runExtractionEngineV2 } from './engine-v2.js';
 
@@ -9,6 +9,7 @@ function email(input: {
   snippet: string;
   sender?: string;
   senderName?: string;
+  headers?: EmailHeader[];
 }): NormalizedEmail {
   return {
     provider: 'nylas',
@@ -20,20 +21,26 @@ function email(input: {
     bcc: [],
     receivedAt: '2026-08-23T00:00:00.000Z',
     snippet: input.snippet,
+    headers: input.headers,
     folders: ['inbox'],
     attachments: [],
   };
 }
 
-test('direct carrier pickup-order wording cannot resolve as retail order_created', () => {
+const dkimPass = (domain: string): EmailHeader => ({
+  name: 'Authentication-Results',
+  value: `mx.google.com; dkim=pass header.d=${domain}`,
+});
+
+test('direct carrier source cannot resolve raw retail order_created evidence', () => {
   const document = buildEmailDocumentV1(email({
     sender: 'webcas@expressone.hu',
     senderName: 'Express One',
-    subject: 'Expressone értesítés #772013',
+    subject: 'Megrendelés visszaigazolása #772013',
     snippet: [
       'Köszönjük a megrendelést.',
-      'Az "772013" azonosítóval rögzített árufelvételi megbízást a futár elfogadta.',
-      'Az árufelvétel a mai napon várható.',
+      'Megrendelés visszaigazolása #772013',
+      'Az árufelvételi megbízást a futár elfogadta.',
     ].join('\n'),
   }));
 
@@ -62,10 +69,11 @@ test('the same strong order wording remains eligible for a normal merchant sourc
   assert.equal(result.resolved.orderNumber.value, 'ORD-12345');
 });
 
-test('direct carrier shipment and delivery lifecycle remains eligible', () => {
+test('authenticated direct carrier shipment and delivery lifecycle remains eligible', () => {
   const shipmentDocument = buildEmailDocumentV1(email({
     sender: 'notify@expressone.hu',
     senderName: 'Express One',
+    headers: [dkimPass('expressone.hu')],
     subject: 'Küldemény feldolgozása megkezdődött',
     snippet: 'Küldeményének feldolgozását megkezdtük a központi raktárunkban.',
   }));
@@ -75,6 +83,7 @@ test('direct carrier shipment and delivery lifecycle remains eligible', () => {
   const deliveryDocument = buildEmailDocumentV1(email({
     sender: 'notify@dpd.hu',
     senderName: 'DPD',
+    headers: [dkimPass('dpd.hu')],
     subject: 'Sikeres kézbesítés',
     snippet: 'Küldeményét a mai napon sikeresen kézbesítettük.',
   }));
