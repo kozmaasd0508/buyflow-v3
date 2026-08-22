@@ -136,6 +136,7 @@ function normalizeComparable(field: keyof CanonicalFieldSnapshot, value: unknown
 }
 
 function isMissing(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length === 0;
   return value === null || value === undefined || value === '';
 }
 
