@@ -86,8 +86,9 @@ function claim(input: {
 
 /**
  * Additive shadow evidence from a direct source identity. This never suppresses
- * universal extractors and does not write production data. DKIM raises source
- * confidence when present; sender-domain identity alone remains a lower tier.
+ * universal extractors and does not write production data. Sender-domain identity
+ * can contribute carrier identity in shadow, but source-specific lifecycle
+ * promotion requires matching DKIM pass evidence.
  */
 export function deriveSourceAdapterEvidence(document: EmailDocumentV1): EvidenceClaim[] {
   const profile = directCarrierForDomain(document.sender.primaryDomain);
@@ -97,23 +98,25 @@ export function deriveSourceAdapterEvidence(document: EmailDocumentV1): Evidence
   const claims: EvidenceClaim[] = [claim({
     field: 'carrier',
     value: profile.name,
-    confidence: authenticated ? 0.995 : 0.94,
+    confidence: authenticated ? 0.995 : 0.90,
     qualifier: authenticated ? 'authenticated_direct_carrier_sender' : 'direct_carrier_sender',
   })];
+
+  if (!authenticated) return claims;
 
   const text = currentText(document);
   if (DIRECT_DELIVERY.test(text)) {
     claims.push(claim({
       field: 'event_type',
       value: 'delivery',
-      confidence: authenticated ? 0.995 : 0.965,
+      confidence: 0.995,
       qualifier: 'direct_carrier_delivery_event',
     }));
   } else if (DIRECT_SHIPMENT.test(text)) {
     claims.push(claim({
       field: 'event_type',
       value: 'shipment',
-      confidence: authenticated ? 0.99 : 0.955,
+      confidence: 0.99,
       qualifier: 'direct_carrier_shipment_event',
     }));
   }
