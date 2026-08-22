@@ -2,7 +2,7 @@ import type { EmailDocumentMoneyCandidate, EmailDocumentV1 } from '../ingestion/
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_MONEY_EXTRACTOR_VERSION = 'universal-money-v3';
+export const UNIVERSAL_MONEY_EXTRACTOR_VERSION = 'universal-money-v4';
 
 type Currency = EmailDocumentMoneyCandidate['currency'];
 
@@ -61,6 +61,7 @@ function moneyInText(text: string): { amount: number; currency: Currency } | nul
   return null;
 }
 
+const COD_COLLECTION_AMOUNT_LABEL = /(?:\b(?:kuldemeny|csomag)\w*.{0,48}\batvetelekor\s+fizetendo(?:\s+osszeg)?\b|\bamount\s+to\s+be\s+cleared\b.{0,80}\btime\s+of\s+receiving\b.{0,48}\bparcel\b)/i;
 const STRONG_FINAL_TOTAL_LABEL = /\b(?:fizetendo(?:\s+osszeg)?|brutto\s+osszeg|vegosszeg|grand\s+total|order\s+total|total\s+amount|amount\s+due)\b/i;
 const INTERMEDIATE_TOTAL_LABEL = /\b(?:reszosszeg|subtotal|goods\s+total|items?\s+total|products?\s+total|value\s+of\s+goods|(?:termek(?:ek)?|aru(?:k)?|products?|items?|goods).{0,32}\bosszesen)\b/i;
 const GENERIC_TOTAL_LABEL = /\bosszesen\b/i;
@@ -104,12 +105,13 @@ function scanLabeledText(
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? '';
     const normalized = normalizeText(line);
+    const codCollectionMatch = normalized.match(COD_COLLECTION_AMOUNT_LABEL);
     const paymentMatch = normalized.match(PAYMENT_AMOUNT_LABEL);
     const strongFinalMatch = normalized.match(STRONG_FINAL_TOTAL_LABEL);
     const intermediateMatch = normalized.match(INTERMEDIATE_TOTAL_LABEL);
     const genericTotalMatch = normalized.match(GENERIC_TOTAL_LABEL);
 
-    const match = paymentMatch ?? strongFinalMatch ?? intermediateMatch ?? genericTotalMatch;
+    const match = codCollectionMatch ?? paymentMatch ?? strongFinalMatch ?? intermediateMatch ?? genericTotalMatch;
     if (!match) continue;
 
     const nextLine = lines.slice(index + 1).find((candidate) => Boolean(candidate.trim())) ?? '';
@@ -119,7 +121,10 @@ function scanLabeledText(
 
     let qualifier: string;
     let confidence: number;
-    if (paymentMatch) {
+    if (codCollectionMatch) {
+      qualifier = 'explicit_cod_collection_amount';
+      confidence = source === 'subject' ? 0.97 : 0.99;
+    } else if (paymentMatch) {
       qualifier = 'explicit_payment_amount';
       confidence = source === 'subject' ? 0.95 : 0.97;
     } else if (strongFinalMatch) {
