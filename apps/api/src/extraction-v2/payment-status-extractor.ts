@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_PAYMENT_STATUS_EXTRACTOR_VERSION = 'universal-payment-status-v2';
+export const UNIVERSAL_PAYMENT_STATUS_EXTRACTOR_VERSION = 'universal-payment-status-v3';
 
 type PaymentStatusEvidence = 'paid' | 'cash_on_delivery' | 'failed' | 'refunded';
 
@@ -15,7 +15,7 @@ function normalizeText(value: string): string {
 }
 
 const FAILED = /\b(?:sikertelen\s+(?:bankkartyas\s+)?fizetes|fizetes\s+sikertelen|tranzakcio\s+sikertelen|sikertelen\s+tranzakcio|payment\s+(?:failed|unsuccessful|declined)|transaction\s+(?:failed|declined))\b/i;
-const REFUNDED = /\b(?:visszaterites\s+(?:megtortent|sikeres|teljesitve)|sikeres\s+visszaterites|refund\s+(?:completed|successful)|payment\s+refunded|refunded)\b/i;
+const REFUNDED = /\b(?:visszaterites\s+(?:megtortent|sikeres|teljesitve|elinditva)|sikeres\s+visszaterites|refund\b.{0,96}\b(?:has\s+been\s+|was\s+)?(?:completed|successful|issued|processed)|payment\s+refunded|refunded)\b/i;
 const COD_VALUE = /\b(?:utanvet(?:el|tel|es)?|cash\s+on\s+delivery|cod)\b/i;
 const COD = /(?:fizetesi\s+mod|payment\s+method)\s*[:：-]?\s*(?:utanvet(?:el|tel|es)?|cash\s+on\s+delivery|cod)\b|\b(?:utanvet(?:es)?(?:i)?\s+osszeg|beszedendo\s+osszeg|cash\s+on\s+delivery\s+amount|cod\s+amount)\b/i;
 const PAYMENT_METHOD_LABEL = /^\s*(?:fizetesi\s+mod|payment\s+method)\s*[:：-]?\s*$/i;
