@@ -168,6 +168,19 @@ test('generic-commerce-v4 recognizes broader lifecycle language from fresh holdo
   }
 });
 
+test('generic-commerce-v4 accepts body-only successful transaction when an amount corroborates it', () => {
+  const message = email({
+    subject: 'Fizetési értesítő',
+    sender: 'noreply@payments.example.hu',
+    name: 'Fizetési szolgáltató',
+    snippet: 'Sikeres tranzakció\nÖsszeg: 14 705 Ft',
+  });
+  const result = detectGenericCommerceV2(buildEmailDocumentV1(message));
+  assert.ok(result);
+  assert.equal(result.eventType, 'payment_completed');
+  assert.deepEqual(result.total, { amount: 14705, currency: 'HUF' });
+});
+
 test('generic-commerce-v4 rejects administrative document receipts that only look like commerce', () => {
   const administrative = email({
     subject: 'Átvételi értesítő (Feladó: NAV, Dokumentum: Elfogadó nyugta - 518124715202608081915121139)',

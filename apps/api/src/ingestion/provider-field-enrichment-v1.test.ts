@@ -5,10 +5,10 @@ import type { NormalizedEmail } from '../email/types.js';
 import type { DeterministicCommerceParseResult } from './deterministic-commerce-parser.js';
 import { enrichProviderFieldsV1 } from './provider-field-enrichment-v1.js';
 
-function email(from: string, subject: string, snippet = ''): NormalizedEmail {
+function email(from: string, subject: string, snippet = '', name?: string): NormalizedEmail {
   return {
     provider: 'nylas', providerMessageId: 'test', subject,
-    from: [{ email: from }], to: [], cc: [], bcc: [],
+    from: [{ email: from, ...(name ? { name } : {}) }], to: [], cc: [], bcc: [],
     receivedAt: '2026-08-20T00:00:00.000Z', snippet,
     folders: [], attachments: [],
   };
@@ -79,4 +79,58 @@ test('does not enrich untrusted sender with DPD-shaped subject', () => {
   );
   assert.equal(result.extraction.carrier, null);
   assert.equal(result.extraction.tracking_number, null);
+});
+
+test('enriches shipment COD amount and payment status from explicit labels', () => {
+  const result = enrichProviderFieldsV1(
+    email('shop@example.hu', 'Csomagod úton van', 'Utánvét összege: 9 560 Ft\nFizetési mód: Utánvét'),
+    parsed('shipment'),
+  );
+  assert.equal(result.extraction.total, 9560);
+  assert.equal(result.extraction.currency, 'HUF');
+  assert.equal(result.extraction.payment_status, 'cash_on_delivery');
+});
+
+test('enriches payment amount and paid status from explicit transaction evidence', () => {
+  const result = enrichProviderFieldsV1(
+    email('payments@example.hu', 'Fizetési értesítő', 'Sikeres tranzakció\nTranzakció összege: 14 960 Ft'),
+    parsed('payment_completed'),
+  );
+  assert.equal(result.extraction.total, 14960);
+  assert.equal(result.extraction.currency, 'HUF');
+  assert.equal(result.extraction.payment_status, 'paid');
+});
+
+test('marks invoice or receipt paid only with explicit paid evidence', () => {
+  const result = enrichProviderFieldsV1(
+    email('billing@example.hu', 'A számlád elkészült', 'Fizetés megtörtént.'),
+    parsed('invoice_or_receipt'),
+  );
+  assert.equal(result.extraction.payment_status, 'paid');
+});
+
+test('uses non-courier sender display name as merchant fallback', () => {
+  const result = enrichProviderFieldsV1(
+    email('orders@example-shop.hu', 'Rendelésed szállítás alatt', '', 'MODELL&HOBBY Kft.'),
+    parsed('shipment'),
+  );
+  assert.equal(result.extraction.merchant, 'MODELL&HOBBY Kft.');
+});
+
+test('uses parsed parcel sender as merchant fallback for courier mail', () => {
+  const input = parsed('shipment');
+  input.extraction.parcel_sender = 'MODELL&HOBBY Kft.';
+  const result = enrichProviderFieldsV1(
+    email('noreply@dpd.hu', 'Értesítés 16380143879559', '', 'DPD Hungary'),
+    input,
+  );
+  assert.equal(result.extraction.merchant, 'MODELL&HOBBY Kft.');
+});
+
+test('does not use courier sender display name as merchant fallback', () => {
+  const result = enrichProviderFieldsV1(
+    email('noreply@dpd.hu', 'Értesítés 16380143879559', '', 'DPD Hungary'),
+    parsed('shipment'),
+  );
+  assert.equal(result.extraction.merchant, null);
 });
