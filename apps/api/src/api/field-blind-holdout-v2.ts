@@ -47,6 +47,12 @@ function actualFields(plan: ReturnType<typeof planNormalizedInboundEmail>) {
   } as Record<FieldName, unknown>;
 }
 
+function expectationValue(expectation: GroundTruthExpectation<unknown>): unknown {
+  if (expectation.state === 'not_asserted') return undefined;
+  if (expectation.state === 'null') return null;
+  return expectation.value;
+}
+
 function evaluate(expectation: GroundTruthExpectation<unknown>, actual: unknown) {
   if (expectation.state === 'not_asserted') return { asserted: false, pass: true };
   if (expectation.state === 'null') {
@@ -136,7 +142,8 @@ async function run(userId: string) {
     const actual = actualFields(plan);
     let criticalMismatch = false;
     const fields = FIELDS.map((name) => {
-      const result = evaluate(truth[name] as GroundTruthExpectation<unknown>, actual[name]);
+      const expectation = truth[name] as GroundTruthExpectation<unknown>;
+      const result = evaluate(expectation, actual[name]);
       if (result.asserted) {
         asserted += 1;
         (summary[name] as any).asserted += 1;
@@ -156,7 +163,12 @@ async function run(userId: string) {
           ].includes(name)) criticalMismatch = true;
         }
       }
-      return { name, ...result, actual: actual[name] };
+      return {
+        name,
+        ...result,
+        expected: expectationValue(expectation),
+        actual: actual[name],
+      };
     });
 
     if (criticalMismatch) criticalMismatchCount += 1;
@@ -231,16 +243,23 @@ function html() {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Blind Field Holdout v2</title>
 <style>
-body{font-family:system-ui;background:#071020;color:#fff;max-width:1000px;margin:auto;padding:28px}
+body{font-family:system-ui;background:#071020;color:#fff;max-width:1100px;margin:auto;padding:28px}
 .c{background:#0d1830;padding:20px;border-radius:18px;margin:14px}
 button{padding:12px;border:0;border-radius:10px;background:#7c4dff;color:white;font-weight:700}
+.bad{color:#ff9b9b}.good{color:#8ef0ba}.muted{color:#9fb0c9}
+table{width:100%;border-collapse:collapse;margin-top:12px}th,td{text-align:left;vertical-align:top;padding:9px;border-bottom:1px solid #263551}code{white-space:pre-wrap;word-break:break-word;color:#dfe7ff}
 </style>
-<div class="c"><b>BLIND FIELD HOLDOUT v2 · FROZEN BEFORE RUN · 0 WRITE · 0 AI</b><h1>Field Blind Holdout v2</h1><button id="b">Első vakteszt futtatása</button><span id="s"></span></div>
+<div class="c"><b>BLIND FIELD HOLDOUT v2 · ORIGINAL TRUTH FROZEN BEFORE FIRST RUN · 0 WRITE · 0 AI</b><h1>Field Blind Holdout v2</h1><p class="muted">Az első vakfutás után ez az oldal diagnosztikai/regressziós nézetként használható.</p><button id="b">Audit újrafuttatása</button><span id="s"></span></div>
 <div class="c" id="o"></div>
 <script type="module">
 import{createClient}from'https://esm.sh/@supabase/supabase-js@2';
 const c=createClient('https://acjenqkrvnkdvvgordry.supabase.co','sb_publishable_aFkSa0y3YHzgBAxRx3nwxg_o5_8shFp');
-b.onclick=async()=>{const{x,data}=await c.auth.getSession();if(!data.session){s.textContent=' Jelentkezz be.';return}s.textContent=' Fut…';const r=await fetch('/api/audit/field-blind-v2',{method:'POST',headers:{Authorization:'Bearer '+data.session.access_token}}),d=await r.json(),p=v=>v==null?'—':(v*100).toFixed(1)+'%';o.innerHTML='<h2>Detection: '+p(d.detection.precision)+' precision · '+p(d.detection.recall)+' recall</h2><p>TP '+d.detection.tp+' · FN '+d.detection.fn+' · FP '+d.detection.fp+' · TN '+d.detection.tn+'</p><h2>Fields: '+p(d.fields.accuracy)+'</h2><p>Found '+d.foundMessages+'/'+d.expectedMessages+' · asserted '+d.fields.asserted+' · critical mismatch '+d.fields.criticalMismatchCount+'</p>'+Object.entries(d.fields.summary).map(([k,v])=>'<p>'+k+' · '+p(v.accuracy)+' · '+v.passed+'/'+v.asserted+'</p>').join('');s.textContent=' Kész. 0 write · 0 AI.'};
+const esc=v=>String(v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fmt=v=>v===undefined?'—':v===null?'null':typeof v==='string'?v:JSON.stringify(v);
+b.onclick=async()=>{const{x,data}=await c.auth.getSession();if(!data.session){s.textContent=' Jelentkezz be.';return}s.textContent=' Fut…';const r=await fetch('/api/audit/field-blind-v2',{method:'POST',headers:{Authorization:'Bearer '+data.session.access_token}}),d=await r.json(),p=v=>v==null?'—':(v*100).toFixed(1)+'%';
+const commerce=d.rows.filter(x=>x.truth==='commerce');
+const detail=commerce.map((row,i)=>{const failed=(row.fields||[]).filter(f=>f.asserted&&!f.pass);if(!row.found)return '<h3 class="bad">C'+(i+1)+' · message missing</h3>';if(!failed.length)return '<h3 class="good">C'+(i+1)+' · PASS · '+esc(row.parserVersion||'—')+'</h3>';return '<h3 class="bad">C'+(i+1)+' · '+esc(row.classification||'NO DETECTION')+' · '+esc(row.parserVersion||'—')+'</h3><table><tr><th>Field</th><th>Expected</th><th>Actual</th></tr>'+failed.map(f=>'<tr><td>'+esc(f.name)+'</td><td><code>'+esc(fmt(f.expected))+'</code></td><td><code>'+esc(fmt(f.actual))+'</code></td></tr>').join('')+'</table>'}).join('');
+o.innerHTML='<h2>Detection: '+p(d.detection.precision)+' precision · '+p(d.detection.recall)+' recall</h2><p>TP '+d.detection.tp+' · FN '+d.detection.fn+' · FP '+d.detection.fp+' · TN '+d.detection.tn+'</p><h2>Fields: '+p(d.fields.accuracy)+'</h2><p>Found '+d.foundMessages+'/'+d.expectedMessages+' · asserted '+d.fields.asserted+' · critical mismatch '+d.fields.criticalMismatchCount+'</p>'+Object.entries(d.fields.summary).map(([k,v])=>'<p>'+k+' · '+p(v.accuracy)+' · '+v.passed+'/'+v.asserted+'</p>').join('')+'<h2>Mismatch diagnostics</h2>'+detail;s.textContent=' Kész. 0 write · 0 AI.'};
 </script>`;
 }
 
