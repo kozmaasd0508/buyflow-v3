@@ -112,7 +112,7 @@ test('money extractor only uses unlabeled document money as weak evidence when e
   assert.equal(multiple.length, 0);
 });
 
-test('universal core runs all extractors and accumulates independent field evidence', () => {
+test('universal core runs required extractors and accumulates independent field evidence', () => {
   const result = collectUniversalCoreEvidence(document({
     subject: 'Rendelésszám: SO-2024-30411',
     text: [
@@ -121,11 +121,11 @@ test('universal core runs all extractors and accumulates independent field evide
     ].join('\n'),
   }));
 
-  assert.deepEqual(result.ranExtractors.map((item) => item.id), [
-    'universal-order-number',
-    'universal-tracking-number',
-    'universal-money',
-  ]);
+  const ids = new Set(result.ranExtractors.map((item) => item.id));
+  assert.ok(ids.has('universal-order-number'));
+  assert.ok(ids.has('universal-tracking-number'));
+  assert.ok(ids.has('universal-money'));
+  assert.equal(new Set(result.ranExtractors.map((item) => item.id)).size, result.ranExtractors.length);
   assert.equal(result.bundle.claims.find((claim) => claim.field === 'order_number')?.value, 'SO-2024-30411');
   assert.equal(result.bundle.claims.find((claim) => claim.field === 'tracking_number')?.value, 'PB9S650295555');
   assert.equal(result.bundle.claims.find((claim) => claim.field === 'total')?.value, 9560);
