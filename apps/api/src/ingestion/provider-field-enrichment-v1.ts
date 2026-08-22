@@ -68,7 +68,7 @@ function explicitCodAmount(text: string): { amount: number; currency: string } |
 
 function hasExplicitPaidEvidence(subject: string, text: string): boolean {
   const source = `${subject}\n${text}`;
-  return /\b(?:sikeres fizet[eé]s|sikeresen fizett[eé]l|sikeresen rendezte|fizet[eé]s megerős[ií]t[eé]se|fizet[eé]s megt[oö]rt[eé]nt|fizet[eé]s teljes[ií]tve|kifizetve|sikeres tranzakci[oó]|tranzakci[oó] sikeres|sikeres befizet[eé]s|befizet[eé]s be[eé]rkezett|payment successful|payment confirmed|payment completed|successfully paid|paid successfully)\b/i.test(source);
+  return /\b(?:sikeres fizet[eé]s|sikeresen fizett[eé]l|sikeresen rendezte|fizet[eé]s megerős[ií]t[eé]se|fizet[eé]s megt[oö]rt[eé]nt|fizet[eé]s teljes[ií]tve|kifizetve|sikeres tranzakci[oó]|tranzakci[oó] sikeres|sikeres befizet[eé]s|befizet[eé]s be[eé]rkezett|payment successful|payment confirmed|payment completed|successfully paid|paid successfully)(?=$|[\s.,;:!?])/i.test(source);
 }
 
 function hasExplicitCodEvidence(text: string): boolean {
