@@ -34,7 +34,8 @@ function hasInvoiceAttachment(document: EmailDocumentV1): boolean {
     const contentType = normalizeText(attachment.contentType ?? '');
     const looksLikeDocument = /(?:\.pdf|\.xml|\.html?)$/i.test(filename)
       || /(?:pdf|xml|html)/i.test(contentType);
-    return looksLikeDocument && /\b(?:invoice|receipt|szamla|nyugta|bizonylat)\b/i.test(filename);
+    const invoiceFilename = /(?:^|[^a-z0-9])(?:invoice|receipt|szamla|nyugta|bizonylat)(?:[^a-z0-9]|$)/i.test(filename);
+    return looksLikeDocument && invoiceFilename;
   });
 }
 
