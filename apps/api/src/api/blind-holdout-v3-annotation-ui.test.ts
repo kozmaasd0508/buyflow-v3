@@ -16,10 +16,12 @@ test('Blind v3 annotation page serves JavaScript that parses successfully', asyn
   assert.equal(response.statusCode, 200);
   const html = response.body;
   const match = html.match(/<script>([\s\S]*?)<\/script>/i);
-  assert.ok(match?.[1], 'inline Blind v3 script should be present');
+  const script = match?.[1];
+  if (!script) throw new Error('inline Blind v3 script should be present');
+
   assert.doesNotThrow(() => {
     // Parse the exact JavaScript emitted to the browser. Do not execute it.
-    new Function(match[1]);
+    new Function(script);
   });
 
   await app.close();
