@@ -41,6 +41,14 @@ export interface ResolvedField<T = unknown> {
   provenance: EvidenceClaim<T>[];
 }
 
+export interface EvidenceProduct {
+  name: string;
+  quantity: number | null;
+  unitPrice: number | null;
+  totalPrice: number | null;
+  currency: 'HUF' | 'EUR' | 'USD' | 'GBP' | null;
+}
+
 export interface ResolvedCommerceEvent {
   eventType: ResolvedField<string>;
   merchant: ResolvedField<string>;
@@ -52,6 +60,6 @@ export interface ResolvedCommerceEvent {
   paymentStatus: ResolvedField<string>;
   invoiceNumber: ResolvedField<string>;
   paymentReference: ResolvedField<string>;
-  products: ResolvedField<unknown[]>;
+  products: ResolvedField<EvidenceProduct[]>;
   reviewRequired: boolean;
 }
