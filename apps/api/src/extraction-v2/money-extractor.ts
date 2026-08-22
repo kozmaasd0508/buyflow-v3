@@ -2,7 +2,7 @@ import type { EmailDocumentMoneyCandidate, EmailDocumentV1 } from '../ingestion/
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_MONEY_EXTRACTOR_VERSION = 'universal-money-v2';
+export const UNIVERSAL_MONEY_EXTRACTOR_VERSION = 'universal-money-v3';
 
 type Currency = EmailDocumentMoneyCandidate['currency'];
 
@@ -61,7 +61,9 @@ function moneyInText(text: string): { amount: number; currency: Currency } | nul
   return null;
 }
 
-const FINAL_TOTAL_LABEL = /\b(?:osszesen|fizetendo(?:\s+osszeg)?|brutto\s+osszeg|vegosszeg|grand\s+total|order\s+total|total\s+amount|amount\s+due)\b/i;
+const STRONG_FINAL_TOTAL_LABEL = /\b(?:fizetendo(?:\s+osszeg)?|brutto\s+osszeg|vegosszeg|grand\s+total|order\s+total|total\s+amount|amount\s+due)\b/i;
+const INTERMEDIATE_TOTAL_LABEL = /\b(?:reszosszeg|subtotal|goods\s+total|items?\s+total|products?\s+total|value\s+of\s+goods|(?:termek(?:ek)?|aru(?:k)?)\s+osszesen)\b/i;
+const GENERIC_TOTAL_LABEL = /\bosszesen\b/i;
 const PAYMENT_AMOUNT_LABEL = /\b(?:fizetett\s+osszeg|befizetett\s+osszeg|tranzakcio\s+osszege|fizetes\s+osszege|payment\s+amount|paid\s+amount|amount\s+paid)\b/i;
 
 function claimPair(input: {
@@ -102,22 +104,40 @@ function scanLabeledText(
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? '';
     const normalized = normalizeText(line);
-    const finalMatch = normalized.match(FINAL_TOTAL_LABEL);
     const paymentMatch = normalized.match(PAYMENT_AMOUNT_LABEL);
-    const labelMatch = finalMatch ?? paymentMatch;
-    if (!labelMatch) continue;
+    const strongFinalMatch = normalized.match(STRONG_FINAL_TOTAL_LABEL);
+    const intermediateMatch = normalized.match(INTERMEDIATE_TOTAL_LABEL);
+    const genericTotalMatch = normalized.match(GENERIC_TOTAL_LABEL);
+
+    const match = paymentMatch ?? strongFinalMatch ?? intermediateMatch ?? genericTotalMatch;
+    if (!match) continue;
 
     const nextLine = lines.slice(index + 1).find((candidate) => Boolean(candidate.trim())) ?? '';
-    const labelIndex = labelMatch.index ?? 0;
+    const labelIndex = match.index ?? 0;
     const money = moneyInText(line.slice(labelIndex)) ?? moneyInText(nextLine);
     if (!money) continue;
 
-    const isFinalTotal = Boolean(finalMatch);
+    let qualifier: string;
+    let confidence: number;
+    if (paymentMatch) {
+      qualifier = 'explicit_payment_amount';
+      confidence = source === 'subject' ? 0.95 : 0.97;
+    } else if (strongFinalMatch) {
+      qualifier = 'explicit_final_total';
+      confidence = source === 'subject' ? 0.985 : 0.995;
+    } else if (intermediateMatch) {
+      qualifier = 'explicit_intermediate_total';
+      confidence = source === 'subject' ? 0.91 : 0.93;
+    } else {
+      qualifier = 'explicit_generic_total';
+      confidence = source === 'subject' ? 0.95 : 0.97;
+    }
+
     claims.push(...claimPair({
       ...money,
       source,
-      confidence: isFinalTotal ? (source === 'subject' ? 0.98 : 0.99) : (source === 'subject' ? 0.95 : 0.97),
-      qualifier: isFinalTotal ? 'explicit_final_total' : 'explicit_payment_amount',
+      confidence,
+      qualifier,
     }));
   }
   return claims;
