@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_TRACKING_EXTRACTOR_VERSION = 'universal-tracking-number-v2';
+export const UNIVERSAL_TRACKING_EXTRACTOR_VERSION = 'universal-tracking-number-v3';
 
 function normalizeText(value: string): string {
   return value
@@ -30,7 +30,11 @@ function collectExplicit(
       qualifier: 'explicit_tracking_label',
     },
     {
-      pattern: /\b([A-Z0-9][A-Z0-9-]{7,31})\s+(?:szamu\s+)?(?:csomag|kuldemeny)\b/gi,
+      pattern: /\b(\d{10,30})\s+(?:szamu\s+)?(?:csomag|kuldemeny)\w*\b/gi,
+      qualifier: 'contextual_tracking_identifier',
+    },
+    {
+      pattern: /\b([A-Z0-9][A-Z0-9-]{7,31})\s+szamu\s+(?:csomag|kuldemeny)\w*\b/gi,
       qualifier: 'contextual_tracking_identifier',
     },
   ];
