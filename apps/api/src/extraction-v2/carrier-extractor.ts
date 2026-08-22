@@ -3,7 +3,7 @@ import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 import { currentMessageLines } from './event-type-extractor.js';
 
-export const UNIVERSAL_CARRIER_EXTRACTOR_VERSION = 'universal-carrier-v1';
+export const UNIVERSAL_CARRIER_EXTRACTOR_VERSION = 'universal-carrier-v2';
 
 function normalizeText(value: string): string {
   return value
@@ -42,11 +42,8 @@ function explicitClaims(text: string, source: 'subject' | 'body'): EvidenceClaim
   return claims;
 }
 
-function carrierAppearsInCurrentMessage(carrier: string, text: string): boolean {
-  const normalizedText = normalizeText(currentMessageLines(text).join('\n')).toLowerCase();
+function aliasFor(carrier: string): RegExp | null {
   const normalizedCarrier = normalizeText(carrier).toLowerCase();
-  if (!normalizedCarrier) return false;
-
   const aliases: Record<string, RegExp> = {
     'express one': /\bexpress\s*one\b/i,
     gls: /\bgls\b/i,
@@ -57,8 +54,23 @@ function carrierAppearsInCurrentMessage(carrier: string, text: string): boolean 
     ups: /\bups\b/i,
     mpl: /\b(?:mpl|magyar posta)\b/i,
   };
-  const alias = aliases[normalizedCarrier];
-  return alias ? alias.test(normalizedText) : normalizedText.includes(normalizedCarrier);
+  return aliases[normalizedCarrier] ?? null;
+}
+
+const TRANSPORT_CONTEXT = /\b(?:tracking|track|shipment|shipping|delivery|parcel|package|carrier|courier|futar|futarszolgalat|csomag|kuldemeny|kezbesites|kezbesitve|szallitas|szallitmany|nyomkovetes)\b/i;
+
+function carrierAppearsInTransportContext(carrier: string, text: string): boolean {
+  const alias = aliasFor(carrier);
+  if (!alias) return false;
+  const lines = currentMessageLines(text).map((line) => normalizeText(line).toLowerCase());
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (!alias.test(line)) continue;
+    const window = [lines[index - 1] ?? '', line, lines[index + 1] ?? ''].join(' ');
+    if (TRANSPORT_CONTEXT.test(window)) return true;
+  }
+  return false;
 }
 
 function dedupe(claims: EvidenceClaim<string>[]): EvidenceClaim<string>[] {
@@ -82,14 +94,11 @@ export const universalCarrierExtractor: EvidenceExtractor = {
 
     for (const candidate of document.signals.couriers) {
       const value = cleanCarrier(candidate);
-      if (!value || !carrierAppearsInCurrentMessage(value, document.text)) continue;
+      if (!value || !carrierAppearsInTransportContext(value, document.text)) continue;
       claims.push({
         field: 'carrier',
         value,
         confidence: 0.90,
-        // This signal is derived from the current body. Keeping it at body
-        // precedence prevents a weak document candidate from silently
-        // outranking an explicit carrier label.
         source: 'body',
         extractorId: 'universal-carrier',
         extractorVersion: UNIVERSAL_CARRIER_EXTRACTOR_VERSION,
