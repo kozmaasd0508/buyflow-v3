@@ -172,7 +172,7 @@ export async function registerExtractionV2ShadowAudit(app: FastifyInstance) {
     const user = await resolveUser(request, reply);
     if (!user) return;
     try {
-      return reply.send(await run(user.id, sampleLimit(request.query.limit));
+      return reply.send(await run(user.id, sampleLimit(request.query.limit)));
     } catch (auditError) {
       request.log.error({
         errorType: auditError instanceof Error ? auditError.name : 'UnknownError',
