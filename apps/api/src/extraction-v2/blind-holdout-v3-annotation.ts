@@ -93,21 +93,35 @@ function validateCase(input: unknown): asserts input is BlindHoldoutV3TruthCase 
   for (const field of BLIND_HOLDOUT_V3_FIELDS) validateExpectation(field, input.fields[field]);
 }
 
+function normalizeStringExpectation(
+  expectation: GroundTruthExpectation<string>,
+): GroundTruthExpectation<string> {
+  if (expectation.state === 'known') return { state: 'known', value: expectation.value.trim() };
+  return { state: expectation.state };
+}
+
+function normalizeExpectation<T>(expectation: GroundTruthExpectation<T>): GroundTruthExpectation<T> {
+  if (expectation.state === 'known') return { state: 'known', value: expectation.value };
+  return { state: expectation.state };
+}
+
 function normalizedCase(input: BlindHoldoutV3TruthCase): BlindHoldoutV3TruthCase {
-  const fields = {} as BlindHoldoutV3TruthCase['fields'];
-  for (const field of BLIND_HOLDOUT_V3_FIELDS) {
-    const expectation = input.fields[field] as GroundTruthExpectation<unknown>;
-    if (expectation.state === 'known') {
-      const knownValue = typeof expectation.value === 'string' ? expectation.value.trim() : expectation.value;
-      (fields as Record<string, GroundTruthExpectation<unknown>>)[field] = { state: 'known', value: knownValue };
-    } else {
-      (fields as Record<string, GroundTruthExpectation<unknown>>)[field] = { state: expectation.state };
-    }
-  }
   return {
     caseId: input.caseId,
     isCommerceEvent: input.isCommerceEvent,
-    fields,
+    fields: {
+      eventType: normalizeStringExpectation(input.fields.eventType),
+      merchant: normalizeStringExpectation(input.fields.merchant),
+      orderNumber: normalizeStringExpectation(input.fields.orderNumber),
+      total: normalizeExpectation(input.fields.total),
+      currency: normalizeStringExpectation(input.fields.currency),
+      carrier: normalizeStringExpectation(input.fields.carrier),
+      trackingNumber: normalizeStringExpectation(input.fields.trackingNumber),
+      paymentStatus: normalizeStringExpectation(input.fields.paymentStatus),
+      invoiceNumber: normalizeStringExpectation(input.fields.invoiceNumber),
+      paymentReference: normalizeStringExpectation(input.fields.paymentReference),
+      products: normalizeExpectation(input.fields.products),
+    },
   };
 }
 
