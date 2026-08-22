@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_MERCHANT_EXTRACTOR_VERSION = 'universal-merchant-v1';
+export const UNIVERSAL_MERCHANT_EXTRACTOR_VERSION = 'universal-merchant-v2';
 
 function normalizeText(value: string): string {
   return value
@@ -22,6 +22,21 @@ function cleanMerchant(value: string): string | null {
   const normalized = normalizeText(cleaned).trim().toLowerCase();
   if (/^(?:no-?reply|noreply|info|support|customer service|ugyfelszolgalat|webshop|shop|ertesites|notification|mailer|robot)$/i.test(normalized)) return null;
   return cleaned;
+}
+
+function isCourierIdentity(value: string): boolean {
+  const normalized = normalizeText(value).trim().toLowerCase();
+  return /^(?:gls|dpd|dhl|ups|mpl|foxpost|packeta|express\s*one|magyar posta)(?:\b|\s)/i.test(normalized);
+}
+
+function hasTransactionalCorroboration(document: EmailDocumentV1): boolean {
+  if (document.signals.orderNumbers.length > 0) return true;
+  if (document.signals.trackingNumbers.length > 0) return true;
+  if (document.signals.products.length > 0) return true;
+  if (document.sections.some((section) => section.type !== 'other')) return true;
+
+  const subject = normalizeText(document.subject ?? '').toLowerCase();
+  return /\b(?:rendeles|megrendeles|order|purchase|szamla|invoice|receipt|fizetes|payment|refund|visszaterites|shipment|delivery|csomag|kuldemeny)\b/i.test(subject);
 }
 
 function explicitClaims(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[] {
@@ -78,15 +93,16 @@ export const universalMerchantExtractor: EvidenceExtractor = {
     ];
 
     const displayName = cleanMerchant(document.sender.primaryName ?? '');
-    if (displayName) {
+    if (displayName && !isCourierIdentity(displayName)) {
+      const transactional = hasTransactionalCorroboration(document);
       claims.push({
         field: 'merchant',
         value: displayName,
-        confidence: 0.68,
+        confidence: transactional ? 0.86 : 0.68,
         source: 'sender',
         extractorId: 'universal-merchant',
         extractorVersion: UNIVERSAL_MERCHANT_EXTRACTOR_VERSION,
-        qualifiers: ['sender_display_name_fallback'],
+        qualifiers: [transactional ? 'sender_transactional_identity' : 'sender_display_name_fallback'],
       });
     }
 
