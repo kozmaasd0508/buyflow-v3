@@ -104,6 +104,11 @@ const PAYMENT_PATTERNS = [
   /\bsikeres\s+fizetes\b/i,
   /\bfizetes\s+sikeres\b/i,
   /\bfizetes\s+megerositese\b/i,
+  /\bfizetes\s+megtortent\b/i,
+  /\bsikeres\s+tranzakcio\b/i,
+  /\btranzakcio\s+sikeres\b/i,
+  /\bsikeres\s+befizetes\b/i,
+  /\bbefizetes\s+beerkezett\b/i,
   /\butanvetes\s+fizetes\s+visszaigazolas\b/i,
   /\bpayment\s+(?:completed|successful|received)\b/i,
 ];
@@ -250,6 +255,10 @@ export function detectGenericCommerceV2(document: EmailDocumentV1): GenericComme
   if (document.signals.products.length > 0) {
     score += 1;
     reasons.push('generic_product_line_candidates');
+  }
+  if (event.eventType === 'payment_completed' && document.signals.amounts.length > 0) {
+    score += 1;
+    reasons.push('generic_payment_amount_candidate');
   }
 
   // A strong commerce-specific subject is sufficient by itself. Body-only matches
