@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v1';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v2';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -54,7 +54,7 @@ const EVENT_PATTERNS: EventPattern[] = [
     qualifier: 'explicit_delivery_event',
     confidence: 0.995,
     patterns: [
-      /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?)\s+(?:sikeresen\s+)?kezbesitve\b/i,
+      /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:sikeresen\s+)?kezbesitve\b/i,
       /\b(?:sikeresen\s+)?kezbesitett(?:uk|ek|e)\b/i,
       /\b(?:your\s+)?(?:order|parcel|package|shipment)\s+(?:has\s+been\s+)?(?:successfully\s+)?delivered\b/i,
       /\bsuccessfully\s+delivered\b/i,
@@ -65,8 +65,9 @@ const EVENT_PATTERNS: EventPattern[] = [
     qualifier: 'explicit_shipment_event',
     confidence: 0.99,
     patterns: [
-      /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?)\s+(?:feladasra\s+kerult|feladva|uton\s+van)\b/i,
-      /\b(?:rendeles(?:ed|e)?|csomag(?:od|ja)?)\w*.*\b(?:atadtuk|atadasra\s+kerult)\b.*\b(?:futar|futarszolgalat)\b/i,
+      /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:feladasra\s+kerult|feladva|uton\s+van)\b/i,
+      /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?|csomag(?:od|ja)?)\w*.*\b(?:atadtuk|atadasra\s+kerult)\b.*\b(?:futar|futarszolgalat)\b/i,
+      /\b(?:csomag|kuldemeny)\w*.{0,100}\bkezbesitesre\s+(?:atvette|atvettuk|atadva)\b/i,
       /\b(?:your\s+)?(?:order|parcel|package|shipment)\s+(?:has\s+been\s+)?(?:shipped|dispatched)\b/i,
       /\b(?:handed|passed)\s+(?:over\s+)?to\s+(?:the\s+)?(?:carrier|courier)\b/i,
     ],
@@ -77,7 +78,7 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.995,
     patterns: [
       /\bvisszaterites\s+(?:megtortent|sikeres|teljesitve|elinditva)\b/i,
-      /\b(?:refund|reimbursement)\s+(?:completed|successful|issued|processed)\b/i,
+      /\b(?:refund|reimbursement)\b.{0,96}\b(?:has\s+been\s+|was\s+)?(?:completed|successful|issued|processed)\b/i,
       /\bwe\s+(?:have\s+)?refunded\b/i,
     ],
   },
@@ -115,6 +116,8 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.97,
     patterns: [
       /\b(?:szamla(?:d|ja)?|nyugta(?:d|ja)?)\s+(?:elkeszult|kiallitva|elerheto)\b/i,
+      /\b(?:fizetesi\s+bizonylat|payment\s+receipt)\b/i,
+      /\b(?:rendeles|megrendeles)\b.{0,64}\bnyugta(?:ja|d)?\b/i,
       /\b(?:invoice|receipt)\s+(?:is\s+)?(?:ready|available|issued|created)\b/i,
       /\b(?:your\s+)?(?:invoice|receipt)\s+for\s+(?:order|purchase)\b/i,
     ],
@@ -125,7 +128,9 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.96,
     patterns: [
       /\b(?:koszonjuk|koszonjuk),?\s+(?:hogy\s+)?(?:rendeltel|leadta\w*\s+a\s+rendeles)\b/i,
+      /\b(?:webaruhazunkban|webshopunkban)?\s*.{0,48}\brendelest\s+(?:adott|adtal)\s+le\b/i,
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:beerkezett|rogzitettuk|fogadtuk|visszaigazolva)\b/i,
+      /\b(?:rendeles|megrendeles)\s+visszaigazolas(?:a)?\b/i,
       /\b(?:order|purchase)\s+(?:confirmed|confirmation|received)\b/i,
       /\bwe(?:'ve|\s+have)?\s+received\s+your\s+order\b/i,
     ],
