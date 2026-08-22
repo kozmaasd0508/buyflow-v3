@@ -77,6 +77,13 @@ Resolve fields independently, attach provenance, and run cross-field validation.
 ### Phase F - Shadow comparison
 Run old parser and v2 engine side-by-side against frozen regressions and a new fresh blind holdout.
 
+Read-only differential audit routes:
+
+- `GET /audit-extraction-v2-shadow`
+- `POST /api/audit/extraction-v2-shadow?limit=100|200|300|500`
+
+These routes are authenticated, 0-write, 0-AI, and report differential agreement only. They do not claim accuracy without independent frozen ground truth.
+
 ### Phase G - Cutover
 Only after v2 meets precision/recall/field gates, route CanonicalEvent generation to Extraction Engine v2.
 
