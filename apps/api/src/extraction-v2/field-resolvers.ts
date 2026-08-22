@@ -48,6 +48,7 @@ const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = 
   merchant: {
     explicit_merchant_label: 500,
     explicit_sender_label: 470,
+    sender_transactional_identity: 380,
     sender_display_name_fallback: 220,
   },
   payment_status: {
@@ -254,6 +255,17 @@ export function resolveProducts(bundle: EvidenceBundle): ResolvedField<EvidenceP
   };
 }
 
+function hasResolvedTransactionalAnchor(fields: {
+  eventType: ResolvedField<string>;
+  orderNumber: ResolvedField<string>;
+  trackingNumber: ResolvedField<string>;
+  paymentStatus: ResolvedField<string>;
+  invoiceNumber: ResolvedField<string>;
+  paymentReference: ResolvedField<string>;
+}): boolean {
+  return Object.values(fields).some((field) => field.status === 'resolved' && field.value !== null);
+}
+
 export function resolveCommerceEvent(bundle: EvidenceBundle): ResolvedCommerceEvent {
   const eventType = resolveStringField({
     bundle,
@@ -345,6 +357,17 @@ export function resolveCommerceEvent(bundle: EvidenceBundle): ResolvedCommerceEv
     .filter(([, field]) => field.status === 'conflict')
     .map(([field]) => field);
 
+  const transactionalAnchor = hasResolvedTransactionalAnchor({
+    eventType,
+    orderNumber,
+    trackingNumber,
+    paymentStatus,
+    invoiceNumber,
+    paymentReference,
+  });
+  const reviewRequired = conflictFields.some((field) => field !== 'carrier')
+    || (transactionalAnchor && conflictFields.includes('carrier'));
+
   return {
     eventType,
     merchant,
@@ -357,7 +380,7 @@ export function resolveCommerceEvent(bundle: EvidenceBundle): ResolvedCommerceEv
     invoiceNumber,
     paymentReference,
     products,
-    reviewRequired: conflictFields.length > 0,
+    reviewRequired,
     conflictFields,
   };
 }
