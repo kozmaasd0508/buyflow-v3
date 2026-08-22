@@ -5,6 +5,7 @@ import { CORROBORATED_TRACKING_EVIDENCE_VERSION, deriveCorroboratedTrackingEvide
 import { validateResolvedCommerceEvent, type CommerceValidationResult } from './cross-field-validator.js';
 import { resolveCommerceEvent } from './field-resolvers.js';
 import { deriveSourceAdapterEvidence, SOURCE_ADAPTER_EVIDENCE_VERSION } from './source-adapter-evidence.js';
+import { evidenceEligibleForResolution } from './source-role-eligibility.js';
 import type { ResolvedCommerceEvent } from './types.js';
 import { collectUniversalCoreEvidence } from './universal-core.js';
 
@@ -27,7 +28,9 @@ export interface ExtractionEngineV2Result {
  * independent evidence without suppressing generic claims. Collected evidence
  * can corroborate lifecycle classification, then a final read-only pass may
  * promote a unique long transport identifier to tracking only when shipment and
- * carrier evidence already agree. None of these passes reads legacy output.
+ * carrier evidence already agree. Source-role eligibility is applied only for
+ * resolution, preserving the complete raw evidence bundle for shadow diagnostics.
+ * None of these passes reads legacy output.
  */
 export function runExtractionEngineV2(document: EmailDocumentV1): ExtractionEngineV2Result {
   const baseEvidence = collectUniversalCoreEvidence(document);
@@ -64,7 +67,8 @@ export function runExtractionEngineV2(document: EmailDocumentV1): ExtractionEngi
     ],
   };
 
-  const resolved = resolveCommerceEvent(evidence.bundle);
+  const resolutionEvidence = evidenceEligibleForResolution(evidence.bundle);
+  const resolved = resolveCommerceEvent(resolutionEvidence);
   const validation = validateResolvedCommerceEvent(resolved);
 
   return {
