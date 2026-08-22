@@ -63,7 +63,7 @@ function explicitPaymentAmount(text: string): { amount: number; currency: string
 }
 
 function explicitCodAmount(text: string): { amount: number; currency: string } | null {
-  return moneyAfterLabel(text, /\b(?:utánvét(?:es)?(?:i)? összeg(?:e)?|beszedendő összeg|cash on delivery amount|cod amount|fizetendő összeg)\b/i);
+  return moneyAfterLabel(text, /\b(?:utánvét|utánvétes|utánvéti|utánvét(?:es)?(?:i)? összeg(?:e)?|beszedendő összeg|cash on delivery|cash on delivery amount|cod|cod amount|fizetendő összeg)\b/i);
 }
 
 function hasExplicitPaidEvidence(subject: string, text: string): boolean {
@@ -184,6 +184,11 @@ export function enrichProviderFieldsV1(
       ]);
     }
     if (extraction.order_number) reasons.push('field_enrichment_v1_epic_order_number');
+  }
+
+  if (!extraction.merchant && courierSenderDomain(senderDomain) && extraction.parcel_sender?.trim()) {
+    extraction.merchant = extraction.parcel_sender.trim();
+    reasons.push('field_enrichment_v1_parcel_sender_merchant');
   }
 
   if (!extraction.merchant) {
