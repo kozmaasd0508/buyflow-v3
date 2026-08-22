@@ -109,9 +109,10 @@ function resolveStringField(input: {
   field: EvidenceField;
   minimumConfidence: number;
   normalize: (value: string) => string;
+  claims?: EvidenceClaim<string>[];
 }): ResolvedField<string> {
   return resolveField({
-    claims: claimsFor<string>(input.bundle, input.field),
+    claims: input.claims ?? claimsFor<string>(input.bundle, input.field),
     rank: (claim) => fieldClaimRank(input.field, claim),
     minimumConfidence: input.minimumConfidence,
     equivalent: (a, b) => input.normalize(a) === input.normalize(b),
@@ -122,13 +123,30 @@ function resolveNumberField(input: {
   bundle: EvidenceBundle;
   field: EvidenceField;
   minimumConfidence: number;
+  claims?: EvidenceClaim<number>[];
 }): ResolvedField<number> {
   return resolveField({
-    claims: claimsFor<number>(input.bundle, input.field),
+    claims: input.claims ?? claimsFor<number>(input.bundle, input.field),
     rank: (claim) => fieldClaimRank(input.field, claim),
     minimumConfidence: input.minimumConfidence,
     equivalent: (a, b) => Math.abs(a - b) < 0.000001,
   });
+}
+
+function isPaymentAmountEligible(eventType: ResolvedField<string>): boolean {
+  if (eventType.status !== 'resolved' || !eventType.value) return false;
+  const normalized = normalizeToken(eventType.value);
+  return normalized === 'payment_completed' || normalized === 'refund';
+}
+
+function filterContextualMoneyClaims<T>(
+  claims: EvidenceClaim<T>[],
+  eventType: ResolvedField<string>,
+): EvidenceClaim<T>[] {
+  const allowPaymentAmount = isPaymentAmountEligible(eventType);
+  return claims.filter((claim) => (
+    !claim.qualifiers?.includes('explicit_payment_amount') || allowPaymentAmount
+  ));
 }
 
 function normalizedProductName(value: string): string {
@@ -241,13 +259,29 @@ export function resolveCommerceEvent(bundle: EvidenceBundle): ResolvedCommerceEv
     minimumConfidence: 0.80,
     normalize: normalizeIdentifier,
   });
-  const total = resolveNumberField({ bundle, field: 'total', minimumConfidence: 0.80 });
+
+  const totalClaims = filterContextualMoneyClaims(
+    claimsFor<number>(bundle, 'total'),
+    eventType,
+  );
+  const currencyClaims = filterContextualMoneyClaims(
+    claimsFor<string>(bundle, 'currency'),
+    eventType,
+  );
+  const total = resolveNumberField({
+    bundle,
+    field: 'total',
+    minimumConfidence: 0.80,
+    claims: totalClaims,
+  });
   const currency = resolveStringField({
     bundle,
     field: 'currency',
     minimumConfidence: 0.80,
     normalize: normalizeToken,
+    claims: currencyClaims,
   });
+
   const carrier = resolveStringField({
     bundle,
     field: 'carrier',
