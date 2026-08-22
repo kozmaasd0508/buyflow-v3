@@ -4,10 +4,12 @@ import type { NormalizedEmail } from '../email/types.js';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
 import { compareCanonicalSnapshots } from '../pipeline/extraction-v2-shadow-comparison.js';
 import { universalCarrierExtractor } from './carrier-extractor.js';
+import { universalEventTypeExtractor } from './event-type-extractor.js';
 import { resolveCommerceEvent } from './field-resolvers.js';
 import { universalMerchantExtractor } from './merchant-extractor.js';
 import { universalMoneyExtractor } from './money-extractor.js';
 import { universalOrderNumberExtractor } from './order-number-extractor.js';
+import { universalPaymentStatusExtractor } from './payment-status-extractor.js';
 import { universalProductExtractor } from './product-extractor.js';
 import type { EvidenceBundle, EvidenceClaim } from './types.js';
 
@@ -70,6 +72,28 @@ test('carrier extractor keeps courier evidence when the brand appears in shipmen
   assert.ok(carriers.some((item) => item.value === 'Express One'));
 });
 
+test('incidental carrier context stays evidence-only and does not finalize a carrier on marketing mail', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: '100 db prémium fénykép akció',
+    snippet: 'Rendeld meg ma. Foxpost szállítás is választható az akcióban.',
+  }));
+  const evidence = universalCarrierExtractor.extract(document);
+  assert.ok(evidence.some((item) => item.value === 'Foxpost'));
+  const result = resolveCommerceEvent({ claims: evidence });
+  assert.equal(result.carrier.status, 'missing');
+});
+
+test('structured shipping method can resolve an explicitly selected carrier', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Megrendelés visszaigazolása #130354',
+    snippet: 'Szállítási mód: GLS futárszolgálat',
+  }));
+  const evidence = universalCarrierExtractor.extract(document);
+  assert.ok(evidence.some((item) => item.value === 'GLS' && item.confidence >= 0.95));
+  const result = resolveCommerceEvent({ claims: evidence });
+  assert.equal(result.carrier.value, 'GLS');
+});
+
 test('commercial sender display name can resolve merchant while generic sender names stay weak', () => {
   const transactional = buildEmailDocumentV1(email({
     subject: 'Rendelés #AB-12345 visszaigazolása',
@@ -128,6 +152,34 @@ test('order extractor recognizes Hungarian adjectival order-number labels', () =
   const orders = universalOrderNumberExtractor.extract(document).filter((item) => item.field === 'order_number');
   assert.ok(orders.some((item) => item.value === '130354' && item.qualifiers?.includes('explicit_order_label')));
   assert.ok(orders.some((item) => item.value === 'AB-9918274' && item.qualifiers?.includes('explicit_order_label')));
+});
+
+test('order extractor recognizes confirmation subjects with a trailing hash id', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Megrendelés visszaigazolása #130354',
+    snippet: 'Köszönjük a megrendelést.',
+  }));
+  const orders = universalOrderNumberExtractor.extract(document).filter((item) => item.field === 'order_number');
+  assert.ok(orders.some((item) => item.value === '130354'));
+});
+
+test('payment extractor resolves COD when payment method label and value are split across lines', () => {
+  const document = buildEmailDocumentV1(email({
+    snippet: 'Fizetési mód:\nUtánvét',
+  }));
+  const payments = universalPaymentStatusExtractor.extract(document).filter((item) => item.field === 'payment_status');
+  assert.ok(payments.some((item) => item.value === 'cash_on_delivery' && item.confidence >= 0.95));
+  const result = resolveCommerceEvent({ claims: payments });
+  assert.equal(result.paymentStatus.value, 'cash_on_delivery');
+});
+
+test('refund-request feedback survey is not proof that a refund completed', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: '[Refund request] Share your feedback with us',
+    snippet: 'We would love to hear how we did on your recent request. How would you rate our support?',
+  }));
+  const events = universalEventTypeExtractor.extract(document).filter((item) => item.field === 'event_type');
+  assert.ok(!events.some((item) => item.value === 'refund'));
 });
 
 test('carrier-only conflict remains diagnostic but does not create REVIEW without a transactional anchor', () => {
