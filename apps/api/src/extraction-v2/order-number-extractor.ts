@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION = 'universal-order-number-v3';
+export const UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION = 'universal-order-number-v4';
 
 function normalizeText(value: string): string {
   return value
@@ -14,6 +14,8 @@ function normalizeText(value: string): string {
 function normalizeIdentifier(value: string): string | null {
   const cleaned = value.trim().replace(/^#+/, '').replace(/[.,;:)]+$/, '');
   if (cleaned.length < 4 || cleaned.length > 40 || !/\d/.test(cleaned)) return null;
+  if (/https?:\/\/|www\./i.test(cleaned)) return null;
+  if (/[a-z0-9-]+\.[a-z]{2,}(?:\/|$)/i.test(cleaned)) return null;
   return cleaned;
 }
 

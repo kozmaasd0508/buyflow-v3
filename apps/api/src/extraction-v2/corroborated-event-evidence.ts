@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { currentMessageLines } from './event-type-extractor.js';
 import type { EvidenceBundle, EvidenceClaim } from './types.js';
 
-export const CORROBORATED_EVENT_EVIDENCE_VERSION = 'corroborated-event-evidence-v1';
+export const CORROBORATED_EVENT_EVIDENCE_VERSION = 'corroborated-event-evidence-v2';
 
 function normalizeText(value: string): string {
   return value
@@ -45,6 +45,20 @@ function invoiceContext(document: EmailDocumentV1): boolean {
     || hasInvoiceAttachment(document);
 }
 
+function hasInvoiceCreationLanguage(document: EmailDocumentV1): boolean {
+  const text = currentMessageText(document);
+  return /\b(?:szamla(?:d|ja)?|nyugta(?:d|ja)?)\s+(?:elkeszult|kiallitva|elerheto|erkezett)\b/i.test(text)
+    || /\b(?:invoice|receipt)\s+(?:is\s+)?(?:ready|available|issued|created)\b/i.test(text);
+}
+
+function isInvoiceReminderContext(document: EmailDocumentV1): boolean {
+  const text = currentMessageText(document);
+  const reminder = /\b(?:fizetesi|szamla|invoice|payment)\s+(?:emlekezteto|reminder)\b/i.test(text)
+    || /\bfizetesi\s+hatarido(?:ja)?\b.{0,80}\b(?:lejar|kozeleg|hamarosan|rovidesen)\w*\b/i.test(text)
+    || /\b(?:invoice|payment)\s+(?:is\s+)?(?:overdue|past\s+due|due\s+soon)\b/i.test(text);
+  return reminder && !hasInvoiceCreationLanguage(document);
+}
+
 export function deriveCorroboratedEventEvidence(
   document: EmailDocumentV1,
   bundle: EvidenceBundle,
@@ -77,8 +91,9 @@ export function deriveCorroboratedEventEvidence(
   );
   const invoiceAttachment = hasInvoiceAttachment(document);
   const invoiceDocument = invoiceContext(document);
+  const invoiceReminder = isInvoiceReminderContext(document);
 
-  if ((explicitInvoiceNumber && invoiceDocument) || invoiceAttachment) {
+  if (!invoiceReminder && ((explicitInvoiceNumber && invoiceDocument) || invoiceAttachment)) {
     claims.push({
       field: 'event_type',
       value: 'invoice_or_receipt',

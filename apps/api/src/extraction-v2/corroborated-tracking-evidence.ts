@@ -2,10 +2,11 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { currentMessageLines } from './event-type-extractor.js';
 import type { EvidenceBundle, EvidenceClaim } from './types.js';
 
-export const CORROBORATED_TRACKING_EVIDENCE_VERSION = 'corroborated-tracking-evidence-v1';
+export const CORROBORATED_TRACKING_EVIDENCE_VERSION = 'corroborated-tracking-evidence-v2';
 
 const TRANSPORT_CONTEXT = /\b(?:csomag|kuldemeny|kezbesit|szallitas|szallitmany|futar|futarszolgalat|nyomkovet|tracking|shipment|parcel|package|delivery|courier|carrier)\w*\b/i;
-const LONG_NUMERIC_IDENTIFIER = /\b\d{20,30}\b/g;
+const TRACKING_LABEL_CONTEXT = /\b(?:tracking|nyomkovet|kuldemeny\s*(?:szam|azonosito)|fuvarlevel\s*szam|csomag\s*szam|parcel\s*(?:number|id)|shipment\s*(?:number|id))\w*\b/i;
+const NUMERIC_IDENTIFIER = /\b\d{10,30}\b/g;
 
 function normalized(value: unknown): string {
   return String(value ?? '').trim().toUpperCase();
@@ -34,11 +35,40 @@ function claimedNonTrackingIdentifiers(bundle: EvidenceBundle): Set<string> {
     .filter(Boolean));
 }
 
+function numericIdentifiersNearTrackingContext(document: EmailDocumentV1): string[] {
+  const lines = [document.subject ?? '', ...currentMessageLines(document.text)];
+  const candidates: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    const normalizedLine = line.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\u00a0/g, ' ');
+    const isSubject = index === 0;
+    const hasRelevantContext = isSubject
+      ? TRANSPORT_CONTEXT.test(normalizedLine)
+      : TRACKING_LABEL_CONTEXT.test(normalizedLine);
+    if (!hasRelevantContext) continue;
+
+    for (const match of normalizedLine.matchAll(NUMERIC_IDENTIFIER)) {
+      candidates.push(normalized(match[0]));
+    }
+
+    if (!isSubject && TRACKING_LABEL_CONTEXT.test(normalizedLine)) {
+      const nextLine = lines[index + 1] ?? '';
+      for (const match of nextLine.matchAll(NUMERIC_IDENTIFIER)) {
+        candidates.push(normalized(match[0]));
+      }
+    }
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
 /**
- * A long bare number is not tracking evidence by itself. It becomes eligible only
- * when independent v2 evidence already proves a shipment/delivery context and a
- * carrier, the current message contains transport language, and exactly one long
- * identifier remains after excluding known order/invoice/payment identifiers.
+ * A numeric identifier is not tracking evidence by itself. It becomes eligible
+ * only when independent v2 evidence already proves shipment/delivery context and
+ * carrier identity, and the number is located in a transport subject or next to
+ * an explicit tracking/parcel label. This avoids accidentally promoting phone,
+ * date, invoice or account numbers from the rest of the message.
  */
 export function deriveCorroboratedTrackingEvidence(
   document: EmailDocumentV1,
@@ -47,15 +77,9 @@ export function deriveCorroboratedTrackingEvidence(
   if (!bundle.claims.some(isStrongShipmentOrDeliveryClaim)) return [];
   if (!bundle.claims.some(isCarrierEvidence)) return [];
 
-  const currentText = [document.subject ?? '', ...currentMessageLines(document.text)].join('\n');
-  if (!TRANSPORT_CONTEXT.test(currentText)) return [];
-
   const protectedIds = claimedNonTrackingIdentifiers(bundle);
-  const candidates = [...new Set(
-    [...currentText.matchAll(LONG_NUMERIC_IDENTIFIER)]
-      .map((match) => normalized(match[0]))
-      .filter((value) => value && !protectedIds.has(value)),
-  )];
+  const candidates = numericIdentifiersNearTrackingContext(document)
+    .filter((value) => !protectedIds.has(value));
 
   if (candidates.length !== 1) return [];
 
@@ -66,6 +90,6 @@ export function deriveCorroboratedTrackingEvidence(
     source: 'document_structure',
     extractorId: 'corroborated-tracking-evidence',
     extractorVersion: CORROBORATED_TRACKING_EVIDENCE_VERSION,
-    qualifiers: ['corroborated_long_tracking_identifier'],
+    qualifiers: ['corroborated_numeric_tracking_identifier'],
   }];
 }

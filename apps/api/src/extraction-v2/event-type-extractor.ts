@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v4';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v5';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -68,6 +68,10 @@ const EVENT_PATTERNS: EventPattern[] = [
       /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:feladasra\s+kerult|feladva|uton\s+van)\b/i,
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?|csomag(?:od|ja)?)\w*.*\b(?:atadtuk|atadasra\s+kerult)\b.*\b(?:futar|futarszolgalat)\b/i,
       /\b(?:csomag|kuldemeny)\w*.{0,100}\bkezbesitesre\s+(?:atvette|atvettuk|atadva)\b/i,
+      /\b(?:csomag|kuldemeny)\w*\s+feladasarol\b/i,
+      /\b(?:megkisereljuk|megprobaljuk)\s+(?:a\s+)?(?:csomag\w*\s+)?kezbesiteni\b/i,
+      /\bfutar\w*\s+(?:ma|a\s+mai\s+napon)\s+kezbesit\w*\b/i,
+      /\bpartnerunk\b.{0,160}\b(?:csomag|kuldemeny)\w*\b.{0,80}\badott\s+fel\b/i,
       /\b(?:your\s+)?(?:order|parcel|package|shipment)\s+(?:has\s+been\s+)?(?:shipped|dispatched)\b/i,
       /\b(?:handed|passed)\s+(?:over\s+)?to\s+(?:the\s+)?(?:carrier|courier)\b/i,
     ],
@@ -116,7 +120,7 @@ const EVENT_PATTERNS: EventPattern[] = [
     qualifier: 'explicit_invoice_event',
     confidence: 0.97,
     patterns: [
-      /\b(?:szamla(?:d|ja)?|nyugta(?:d|ja)?)\s+(?:elkeszult|kiallitva|elerheto)\b/i,
+      /\b(?:szamla(?:d|ja)?|nyugta(?:d|ja)?)\s+(?:elkeszult|kiallitva|elerheto|erkezett)\b/i,
       /\b(?:fizetesi\s+bizonylat|payment\s+receipt)\b/i,
       /\b(?:rendeles|megrendeles)\b.{0,64}\bnyugta(?:ja|d)?\b/i,
       /\b(?:invoice|receipt)\s+(?:is\s+)?(?:ready|available|issued|created)\b/i,
@@ -129,6 +133,9 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.96,
     patterns: [
       /\b(?:koszonjuk|koszonjuk),?\s+(?:hogy\s+)?(?:rendeltel|leadta\w*\s+a\s+rendeles)\b/i,
+      /\bkoszonjuk\s+(?:a\s+)?(?:rendeles(?:ed|et)|megrendeles(?:ed|et))\b/i,
+      /\b(?:rendelest|megrendelest)\s+megkaptuk\b/i,
+      /\b(?:sikeres\s+)?(?:rendeles|megrendeles)\s+megerositese\b/i,
       /\b(?:webaruhazunkban|webshopunkban)?\s*.{0,48}\brendelest\s+(?:adott|adtal)\s+le\b/i,
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:beerkezett|rogzitettuk|fogadtuk|visszaigazolva)\b/i,
       /\b(?:rendeles|megrendeles)\s+visszaigazolas(?:a)?\b/i,
@@ -152,8 +159,12 @@ function eventClaim(eventType: UniversalCommerceEventType, source: 'subject' | '
 
 function scan(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[] {
   const lines = source === 'subject' ? [text] : currentMessageLines(text);
+  const candidates = source === 'body' && lines.length > 1
+    ? [...lines, lines.join(' ')]
+    : lines;
   const claims: EvidenceClaim<string>[] = [];
-  for (const rawLine of lines) {
+
+  for (const rawLine of candidates) {
     const line = normalizeText(rawLine);
     if (source === 'subject' && /^\s*your\s+refund\s+from\b/i.test(line)) {
       claims.push(eventClaim('refund', 'subject'));

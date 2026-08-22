@@ -41,10 +41,13 @@ const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = 
     explicit_tracking_label: 500,
     direct_carrier_tracking_candidate: 470,
     contextual_tracking_identifier: 420,
+    corroborated_numeric_tracking_identifier: 410,
+    corroborated_long_tracking_identifier: 410,
     document_tracking_candidate: 300,
   },
   total: {
     explicit_final_total: 520,
+    explicit_cod_collection_amount: 500,
     explicit_generic_total: 490,
     explicit_payment_amount: 460,
     explicit_intermediate_total: 410,
@@ -52,6 +55,7 @@ const QUALIFIER_RANKS: Partial<Record<EvidenceField, Record<string, number>>> = 
   },
   currency: {
     explicit_final_total: 520,
+    explicit_cod_collection_amount: 500,
     explicit_generic_total: 490,
     explicit_payment_amount: 460,
     explicit_intermediate_total: 410,
@@ -164,12 +168,20 @@ function resolveNumberField(input: {
   });
 }
 
+function resolvedEventIs(eventType: ResolvedField<string>, expected: string): boolean {
+  return eventType.status === 'resolved'
+    && Boolean(eventType.value)
+    && normalizeToken(eventType.value!) === expected;
+}
+
 function isPaymentAmountEligible(eventType: ResolvedField<string>): boolean {
-  if (eventType.status !== 'resolved' || !eventType.value) return false;
-  const normalized = normalizeToken(eventType.value);
-  return normalized === 'payment_completed'
-    || normalized === 'refund'
-    || normalized === 'invoice_or_receipt';
+  return resolvedEventIs(eventType, 'payment_completed')
+    || resolvedEventIs(eventType, 'refund')
+    || resolvedEventIs(eventType, 'invoice_or_receipt');
+}
+
+function isCodCollectionAmountEligible(eventType: ResolvedField<string>): boolean {
+  return resolvedEventIs(eventType, 'order_created');
 }
 
 function filterContextualMoneyClaims<T>(
@@ -177,8 +189,10 @@ function filterContextualMoneyClaims<T>(
   eventType: ResolvedField<string>,
 ): EvidenceClaim<T>[] {
   const allowPaymentAmount = isPaymentAmountEligible(eventType);
+  const allowCodCollectionAmount = isCodCollectionAmountEligible(eventType);
   return claims.filter((claim) => (
-    !claim.qualifiers?.includes('explicit_payment_amount') || allowPaymentAmount
+    (!claim.qualifiers?.includes('explicit_payment_amount') || allowPaymentAmount)
+    && (!claim.qualifiers?.includes('explicit_cod_collection_amount') || allowCodCollectionAmount)
   ));
 }
 
