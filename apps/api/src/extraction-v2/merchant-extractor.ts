@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_MERCHANT_EXTRACTOR_VERSION = 'universal-merchant-v2';
+export const UNIVERSAL_MERCHANT_EXTRACTOR_VERSION = 'universal-merchant-v3';
 
 function normalizeText(value: string): string {
   return value
@@ -37,6 +37,59 @@ function hasTransactionalCorroboration(document: EmailDocumentV1): boolean {
 
   const subject = normalizeText(document.subject ?? '').toLowerCase();
   return /\b(?:rendeles|megrendeles|order|purchase|szamla|invoice|receipt|fizetes|payment|refund|visszaterites|shipment|delivery|csomag|kuldemeny)\b/i.test(subject);
+}
+
+const GENERIC_MAIL_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'icloud.com',
+  'yahoo.com',
+  'proton.me',
+  'protonmail.com',
+]);
+
+function compactIdentity(value: string): string {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function domainSupportsIdentity(displayName: string, domain: string | null): boolean {
+  if (!domain) return false;
+  const normalizedDomain = domain.trim().toLowerCase();
+  if (GENERIC_MAIL_DOMAINS.has(normalizedDomain)) return false;
+
+  const display = compactIdentity(displayName);
+  const labels = normalizedDomain
+    .split('.')
+    .map((part) => part.replace(/[^a-z0-9-]/g, ''))
+    .filter((part) => part.length >= 4)
+    .filter((part) => !/^(?:mail|email|smtp|notify|notification|news|mg|www|cloud|online)$/.test(part));
+
+  return labels.some((label) => display.includes(label.replace(/-/g, '')));
+}
+
+function hasCommercialIdentityToken(value: string): boolean {
+  const normalized = normalizeText(value).toLowerCase();
+  return /\b(?:kft|zrt|nyrt|bt|ltd|limited|inc|corp|corporation|company|gmbh|srl|shop|store|webshop|market|premium|services|service|billing|payments|orders|official)\b/i.test(normalized);
+}
+
+function looksLikePersonalByline(value: string): boolean {
+  const normalized = normalizeText(value).trim();
+  if (/\b(?:a|az|from|at)\b/i.test(normalized) && normalized.split(/\s+/).length >= 3) return true;
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 3) return false;
+  return words.every((word) => /^[\p{Lu}][\p{L}'’-]+$/u.test(word));
+}
+
+function senderIdentityCanResolveMerchant(document: EmailDocumentV1, displayName: string): boolean {
+  if (!hasTransactionalCorroboration(document)) return false;
+  if (isCourierIdentity(displayName)) return false;
+  if (looksLikePersonalByline(displayName) && !domainSupportsIdentity(displayName, document.sender.primaryDomain)) return false;
+  return hasCommercialIdentityToken(displayName)
+    || domainSupportsIdentity(displayName, document.sender.primaryDomain)
+    || displayName.trim().split(/\s+/).length === 1;
 }
 
 function explicitClaims(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[] {
@@ -94,15 +147,15 @@ export const universalMerchantExtractor: EvidenceExtractor = {
 
     const displayName = cleanMerchant(document.sender.primaryName ?? '');
     if (displayName && !isCourierIdentity(displayName)) {
-      const transactional = hasTransactionalCorroboration(document);
+      const resolvable = senderIdentityCanResolveMerchant(document, displayName);
       claims.push({
         field: 'merchant',
         value: displayName,
-        confidence: transactional ? 0.86 : 0.68,
+        confidence: resolvable ? 0.86 : 0.68,
         source: 'sender',
         extractorId: 'universal-merchant',
         extractorVersion: UNIVERSAL_MERCHANT_EXTRACTOR_VERSION,
-        qualifiers: [transactional ? 'sender_transactional_identity' : 'sender_display_name_fallback'],
+        qualifiers: [resolvable ? 'sender_commercial_identity' : 'sender_display_name_fallback'],
       });
     }
 
