@@ -2,7 +2,7 @@ import type { EmailDocumentMoneyCandidate, EmailDocumentV1 } from '../ingestion/
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_MONEY_EXTRACTOR_VERSION = 'universal-money-v1';
+export const UNIVERSAL_MONEY_EXTRACTOR_VERSION = 'universal-money-v2';
 
 type Currency = EmailDocumentMoneyCandidate['currency'];
 
@@ -102,14 +102,17 @@ function scanLabeledText(
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? '';
     const normalized = normalizeText(line);
-    const isFinalTotal = FINAL_TOTAL_LABEL.test(normalized);
-    const isPaymentAmount = PAYMENT_AMOUNT_LABEL.test(normalized);
-    if (!isFinalTotal && !isPaymentAmount) continue;
+    const finalMatch = normalized.match(FINAL_TOTAL_LABEL);
+    const paymentMatch = normalized.match(PAYMENT_AMOUNT_LABEL);
+    const labelMatch = finalMatch ?? paymentMatch;
+    if (!labelMatch) continue;
 
     const nextLine = lines.slice(index + 1).find((candidate) => Boolean(candidate.trim())) ?? '';
-    const money = moneyInText(line) ?? moneyInText(nextLine);
+    const labelIndex = labelMatch.index ?? 0;
+    const money = moneyInText(line.slice(labelIndex)) ?? moneyInText(nextLine);
     if (!money) continue;
 
+    const isFinalTotal = Boolean(finalMatch);
     claims.push(...claimPair({
       ...money,
       source,
