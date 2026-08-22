@@ -75,3 +75,76 @@ test('processed refund request is not treated as completed refund', () => {
   assert.notEqual(result.resolved.eventType.value, 'refund');
   assert.notEqual(result.resolved.paymentStatus.value, 'refunded');
 });
+
+test('customer asking support to process cancellation and refund is not refunded', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Re: [Replit] Re: Refund request #503830',
+    snippet: [
+      'Hello Quinn,',
+      'Yes, I confirm that I would like to proceed with the cancellation of my Core subscription and receive the refund.',
+      'Please process the cancellation and refund.',
+      'Thank you for your help.',
+    ].join('\n'),
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.notEqual(result.resolved.eventType.value, 'refund');
+  assert.notEqual(result.resolved.paymentStatus.value, 'refunded');
+});
+
+test('refund eligibility and cancellation prerequisite are not completed refund evidence', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: '[Replit] Re: Refund request #503830',
+    snippet: [
+      'Your monthly Core subscription is within the 30-day refund window, so a refund is possible.',
+      'A subscription refund requires cancelling the subscription.',
+      'Once cancelled, your account will move to the free Starter plan.',
+    ].join('\n'),
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.notEqual(result.resolved.eventType.value, 'refund');
+  assert.notEqual(result.resolved.paymentStatus.value, 'refunded');
+});
+
+test('initial customer refund request is not completed refund evidence', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Refund request',
+    snippet: [
+      'Hello Replit Support,',
+      'I would like to request a refund for my recent Replit subscription/payment.',
+      'Please cancel the subscription and refund the amount charged to my payment method.',
+      'Please confirm once the cancellation and refund have been processed.',
+    ].join('\n'),
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.notEqual(result.resolved.eventType.value, 'refund');
+  assert.notEqual(result.resolved.paymentStatus.value, 'refunded');
+});
+
+test('issued refund still resolves when completion is stated inside one current sentence', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: '[Replit] Re: Refund request #503830',
+    snippet: 'Your monthly Core subscription has been cancelled and a refund for your last payment has been issued.',
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.eventType.value, 'refund');
+  assert.equal(result.resolved.paymentStatus.value, 'refunded');
+});
+
+test('quoted completed refund cannot promote a new current-message refund request', () => {
+  const document = buildEmailDocumentV1(email({
+    subject: 'Re: Refund request #503830',
+    snippet: [
+      'Thanks. I have one more question about the refund request.',
+      'On Sat, Aug 22, 2026 at 10:00 PM Support <support@example.com> wrote:',
+      'Your refund for the last payment has been issued.',
+    ].join('\n'),
+  }));
+
+  const result = runExtractionEngineV2(document);
+  assert.notEqual(result.resolved.eventType.value, 'refund');
+  assert.notEqual(result.resolved.paymentStatus.value, 'refunded');
+});
