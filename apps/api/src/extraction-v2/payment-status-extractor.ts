@@ -16,7 +16,7 @@ function normalizeText(value: string): string {
 }
 
 const FAILED = /\b(?:sikertelen\s+(?:bankkartyas\s+)?fizetes|fizetes\s+sikertelen|tranzakcio\s+sikertelen|sikertelen\s+tranzakcio|payment\s+(?:failed|unsuccessful|declined)|transaction\s+(?:failed|declined))\b/i;
-const REFUNDED = /\b(?:visszaterites\s+(?:megtortent|sikeres|teljesitve|elinditva)|sikeres\s+visszaterites|(?:refund|reimbursement)\b(?:(?!\brequest\b)[^.!?\n]){0,96}\b(?:has\s+been\s+|was\s+)?(?:completed|successful|issued|processed)|(?:payment|transaction|charge|amount)\s+(?:has\s+been\s+|was\s+)?refunded|we\s+(?:have\s+)?refunded)\b/i;
+const REFUNDED = /\b(?:visszaterites\s+(?:megtortent|sikeres|teljesitve|elinditva)|sikeres\s+visszaterites|(?:refund|reimbursement)\s+(?:completed|successful|issued|processed)|(?:refund|reimbursement)\b(?:(?!\brequest\b)[^.!?\n]){0,64}\b(?:has\s+been|was)\s+(?:successfully\s+)?(?:completed|issued|processed)|(?:payment|transaction|charge|amount)\s+(?:has\s+been\s+|was\s+)?refunded|we\s+(?:have\s+)?refunded)\b/i;
 const COD_VALUE = /\b(?:utanvet(?:el|tel|es)?|cash\s+on\s+delivery|cod)\b/i;
 const COD = /(?:fizetesi\s+mod|payment\s+method)\s*[:：-]?\s*(?:utanvet(?:el|tel|es)?|cash\s+on\s+delivery|cod)\b|\b(?:utanvet(?:es)?(?:i)?\s+osszeg|beszedendo\s+osszeg|cash\s+on\s+delivery\s+amount|cod\s+amount)\b/i;
 const PAYMENT_METHOD_LABEL = /^\s*(?:fizetesi\s+mod|payment\s+method)\s*[:：-]?\s*$/i;
