@@ -117,6 +117,16 @@ test('uses non-courier sender display name as merchant fallback', () => {
   assert.equal(result.extraction.merchant, 'MODELL&HOBBY Kft.');
 });
 
+test('uses parsed parcel sender as merchant fallback for courier mail', () => {
+  const input = parsed('shipment');
+  input.extraction.parcel_sender = 'MODELL&HOBBY Kft.';
+  const result = enrichProviderFieldsV1(
+    email('noreply@dpd.hu', 'Értesítés 16380143879559', '', 'DPD Hungary'),
+    input,
+  );
+  assert.equal(result.extraction.merchant, 'MODELL&HOBBY Kft.');
+});
+
 test('does not use courier sender display name as merchant fallback', () => {
   const result = enrichProviderFieldsV1(
     email('noreply@dpd.hu', 'Értesítés 16380143879559', '', 'DPD Hungary'),
