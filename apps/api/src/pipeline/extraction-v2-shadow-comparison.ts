@@ -1,6 +1,6 @@
 import type { NormalizedEmail } from '../email/types.js';
 import { runExtractionEngineV2, type ExtractionEngineV2Result } from '../extraction-v2/engine-v2.js';
-import type { EvidenceProduct, ResolvedField } from '../extraction-v2/types.js';
+import type { ResolvedField } from '../extraction-v2/types.js';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
 import { planNormalizedInboundEmail, type NormalizedInboundPlan } from './normalized-inbound-pipeline.js';
 
