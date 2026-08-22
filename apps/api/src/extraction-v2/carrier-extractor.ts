@@ -24,7 +24,7 @@ function cleanCarrier(value: string): string | null {
 function explicitClaims(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[] {
   const claims: EvidenceClaim<string>[] = [];
   const lines = source === 'subject' ? [text] : currentMessageLines(text);
-  const pattern = /^\s*(?:carrier|courier|delivery\s+service|shipping\s+carrier|futar|futarszolgalat|kezbesito)\s*[:：-]\s*(.+?)\s*$/i;
+  const pattern = /^\s*(?:carrier|courier|delivery\s+service|shipping\s+carrier|fut[aá]r|fut[aá]rszolg[aá]lat|k[eé]zbes[ií]t[oő])\s*[:：-]\s*(.+?)\s*$/i;
   for (const line of lines) {
     const match = line.match(pattern);
     const value = cleanCarrier(match?.[1] ?? '');
