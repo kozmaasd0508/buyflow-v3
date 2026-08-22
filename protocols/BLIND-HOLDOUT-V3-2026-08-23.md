@@ -9,7 +9,13 @@ Extraction Engine v2 candidate-freeze commit:
 
 `e871ce25a842d061f55d359f017fe4fa14dd8f61`
 
-The Blind Holdout v3 harness may be added after this commit, but no extractor, evidence collector, source adapter, resolver, validator, or lifecycle rule may be changed between v3 ground-truth freeze and the first v3 result. If any such production extraction logic changes, the unseen set must be versioned forward before it can be called blind again.
+GitHub freeze timestamp / selection cutoff:
+
+`2026-08-22T22:04:05.000Z` (2026-08-23 00:04:05 Europe/Budapest)
+
+Only messages with `receivedAt` strictly after this cutoff may enter the first Blind Holdout v3 candidate pool.
+
+The Blind Holdout v3 harness and annotation tooling may be added after this commit, but no extractor, evidence collector, source adapter, resolver, validator, or lifecycle rule may be changed between v3 ground-truth freeze and the first v3 result. If any such production extraction logic changes, the unseen set must be versioned forward before it can be called blind again.
 
 ## Purpose
 
@@ -31,6 +37,8 @@ The set should include:
 - hard noise / non-commerce
 
 Do not balance by copying parser outputs. Select from the mailbox first, then annotate from the original message content.
+
+The v3 annotation candidate endpoint is read-only and may display raw email content to the authenticated annotator, but it must never call Extraction Engine v2, the legacy parser, or an AI system. Candidate case ids are opaque SHA-256 values derived from user + provider message identity. Raw provider message ids, subject text, body text, sender addresses, and attachment filenames are annotation-only material and must not be committed into the frozen GT bundle.
 
 ## Ground-truth annotation
 
@@ -57,6 +65,19 @@ Scored fields:
 - products
 
 Store only an opaque/hash-like case id plus ground truth in the repository. Do not commit raw email subject/body content to the holdout truth file.
+
+### Annotation workflow
+
+1. Open `/audit-blind-v3-annotate` while authenticated.
+2. Load post-freeze candidates. The API returns only messages received strictly after the fixed selection cutoff and does not run any parser or extractor.
+3. Annotate every selected case from the original email content. Every field must be explicitly marked `known`, `not_applicable`, or `unknown`.
+4. The browser may persist annotation values keyed by opaque case id for resume purposes, but raw email content must not be persisted by the annotation tool.
+5. Submit the completed truth cases to `/api/audit/blind-v3/freeze`.
+6. The freeze endpoint validates the schema, canonicalizes case order and field representation, and returns a canonical JSON bundle plus SHA-256 hash. It performs 0 production writes, 0 AI calls, and does not run the extraction engine.
+7. Commit the exact canonical JSON and its SHA-256 hash before any v3 prediction run is exposed.
+8. Only after that repository freeze may the frozen Extraction Engine v2 be run against the case ids.
+
+The SHA-256 binds the candidate freeze commit, selection cutoff, and complete ground truth. Any change to the frozen truth produces a different hash and must be documented.
 
 ## Metrics
 
