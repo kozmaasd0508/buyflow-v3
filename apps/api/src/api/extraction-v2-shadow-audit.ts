@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
+import { currentMessageLines } from '../extraction-v2/event-type-extractor.js';
 import {
   compareLegacyAndExtractionV2,
   type ShadowComparisonStatus,
@@ -46,6 +47,47 @@ function emptyCounts(): Record<ShadowComparisonStatus, number> {
     different: 0,
     both_missing: 0,
     v2_conflict: 0,
+  };
+}
+
+function normalizedCueText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function redactCue(value: string): string {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+}
+
+function diagnosticCues(
+  message: { subject?: string | null; snippet?: string | null },
+  differences: Array<{ legacy?: unknown }>,
+) {
+  const legacyTokens = differences
+    .map((item) => item.legacy)
+    .filter((value): value is string | number => typeof value === 'string' || typeof value === 'number')
+    .map((value) => String(value).trim())
+    .filter((value) => value.length >= 3);
+  const keywordPattern = /\b(?:refund|reimbursement|visszater|jovair|credit|order|rendel|invoice|szamla|receipt|payment|fizet|total|osszesen|vegosszeg|shipment|delivery|szallit|csomag|carrier|futar)\w*/i;
+  const lines = currentMessageLines(message.snippet ?? '')
+    .filter((line) => {
+      const normalized = normalizedCueText(line);
+      return keywordPattern.test(normalized)
+        || legacyTokens.some((token) => normalized.includes(normalizedCueText(token)));
+    })
+    .map(redactCue)
+    .filter(Boolean)
+    .slice(0, 4);
+
+  return {
+    subject: message.subject ? redactCue(message.subject) : null,
+    lines,
   };
 }
 
@@ -116,6 +158,7 @@ async function run(userId: string, limit: number) {
           v2ReviewRequired: comparison.v2ReviewRequired,
           v2ConflictFields: comparison.v2ConflictFields,
           validationIssues: comparison.v2ValidationIssueCodes,
+          diagnosticCues: diagnosticCues(message, interesting),
           differences: interesting,
         });
       }
@@ -150,7 +193,7 @@ function html() {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Extraction Engine v2 Shadow Audit</title>
 <style>
-body{font-family:system-ui;background:#071020;color:#fff;max-width:1180px;margin:auto;padding:28px}.c{background:#0d1830;padding:20px;border-radius:18px;margin:14px 0}button,select{padding:11px 14px;border:0;border-radius:10px;font-weight:700}button{background:#7c4dff;color:#fff;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.muted{color:#9fb0c9}.bad{color:#ff9b9b}.good{color:#8ef0ba}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid #263551}code{white-space:pre-wrap;word-break:break-word;color:#dfe7ff}.ev{font-size:12px;color:#b8c6de}
+body{font-family:system-ui;background:#071020;color:#fff;max-width:1180px;margin:auto;padding:28px}.c{background:#0d1830;padding:20px;border-radius:18px;margin:14px 0}button,select{padding:11px 14px;border:0;border-radius:10px;font-weight:700}button{background:#7c4dff;color:#fff;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.muted{color:#9fb0c9}.bad{color:#ff9b9b}.good{color:#8ef0ba}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid #263551}code{white-space:pre-wrap;word-break:break-word;color:#dfe7ff}.ev{font-size:12px;color:#b8c6de}.cue{font-size:12px;color:#9fb0c9;margin:6px 0 10px}
 </style>
 <div class="c"><b>EXTRACTION ENGINE v2 · SHADOW DIFFERENTIAL · 0 WRITE · 0 AI</b><h1>Old engine vs Extraction Engine v2</h1><p class="muted">Ez nem ground truth pontosság. Csak azt mutatja, hol egyezik vagy tér el a két motor.</p><select id="n"><option value="100" selected>100 levél</option><option value="200">200 levél</option><option value="300">300 levél</option><option value="500">500 levél</option></select> <button id="b" type="button">Shadow audit futtatása</button> <span id="s"></span></div>
 <div class="c" id="o"></div>
@@ -167,6 +210,13 @@ body{font-family:system-ui;background:#071020;color:#fff;max-width:1180px;margin
   const esc = (value) => String(value).replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const fmt = (value) => value == null ? 'null' : typeof value === 'string' ? value : JSON.stringify(value);
   const evidenceText = (items) => (items || []).map((item) => 'value=' + fmt(item.value) + ' · conf=' + Number(item.confidence).toFixed(3) + ' · ' + item.source + ' · ' + item.extractorId + ' · ' + (item.qualifiers || []).join(',')).join('\\n');
+  const cueText = (cue) => {
+    if (!cue) return '';
+    const parts = [];
+    if (cue.subject) parts.push('Subject: ' + cue.subject);
+    if (cue.lines && cue.lines.length) parts.push('Cues: ' + cue.lines.join(' | '));
+    return parts.join(' · ');
+  };
 
   let clientPromise = null;
   const getClient = async () => {
@@ -211,7 +261,7 @@ body{font-family:system-ui;background:#071020;color:#fff;max-width:1180px;margin
 
       const statuses = ['same','legacy_only','v2_only','different','v2_conflict','both_missing'];
       const fieldRows = Object.entries(payload.perField).map(([field, counts]) => '<tr><td>' + esc(field) + '</td>' + statuses.map((key) => '<td>' + Number(counts[key] || 0) + '</td>').join('') + '</tr>').join('');
-      const details = payload.rows.map((row) => '<h3>' + esc(row.messageId) + ' · legacy ' + esc(row.legacyClassification || '—') + ' · v2 ' + esc(row.v2EventType || '—') + (row.v2ReviewRequired ? ' · <span class="bad">REVIEW</span>' : '') + '</h3><table><tr><th>Field</th><th>Status</th><th>Legacy</th><th>v2</th><th>v2 evidence</th></tr>' + row.differences.map((field) => '<tr><td>' + esc(field.field) + '</td><td>' + esc(field.status) + '</td><td><code>' + esc(fmt(field.legacy)) + '</code></td><td><code>' + esc(fmt(field.v2)) + '</code></td><td><code class="ev">' + esc(evidenceText(field.evidence)) + '</code></td></tr>').join('') + '</table>').join('');
+      const details = payload.rows.map((row) => '<h3>' + esc(row.messageId) + ' · legacy ' + esc(row.legacyClassification || '—') + ' · v2 ' + esc(row.v2EventType || '—') + (row.v2ReviewRequired ? ' · <span class="bad">REVIEW</span>' : '') + '</h3><div class="cue">' + esc(cueText(row.diagnosticCues)) + '</div><table><tr><th>Field</th><th>Status</th><th>Legacy</th><th>v2</th><th>v2 evidence</th></tr>' + row.differences.map((field) => '<tr><td>' + esc(field.field) + '</td><td>' + esc(field.status) + '</td><td><code>' + esc(fmt(field.legacy)) + '</code></td><td><code>' + esc(fmt(field.v2)) + '</code></td><td><code class="ev">' + esc(evidenceText(field.evidence)) + '</code></td></tr>').join('') + '</table>').join('');
 
       output.innerHTML = '<h2>' + payload.scanned + ' levél összehasonlítva</h2><p>Legacy recognized: ' + payload.legacyRecognized + ' · v2 recognized: ' + payload.v2Recognized + ' · v2 REVIEW: ' + payload.v2Review + '</p><p class="muted">Accuracy claimed: NO · 0 write · 0 AI</p><table><tr><th>Field</th>' + statuses.map((key) => '<th>' + key + '</th>').join('') + '</tr>' + fieldRows + '</table><h2>Eltérések (max. 100)</h2>' + details;
       status.textContent = ' Kész.';

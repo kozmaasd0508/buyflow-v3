@@ -7,6 +7,7 @@ import { universalCarrierExtractor } from './carrier-extractor.js';
 import { resolveCommerceEvent } from './field-resolvers.js';
 import { universalMerchantExtractor } from './merchant-extractor.js';
 import { universalMoneyExtractor } from './money-extractor.js';
+import { universalOrderNumberExtractor } from './order-number-extractor.js';
 import { universalProductExtractor } from './product-extractor.js';
 import type { EvidenceBundle, EvidenceClaim } from './types.js';
 
@@ -69,7 +70,7 @@ test('carrier extractor keeps courier evidence when the brand appears in shipmen
   assert.ok(carriers.some((item) => item.value === 'Express One'));
 });
 
-test('transactional sender display name can resolve merchant while generic sender names stay weak', () => {
+test('commercial sender display name can resolve merchant while generic sender names stay weak', () => {
   const transactional = buildEmailDocumentV1(email({
     subject: 'Rendelés #AB-12345 visszaigazolása',
     snippet: 'Rendelésszám: AB-12345\nVégösszeg: 12 990 Ft',
@@ -79,7 +80,7 @@ test('transactional sender display name can resolve merchant while generic sende
   const sender = claims.find((item) => item.value === 'Sportvision');
   assert.ok(sender);
   assert.ok((sender?.confidence ?? 0) >= 0.80);
-  assert.ok(sender?.qualifiers?.includes('sender_transactional_identity'));
+  assert.ok(sender?.qualifiers?.includes('sender_commercial_identity'));
 
   const generic = buildEmailDocumentV1(email({
     subject: 'Heti hírek',
@@ -97,6 +98,36 @@ test('money extractor binds total to the amount after the total label on a mixed
   const totals = universalMoneyExtractor.extract(document).filter((item) => item.field === 'total');
   assert.ok(totals.some((item) => item.value === 14758 && item.qualifiers?.includes('explicit_final_total')));
   assert.ok(!totals.some((item) => item.value === 990 && item.qualifiers?.includes('explicit_final_total')));
+});
+
+test('final total outranks product subtotal instead of becoming a conflict', () => {
+  const document = buildEmailDocumentV1(email({
+    snippet: 'Termékek összesen: 13 258 Ft\nVégösszeg: 14 758 Ft',
+  }));
+  const evidence = universalMoneyExtractor.extract(document);
+  assert.ok(evidence.some((item) => item.field === 'total' && item.value === 13258 && item.qualifiers?.includes('explicit_intermediate_total')));
+  assert.ok(evidence.some((item) => item.field === 'total' && item.value === 14758 && item.qualifiers?.includes('explicit_final_total')));
+  const result = resolveCommerceEvent({ claims: evidence });
+  assert.equal(result.total.status, 'resolved');
+  assert.equal(result.total.value, 14758);
+  assert.equal(result.reviewRequired, false);
+});
+
+test('bare generic total remains usable when no stronger final-total label exists', () => {
+  const document = buildEmailDocumentV1(email({ snippet: 'Összesen: 7 170 Ft' }));
+  const evidence = universalMoneyExtractor.extract(document);
+  const result = resolveCommerceEvent({ claims: evidence });
+  assert.equal(result.total.value, 7170);
+  assert.equal(result.currency.value, 'HUF');
+});
+
+test('order extractor recognizes Hungarian adjectival order-number labels', () => {
+  const document = buildEmailDocumentV1(email({
+    snippet: 'Rendelési szám: 130354\nMegrendelési azonosító: AB-9918274',
+  }));
+  const orders = universalOrderNumberExtractor.extract(document).filter((item) => item.field === 'order_number');
+  assert.ok(orders.some((item) => item.value === '130354' && item.qualifiers?.includes('explicit_order_label')));
+  assert.ok(orders.some((item) => item.value === 'AB-9918274' && item.qualifiers?.includes('explicit_order_label')));
 });
 
 test('carrier-only conflict remains diagnostic but does not create REVIEW without a transactional anchor', () => {

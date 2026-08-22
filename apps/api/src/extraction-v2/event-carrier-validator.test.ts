@@ -88,7 +88,7 @@ test('courier mentioned only in quoted history is not emitted as current carrier
   assert.ok(!claims.some((claim) => String(claim.value).toUpperCase() === 'GLS'));
 });
 
-test('engine v2 runs all nine extractors and resolves shipment carrier tracking', () => {
+test('engine v2 runs the universal core plus corroborated event pass and resolves shipment fields', () => {
   const document = buildEmailDocumentV1(email({
     subject: 'A csomagod feladásra került',
     snippet: [
@@ -98,8 +98,22 @@ test('engine v2 runs all nine extractors and resolves shipment carrier tracking'
     ].join('\n'),
   }));
   const result = runExtractionEngineV2(document);
+  const ranIds = new Set(result.evidence.ranExtractors.map((item) => item.id));
 
-  assert.equal(result.evidence.ranExtractors.length, 9);
+  for (const required of [
+    'universal-order-number',
+    'universal-tracking-number',
+    'universal-money',
+    'universal-merchant',
+    'universal-payment-status',
+    'universal-invoice-payment-reference',
+    'universal-product',
+    'universal-event-type',
+    'universal-carrier',
+    'corroborated-event-evidence',
+  ]) {
+    assert.ok(ranIds.has(required), required);
+  }
   assert.equal(result.resolved.eventType.value, 'shipment');
   assert.equal(result.resolved.carrier.value, 'DPD');
   assert.equal(result.resolved.trackingNumber.value, '13169408547018');
@@ -118,12 +132,13 @@ test('explicit carrier label outranks a weaker incidental carrier mention', () =
   assert.equal(result.resolved.carrier.value, 'DPD');
 });
 
-test('two different explicit carrier labels become REVIEW', () => {
+test('two different explicit carrier labels become REVIEW when a transaction anchor exists', () => {
   const document = buildEmailDocumentV1(email({
-    subject: 'Csomagértesítő',
-    snippet: 'Futárszolgálat: DPD\nCarrier: GLS',
+    subject: 'Rendelési értesítő',
+    snippet: 'Rendelésszám: AB-12345\nFutárszolgálat: DPD\nCarrier: GLS',
   }));
   const result = runExtractionEngineV2(document);
+  assert.equal(result.resolved.orderNumber.value, 'AB-12345');
   assert.equal(result.resolved.carrier.status, 'conflict');
   assert.equal(result.reviewRequired, true);
 });
