@@ -42,21 +42,38 @@ function normalizeCurrency(value: string): string | null {
   return null;
 }
 
+function moneyAfterLabel(text: string, label: RegExp): { amount: number; currency: string } | null {
+  for (const line of text.split(/\r?\n/)) {
+    if (!label.test(line)) continue;
+    const match = line.match(/([0-9][0-9\s.,\u00a0]*)\s*(Ft|HUF|EUR|€|USD|\$)\b/i);
+    if (!match?.[1] || !match[2]) continue;
+    const amount = parseAmount(match[1]);
+    const currency = normalizeCurrency(match[2]);
+    if (amount !== null && currency) return { amount, currency };
+  }
+  return null;
+}
+
 function explicitTotal(text: string): { amount: number; currency: string } | null {
-  const match = text.match(/(?:^|\n)\s*(?:összesen|fizetendő|fizetendő összeg|grand total|order total|total)\s*:?\s*([0-9][0-9\s.,\u00a0]*)\s*(Ft|HUF|EUR|€|USD|\$)\b/im);
-  if (!match?.[1] || !match[2]) return null;
-  const amount = parseAmount(match[1]);
-  const currency = normalizeCurrency(match[2]);
-  return amount !== null && currency ? { amount, currency } : null;
+  return moneyAfterLabel(text, /\b(?:összesen|fizetendő|fizetendő összeg|bruttó összeg|végösszeg|grand total|order total|total amount|total)\b/i);
+}
+
+function explicitPaymentAmount(text: string): { amount: number; currency: string } | null {
+  return moneyAfterLabel(text, /\b(?:fizetett összeg|befizetett összeg|tranzakció összege|fizetés összege|payment amount|paid amount|amount|összeg)\b/i);
+}
+
+function explicitCodAmount(text: string): { amount: number; currency: string } | null {
+  return moneyAfterLabel(text, /\b(?:utánvét(?:es)?(?:i)? összeg(?:e)?|beszedendő összeg|cash on delivery amount|cod amount|fizetendő összeg)\b/i);
 }
 
 function hasExplicitPaidEvidence(subject: string, text: string): boolean {
   const source = `${subject}\n${text}`;
-  return /\b(?:sikeres fizet[eé]s|sikeresen fizett[eé]l|sikeresen rendezte|fizet[eé]s megerős[ií]t[eé]se|payment successful|payment confirmed|successfully paid)\b/i.test(source);
+  return /\b(?:sikeres fizet[eé]s|sikeresen fizett[eé]l|sikeresen rendezte|fizet[eé]s megerős[ií]t[eé]se|fizet[eé]s megt[oö]rt[eé]nt|fizet[eé]s teljes[ií]tve|kifizetve|sikeres tranzakci[oó]|tranzakci[oó] sikeres|sikeres befizet[eé]s|befizet[eé]s be[eé]rkezett|payment successful|payment confirmed|payment completed|successfully paid|paid successfully)\b/i.test(source);
 }
 
 function hasExplicitCodEvidence(text: string): boolean {
-  return /(?:fizet[eé]si\s+m[oó]d|payment\s+method)\s*:?\s*(?:ut[aá]nv[eé]t(?:el|tel|es)?|cash on delivery|cod)\b/i.test(text);
+  return /(?:fizet[eé]si\s+m[oó]d|payment\s+method)\s*:?\s*(?:ut[aá]nv[eé]t(?:el|tel|es)?|cash on delivery|cod)\b/i.test(text)
+    || /\b(?:ut[aá]nv[eé]t(?:es)?(?:i)?\s+[oö]sszeg(?:e)?|beszedend[oő]\s+[oö]sszeg|cash on delivery amount|cod amount)\b/i.test(text);
 }
 
 function genericOrderNumber(subject: string, text: string): string | null {
@@ -64,6 +81,33 @@ function genericOrderNumber(subject: string, text: string): string | null {
     /(?:megrendel[eé]s|rendel[eé]s)\s+(?:visszaigazol[aá]sa|visszaigazol[aá]s)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{4,30})\b/i,
     /(?:megrendel[eé]s|rendel[eé]s)(?:i)?\s+(?:sz[aá]m|azonos[ií]t[oó])\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{4,30})\b/i,
   ]);
+}
+
+function courierSenderDomain(senderDomain: string): boolean {
+  return [
+    'dpd.hu',
+    'gls-hungary.com',
+    'posta.hu',
+    'expressone.hu',
+    'foxpost.hu',
+    'packeta.hu',
+    'dhl.com',
+    'ups.com',
+    'fedex.com',
+  ].some((candidate) => domainMatches(senderDomain, candidate));
+}
+
+function senderMerchantName(email: NormalizedEmail, senderDomain: string): string | null {
+  if (courierSenderDomain(senderDomain)) return null;
+  const name = email.from[0]?.name?.normalize('NFKC').trim() ?? '';
+  if (name.length < 2 || name.length > 120 || name.includes('@')) return null;
+  const normalized = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+  if (/^(?:no-?reply|noreply|info|support|customer service|ugyfelszolgalat|webshop|shop|ertesites|notification|mailer|robot)$/i.test(normalized)) return null;
+  return name;
 }
 
 /**
@@ -142,6 +186,14 @@ export function enrichProviderFieldsV1(
     if (extraction.order_number) reasons.push('field_enrichment_v1_epic_order_number');
   }
 
+  if (!extraction.merchant) {
+    const merchant = senderMerchantName(email, senderDomain);
+    if (merchant) {
+      extraction.merchant = merchant;
+      reasons.push('field_enrichment_v1_sender_merchant_name');
+    }
+  }
+
   if (extraction.event_type === 'order_created' && !extraction.order_number) {
     const candidate = genericOrderNumber(subject, body);
     if (candidate) {
@@ -150,9 +202,18 @@ export function enrichProviderFieldsV1(
     }
   }
 
-  if ((extraction.event_type === 'order_created' || extraction.event_type === 'invoice_or_receipt')
-      && (extraction.total == null || !extraction.currency)) {
-    const total = explicitTotal(body);
+  const amountEligible = [
+    'order_created',
+    'order_updated',
+    'shipment',
+    'invoice_or_receipt',
+    'payment_completed',
+  ].includes(extraction.event_type);
+
+  if (amountEligible && (extraction.total == null || !extraction.currency)) {
+    const total = explicitTotal(body)
+      ?? (extraction.event_type === 'payment_completed' ? explicitPaymentAmount(body) : null)
+      ?? (extraction.event_type === 'shipment' ? explicitCodAmount(body) : null);
     if (total) {
       if (extraction.total == null) extraction.total = total.amount;
       if (!extraction.currency) extraction.currency = total.currency;
@@ -160,13 +221,15 @@ export function enrichProviderFieldsV1(
     }
   }
 
-  if (extraction.event_type === 'payment_completed' && !extraction.payment_status
+  if ((extraction.event_type === 'payment_completed' || extraction.event_type === 'invoice_or_receipt')
+      && !extraction.payment_status
       && hasExplicitPaidEvidence(subject, body)) {
     extraction.payment_status = 'paid';
     reasons.push('field_enrichment_v1_explicit_paid_status');
   }
 
-  if (extraction.event_type === 'order_created' && !extraction.payment_status
+  if (['order_created', 'order_updated', 'shipment'].includes(extraction.event_type)
+      && !extraction.payment_status
       && hasExplicitCodEvidence(body)) {
     extraction.payment_status = 'cash_on_delivery';
     reasons.push('field_enrichment_v1_explicit_cod_status');
