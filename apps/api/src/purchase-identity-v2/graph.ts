@@ -1,4 +1,9 @@
 import { decideCorrelation } from './decision-engine.js';
+import {
+  invoiceIdentityKey,
+  paymentIdentityKey,
+  shipmentIdentityKey,
+} from './identity-keys.js';
 import { normalizeStableIdentifier } from './identifier-normalizer.js';
 import type {
   CanonicalEvent,
@@ -121,16 +126,27 @@ export class PurchaseIdentityGraph {
   private upsertShipment(purchaseId: string, trackingId: string, event: CanonicalEvent) {
     const normalized = normalizeStableIdentifier(trackingId);
     if (!normalized) return;
-    const existing = this.snapshotState.shipments.find(
+
+    const sameTracking = this.snapshotState.shipments.filter(
       (shipment) => shipment.purchaseId === purchaseId && normalizeStableIdentifier(shipment.trackingId) === normalized,
     );
+    const incomingKey = shipmentIdentityKey(event.userId, event.carrierId, trackingId);
+    let existing = incomingKey
+      ? sameTracking.find((shipment) => shipmentIdentityKey(event.userId, shipment.carrierId, shipment.trackingId) === incomingKey)
+      : sameTracking.find((shipment) => !shipment.carrierId);
+
+    if (!existing && event.carrierId && sameTracking.length === 1 && !sameTracking[0]?.carrierId) {
+      existing = sameTracking[0];
+      if (existing) existing.carrierId = event.carrierId;
+    }
+
     if (existing) {
-      if (!existing.carrierId && event.carrierId) existing.carrierId = event.carrierId;
       existing.status = shipmentStatus(event);
       return;
     }
+
     const shipment: ShipmentIdentity = {
-      shipmentId: `shipment:${purchaseId}:${event.carrierId ?? 'unknown'}:${normalized}`,
+      shipmentId: `shipment:${purchaseId}:${namespaceToken(event.carrierId)}:${normalized}`,
       purchaseId,
       carrierId: event.carrierId ?? null,
       trackingId,
@@ -142,15 +158,24 @@ export class PurchaseIdentityGraph {
   private upsertPayment(purchaseId: string, paymentReference: string, event: CanonicalEvent) {
     const normalized = normalizeStableIdentifier(paymentReference);
     if (!normalized) return;
-    const existing = this.snapshotState.payments.find(
+
+    const sameReference = this.snapshotState.payments.filter(
       (payment) => payment.purchaseId === purchaseId && normalizeStableIdentifier(payment.paymentReference) === normalized,
     );
-    if (existing) {
-      if (!existing.providerId && event.paymentProviderId) existing.providerId = event.paymentProviderId;
-      return;
+    const incomingKey = paymentIdentityKey(event.userId, event.paymentProviderId, paymentReference);
+    let existing = incomingKey
+      ? sameReference.find((payment) => paymentIdentityKey(event.userId, payment.providerId, payment.paymentReference) === incomingKey)
+      : sameReference.find((payment) => !payment.providerId);
+
+    if (!existing && event.paymentProviderId && sameReference.length === 1 && !sameReference[0]?.providerId) {
+      existing = sameReference[0];
+      if (existing) existing.providerId = event.paymentProviderId;
     }
+
+    if (existing) return;
+
     const payment: PaymentIdentity = {
-      paymentId: `payment:${purchaseId}:${event.paymentProviderId ?? 'unknown'}:${normalized}`,
+      paymentId: `payment:${purchaseId}:${namespaceToken(event.paymentProviderId)}:${normalized}`,
       purchaseId,
       providerId: event.paymentProviderId ?? null,
       paymentReference,
@@ -162,17 +187,25 @@ export class PurchaseIdentityGraph {
 
   private upsertInvoice(purchaseId: string, invoiceId: string | null, event: CanonicalEvent) {
     const normalized = normalizeStableIdentifier(invoiceId);
-    const existing = normalized
-      ? this.snapshotState.invoices.find(
+    const sameInvoice = normalized
+      ? this.snapshotState.invoices.filter(
         (invoice) => invoice.purchaseId === purchaseId && normalizeStableIdentifier(invoice.invoiceId) === normalized,
       )
-      : undefined;
-    if (existing) {
-      if (!existing.issuerId && event.invoiceIssuerId) existing.issuerId = event.invoiceIssuerId;
-      return;
+      : [];
+    const incomingKey = invoiceIdentityKey(event.userId, event.invoiceIssuerId, invoiceId);
+    let existing = incomingKey
+      ? sameInvoice.find((invoice) => invoiceIdentityKey(event.userId, invoice.issuerId, invoice.invoiceId) === incomingKey)
+      : sameInvoice.find((invoice) => !invoice.issuerId);
+
+    if (!existing && event.invoiceIssuerId && sameInvoice.length === 1 && !sameInvoice[0]?.issuerId) {
+      existing = sameInvoice[0];
+      if (existing) existing.issuerId = event.invoiceIssuerId;
     }
+
+    if (existing) return;
+
     const invoice: InvoiceIdentity = {
-      invoiceIdentityId: `invoice:${purchaseId}:${event.invoiceIssuerId ?? 'unknown'}:${normalized ?? event.eventId}`,
+      invoiceIdentityId: `invoice:${purchaseId}:${namespaceToken(event.invoiceIssuerId)}:${normalized ?? event.eventId}`,
       purchaseId,
       issuerId: event.invoiceIssuerId ?? null,
       invoiceId,
@@ -190,6 +223,10 @@ export class PurchaseIdentityGraph {
       aiCalls: 0,
     };
   }
+}
+
+function namespaceToken(value: string | null | undefined): string {
+  return encodeURIComponent((value ?? 'unknown').trim().toLowerCase() || 'unknown');
 }
 
 function emptySnapshot(): PurchaseIdentitySnapshot {
