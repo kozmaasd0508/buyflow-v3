@@ -6,6 +6,8 @@ const TRUSTED_VALIDATION_STATUSES = new Set(['validated', 'guardrailed']);
 const SHADOW_ONLY_PARSER_VERSION_PATTERNS = [
   /^generic-order-confirmation-v\d+(?:\.\d+)*$/,
   /^generic-lifecycle-v\d+(?:\.\d+)*$/,
+  /^generic-commerce-v\d+(?:\.\d+)*-shadow$/,
+  /^provider-lifecycle-v\d+(?:\.\d+)*-shadow$/,
 ] as const;
 
 type WritablePurchaseCandidate = PurchaseResolutionCandidate & {

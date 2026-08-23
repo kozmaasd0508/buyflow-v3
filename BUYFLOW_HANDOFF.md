@@ -2,13 +2,26 @@
 
 > Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile with current GitHub/Supabase/Render state before changing runtime code.
 
-**Last updated:** 2026-08-17 Europe/Budapest  
+**Last updated:** 2026-08-20 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current released main:** `73fe594d281df31307547585f6204f34d92a4039` — Generic Lifecycle v1.2  
 **Current release candidate:** PR #156 — Generic Lifecycle v1.3 multi-observation shadow  
 **Final temporary audit:** PR #157 — closed without merge  
 **Production preview:** `https://buyflow-v3-api-dev.onrender.com/app/`  
 **API health:** `https://buyflow-v3-api-dev.onrender.com/health`
+
+## CURRENT SHADOW AUDIT STATE — 2026-08-20
+
+- Shadow branch head: `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce` (PR #191).
+- Frozen Gmail v6 holdout: 50 commerce + 50 hard noise, excluding the prior v4/v5 sets and locked before v6 audit code or tuning.
+- PR #190 added the Gmail-label-locked `/audit-v6` harness; detector/parser runtime was unchanged.
+- First v6 blind run: TP 42 / FN 8 / FP 0 / TN 50; precision 100%, recall 84%, 100/100 coverage.
+- The eight false negatives were two Express One payment receipts, three Google Play subscription lifecycle notices, two MPL/Posta out-for-delivery notices (one via Allegro mail relay), and one Shopbuilder shipped notice.
+- PR #191 added only exact sender/domain + explicit subject/body lifecycle-evidence rules, plus positive and fail-closed negative regression tests. Broad generic matching and the frozen v6 fixtures were unchanged.
+- Live Render v6 regression on `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce`: TP 50 / FN 0 / FP 0 / TN 50; precision 100%, recall 100%, 100/100 coverage.
+- Audit remained read-only: 0 production writes and 0 AI calls.
+- GitHub Actions did not publish checks for PRs #190/#191; live Render commit verification and the read-only audit are the recorded runtime proof.
+- The v4, v5 and v6 sets are regression evidence, not fresh blind sets. Any further generalization claim requires another newly frozen holdout.
 
 ## RESUME CONTRACT
 
