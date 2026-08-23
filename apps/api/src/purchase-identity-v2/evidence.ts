@@ -1,4 +1,10 @@
 import type { CanonicalEvent, EvidenceEdge, PurchaseIdentitySnapshot } from './types.js';
+import {
+  invoiceIdentityKey,
+  orderIdentityKey,
+  paymentIdentityKey,
+  shipmentIdentityKey,
+} from './identity-keys.js';
 import { normalizeStableIdentifier } from './identifier-normalizer.js';
 
 export function buildEvidenceForCandidate(
@@ -20,47 +26,83 @@ export function buildEvidenceForCandidate(
   const payments = snapshot.payments.filter((item) => item.purchaseId === purchaseId);
   const invoices = snapshot.invoices.filter((item) => item.purchaseId === purchaseId);
 
-  if (orderId && orders.some((item) => normalizeStableIdentifier(item.orderId) === orderId)) {
+  const matchingOrders = orderId
+    ? orders.filter((item) => normalizeStableIdentifier(item.orderId) === orderId)
+    : [];
+  if (matchingOrders.length > 0) {
+    const eventKey = orderIdentityKey(event.userId, event.merchantId, orderId);
+    const namespaceMatch = Boolean(eventKey && matchingOrders.some(
+      (item) => orderIdentityKey(event.userId, item.merchantId, item.orderId) === eventKey,
+    ));
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: event.eventType === 'invoice_created' ? 'INVOICE_ORDER_ID_EXACT' : 'ORDER_ID_EXACT',
-      strength: 'hard',
-      score: 100,
-      explanation: `exact normalized order id ${orderId}`,
+      strength: namespaceMatch ? 'hard' : 'soft',
+      score: namespaceMatch ? 100 : 35,
+      explanation: namespaceMatch
+        ? `exact order identity ${eventKey}`
+        : `order id ${orderId} matched without canonical merchant namespace agreement`,
     });
   }
 
-  if (trackingId && shipments.some((item) => normalizeStableIdentifier(item.trackingId) === trackingId)) {
+  const matchingShipments = trackingId
+    ? shipments.filter((item) => normalizeStableIdentifier(item.trackingId) === trackingId)
+    : [];
+  if (matchingShipments.length > 0) {
+    const eventKey = shipmentIdentityKey(event.userId, event.carrierId, trackingId);
+    const namespaceMatch = Boolean(eventKey && matchingShipments.some(
+      (item) => shipmentIdentityKey(event.userId, item.carrierId, item.trackingId) === eventKey,
+    ));
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: 'TRACKING_ID_EXACT',
-      strength: 'hard',
-      score: 100,
-      explanation: `exact normalized tracking id ${trackingId}`,
+      strength: namespaceMatch ? 'hard' : 'soft',
+      score: namespaceMatch ? 100 : 35,
+      explanation: namespaceMatch
+        ? `exact shipment identity ${eventKey}`
+        : `tracking id ${trackingId} matched without carrier namespace agreement`,
     });
   }
 
-  if (paymentReference && payments.some((item) => normalizeStableIdentifier(item.paymentReference) === paymentReference)) {
+  const matchingPayments = paymentReference
+    ? payments.filter((item) => normalizeStableIdentifier(item.paymentReference) === paymentReference)
+    : [];
+  if (matchingPayments.length > 0) {
+    const eventKey = paymentIdentityKey(event.userId, event.paymentProviderId, paymentReference);
+    const namespaceMatch = Boolean(eventKey && matchingPayments.some(
+      (item) => paymentIdentityKey(event.userId, item.providerId, item.paymentReference) === eventKey,
+    ));
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: 'PAYMENT_REFERENCE_EXACT',
-      strength: 'hard',
-      score: 100,
-      explanation: `exact payment reference ${paymentReference}`,
+      strength: namespaceMatch ? 'hard' : 'soft',
+      score: namespaceMatch ? 100 : 35,
+      explanation: namespaceMatch
+        ? `exact payment identity ${eventKey}`
+        : `payment reference ${paymentReference} matched without provider namespace agreement`,
     });
   }
 
-  if (invoiceId && invoices.some((item) => normalizeStableIdentifier(item.invoiceId) === invoiceId)) {
+  const matchingInvoices = invoiceId
+    ? invoices.filter((item) => normalizeStableIdentifier(item.invoiceId) === invoiceId)
+    : [];
+  if (matchingInvoices.length > 0) {
+    const eventKey = invoiceIdentityKey(event.userId, event.invoiceIssuerId, invoiceId);
+    const namespaceMatch = Boolean(eventKey && matchingInvoices.some(
+      (item) => invoiceIdentityKey(event.userId, item.issuerId, item.invoiceId) === eventKey,
+    ));
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: 'INVOICE_ORDER_ID_EXACT',
-      strength: 'hard',
-      score: 95,
-      explanation: `exact invoice id ${invoiceId}`,
+      strength: namespaceMatch ? 'hard' : 'soft',
+      score: namespaceMatch ? 95 : 30,
+      explanation: namespaceMatch
+        ? `exact invoice identity ${eventKey}`
+        : `invoice id ${invoiceId} matched without issuer namespace agreement`,
     });
   }
 
