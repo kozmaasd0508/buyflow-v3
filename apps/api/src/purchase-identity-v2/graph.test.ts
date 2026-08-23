@@ -28,6 +28,10 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
     trackingUrl: overrides.trackingUrl ?? null,
     productFingerprints: overrides.productFingerprints ?? [],
     provenance: overrides.provenance ?? [],
+    carrierId: overrides.carrierId ?? null,
+    paymentProviderId: overrides.paymentProviderId ?? null,
+    invoiceIssuerId: overrides.invoiceIssuerId ?? null,
+    conflicts: overrides.conflicts ?? [],
   };
 }
 
@@ -42,6 +46,7 @@ test('builds one purchase timeline from order, shipment, payment, invoice and de
   const shipped = graph.applyEvent(event({
     eventType: 'shipment_created',
     orderIdRaw: 'ABC123',
+    carrierId: 'gls',
     trackingIdRaw: 'GLS-77',
   }));
   assert.equal(shipped.decision.kind, 'LINKED');
@@ -49,6 +54,7 @@ test('builds one purchase timeline from order, shipment, payment, invoice and de
   const paid = graph.applyEvent(event({
     eventType: 'payment_completed',
     orderIdRaw: 'ABC123',
+    paymentProviderId: 'barion',
     paymentReference: 'PAY-9',
     amount: 12990,
     currency: 'HUF',
@@ -58,12 +64,14 @@ test('builds one purchase timeline from order, shipment, payment, invoice and de
   const invoiced = graph.applyEvent(event({
     eventType: 'invoice_created',
     orderIdRaw: 'ABC123',
+    invoiceIssuerId: 'billingo',
     invoiceIdRaw: 'INV-42',
   }));
   assert.equal(invoiced.decision.kind, 'LINKED');
 
   const delivered = graph.applyEvent(event({
     eventType: 'delivered',
+    carrierId: 'gls',
     trackingIdRaw: 'GLS77',
     merchantId: null,
     merchantRaw: null,
@@ -77,6 +85,9 @@ test('builds one purchase timeline from order, shipment, payment, invoice and de
   assert.equal(snapshot.shipments.length, 1);
   assert.equal(snapshot.payments.length, 1);
   assert.equal(snapshot.invoices.length, 1);
+  assert.equal(snapshot.shipments[0]?.carrierId, 'gls');
+  assert.equal(snapshot.payments[0]?.providerId, 'barion');
+  assert.equal(snapshot.invoices[0]?.issuerId, 'billingo');
   assert.equal(snapshot.purchases[0]?.state, 'fulfilled');
   assert.equal(snapshot.shipments[0]?.status, 'delivered');
 });
@@ -84,8 +95,8 @@ test('builds one purchase timeline from order, shipment, payment, invoice and de
 test('supports multiple shipments under one purchase', () => {
   const graph = new PurchaseIdentityGraph();
   graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ORDER-1' }));
-  graph.applyEvent(event({ eventType: 'shipment_created', orderIdRaw: 'ORDER1', trackingIdRaw: 'TRACK-1' }));
-  graph.applyEvent(event({ eventType: 'shipment_created', orderIdRaw: 'ORDER1', trackingIdRaw: 'TRACK-2' }));
+  graph.applyEvent(event({ eventType: 'shipment_created', orderIdRaw: 'ORDER1', carrierId: 'gls', trackingIdRaw: 'TRACK-1' }));
+  graph.applyEvent(event({ eventType: 'shipment_created', orderIdRaw: 'ORDER1', carrierId: 'gls', trackingIdRaw: 'TRACK-2' }));
 
   assert.equal(graph.snapshot().shipments.length, 2);
 });
@@ -115,6 +126,28 @@ test('keeps ambiguous event review-only and does not mutate graph', () => {
   }));
 
   assert.equal(result.decision.kind, 'REVIEW');
+  assert.equal(result.mutated, false);
+  assert.deepEqual(graph.snapshot(), before);
+});
+
+test('keeps hard-conflict event pending and does not mutate graph', () => {
+  const graph = new PurchaseIdentityGraph();
+  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ORDER-1' }));
+  const before = graph.snapshot();
+
+  const result = graph.applyEvent(event({
+    eventType: 'shipment_created',
+    orderIdRaw: 'ORDER1',
+    conflicts: [{
+      field: 'order_number',
+      values: ['ORDER1', 'ORDER2'],
+      evidence: [],
+      severity: 'hard',
+      explanation: 'conflicting strong order identifiers',
+    }],
+  }));
+
+  assert.equal(result.decision.kind, 'PENDING');
   assert.equal(result.mutated, false);
   assert.deepEqual(graph.snapshot(), before);
 });
