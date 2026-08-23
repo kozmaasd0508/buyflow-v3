@@ -57,6 +57,40 @@ test('v1.5 is one executable shadow entry point over v1.2 plus carrier evidence'
   assert.ok(result.ranExtractors.some((run) => run.id === 'platform-semantic-evidence-v1.2'));
 });
 
+test('v1.5 executable collector includes strict Packeta carrier evidence', () => {
+  const result = collectTechnicalEvidenceV15({
+    document: fixture({
+      sender: {
+        addresses: [{ email: 'noreply@packeta.hu' }],
+        domains: ['packeta.hu'],
+        primaryEmail: 'noreply@packeta.hu',
+        primaryDomain: 'packeta.hu',
+        primaryName: 'Packeta',
+      },
+      subject: 'A szállítmányt elfogadták a szállításra',
+      text: [
+        'Webáruház Example Shop átadta nekünk az Ön alábbi megrendelését Z 349 3891 717,',
+        'melyet szerződéses szállítópartnerünk fog kézbesíteni.',
+        'Adja meg csomagja Z-számát Z 349 3891 717.',
+        'Csomag nyomonkövetése Z 349 3891 717',
+        'https://tracking.packeta.com?id=Z3493891717',
+      ].join('\n'),
+    }),
+  });
+
+  assert.equal(result.productionWrites, 0);
+  assert.equal(result.aiCalls, 0);
+  assert.ok(result.evidence.some((row) => row.kind === 'carrier'
+    && row.normalizedValue === 'Packeta'
+    && row.namespace === 'PACKETA'));
+  assert.ok(result.evidence.some((row) => row.kind === 'tracking_number'
+    && row.normalizedValue === 'Z3493891717'
+    && row.namespace === 'PACKETA'));
+  assert.ok(result.evidence.some((row) => row.kind === 'event'
+    && row.normalizedValue === 'shipment'
+    && row.source === 'carrier_semantic'));
+});
+
 test('v1.5 composes native Shopify lifecycle evidence without granting a carrier namespace', () => {
   const result = collectTechnicalEvidenceV15({
     document: fixture({
