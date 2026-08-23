@@ -9,73 +9,100 @@
 
 ## CURRENT TECHNICALEVIDENCE STATE — 2026-08-23
 
-PR #256 adds a separate `TechnicalEvidence v1` observational lane. It does **not** change the frozen Extraction Engine v2, Purchase Identity Graph v2, production deterministic parser, database schema or production writes.
+TechnicalEvidence remains a separate observational lane. It is NOT wired into production extraction, Purchase Identity Graph decisions, DB mutation, or automatic linking.
 
-Current v1 extractor families:
-- semantic/authentication headers;
-- semantic URL query/path identifiers;
-- HTML title/class/id/data/alternate-text evidence;
-- JSON-LD/schema.org evidence.
+Hard invariants:
+- `mode=shadow`
+- production writes = 0
+- AI calls = 0
+- frozen Extraction Engine v2 unchanged
+- Purchase Identity Graph v2 decision authority unchanged
+- no raw Gmail values in repo-safe measurement reports
 
-Safety invariants:
-- shadow only;
-- 0 production writes;
-- 0 AI calls;
-- raw TechnicalEvidence must not be persisted/logged; use privacy-reduced summary;
-- no automatic identity/merge authority.
+### v1
+Base layers: auth/machine headers, semantic URL query/path, HTML semantics, JSON-LD/schema.org.
+Six-case development result: auth 6/6, commerce-specific 3/6, event 2/6, hard identifier 1/6.
 
-### First Real Gmail development measurement
+### v1.1
+Adds exact composite template tags and strict current-message English machine labels/lifecycle semantics. Quoted history and bare generic IDs remain blocked.
+Six-case remeasurement: commerce-specific 6/6, event 6/6, hard identifier 3/6.
 
-A six-case RAW preflight used already-reviewed development cases covering Sportvision order, GymBeam sent/invoice and Express One processing/out-for-delivery/delivered.
+### Broad ten-case development set
+WooCommerce, UNAS, Shopify, GLS, MPL, FOXPOST, DPD, Billingo, Számlázz.hu, merchant invoice + PDF.
 
-Current TechnicalEvidence v1 preflight:
-- auth/transport evidence: **6/6**;
-- commerce-specific technical evidence: **3/6**;
-- hard identifier evidence: **1/6**;
-- explicit event evidence: **2/6**;
-- explicit tracking evidence: **1/6**;
-- structured JSON-LD in this slice: **0/6**.
+v1.1 broad result: commerce-specific 3/10, event 2/10, hard identifier 1/10.
 
-Key positive signals:
-- Sportvision HTML title -> `order_created` evidence;
-- Express One delivered tracking URL `trackingNr` -> hard tracking evidence;
-- GymBeam invoice HTML title -> invoice event evidence.
+### v1.2
+Adds audited platform/provider semantics without weakening global matching:
+- WooCommerce multi-primitive DOM + `Order #...` -> order identity only, never lifecycle authority
+- UNAS exact X-Mailer action discrimination: `/shop_order_send.php` can prove order-confirmation event; `/admin_order_det.php` does not
+- Shopify multi-signal transport/template fingerprint -> platform evidence only
+- official Posta tracking namespace/path + `ids` -> MPL tracking identity
+- exact `X-Szamlazz-Invoice` -> namespaced invoice identity + invoice event
 
-Key gaps exposed before any cutover:
-- `X-Mailin-Tag: order-sent` is not yet mapped to shipment;
-- `X-Mailin-Tag: order-invoice` composite tag is not yet mapped directly;
-- alternate English body semantics (`shipment ID`, `air waybill`, `has been delivered`, delivery-day wording) are not yet parsed;
-- host-qualified URL aliases need a safe design.
+Broad v1.2 development result:
+- auth/transport 10/10
+- commerce-specific 6/10
+- event 3/10
+- hard identifier 4/10
 
-A new privacy-safe side-by-side evaluator exists at `technical-evidence-real-gmail-measurement-v1.ts`; it can compare exact TechnicalEvidence support and potential rescue of baseline Extraction v2 misses on private Real Gmail GT cases without returning raw values.
+These are development coverage figures, not accuracy/generalization claims.
 
-**Conclusion:** architecture is promising, but v1 is not broad enough to claim recall improvement. Keep it shadow-only. Safest next step is TechnicalEvidence v1.1 generic machine-semantic expansion, then rerun development GT before any fresh blind claim.
+### Remaining gaps
+1. FOXPOST dual identifiers + redirect-wrapped URLs + QR payload
+2. DPD authenticated template semantics; opaque myDPD `code` must never be tracking
+3. PDF TechnicalEvidence using the existing PDF text extraction stack
+4. stronger Shopify lifecycle discriminator only if stable machine evidence is proven
+5. then broader development rerun and finally a new untouched blind set
 
-Detailed protocol: `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V1-2026-08-23.md`.
+Measurement docs:
+- `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V1-2026-08-23.md`
+- `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V11-2026-08-23.md`
+- `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V11-2026-08-23.md`
+- `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V12-2026-08-23.md`
 
-## PURCHASE IDENTITY / REAL GMAIL STATE
+## RESUME CONTRACT
 
-Purchase Identity Graph v2 and the Real Gmail Ground Truth v1 harness already exist on the active development base. The graph remains namespace-safe and zero-write in shadow. Real Gmail GT uses opaque SHA-256 case IDs and forbids raw private email content in the public repository.
+Do not ask the user to retell BuyFlow history when GitHub/Supabase can recover it. Minimal resume phrase: **Folytasd a BuyFlowot a GitHubból.**
+
+## PRODUCT / ARCHITECTURE
+
+BuyFlow turns purchase, payment, shipment, invoice, warranty and return/refund emails into one safe Purchase record.
+
+- frontend/mobile web: `apps/mobile`
+- backend: TypeScript under `apps/api`
+- production data: Supabase
+- email: Nylas v3 webhook + durable/targeted scans + normalized inbound paths
+- recognition: deterministic-first; ambiguity => REVIEW
+- AI intentionally disabled in production recognition
+
+Target research flow:
+```text
+RAW EMAIL
+  -> multi-layer TechnicalEvidence
+  -> CanonicalEvent
+  -> Purchase Identity Graph
+  -> lifecycle projection
+```
+
+TechnicalEvidence observes; it never directly grants unsafe merge authority. Identity remains namespace-scoped and strict.
 
 ## NON-NEGOTIABLE SAFETY
 
 1. Purchase creation and lifecycle updates are separate decisions.
 2. Lifecycle-only mail cannot create a Purchase.
 3. Multiple plausible candidates => REVIEW; never guess.
-4. Hard identifiers require compatible namespaces for automatic linking.
-5. Hard conflict blocks automatic correlation.
-6. Generic/domain/time similarity is never sufficient for unsafe merge.
-7. New evidence layers remain shadow until independently measured.
-8. AI remains disabled in current production recognition.
-9. No raw customer email bodies, private IDs or secrets in repository docs.
+4. Hard identifiers are namespace-scoped; contradictory hard identity => REVIEW.
+5. No generic domain+time fallback.
+6. Platform/provider/relay identity alone cannot establish merchant identity.
+7. Packing, label creation and pre-advice do not prove physical shipment.
+8. Future/conditional fulfillment wording does not prove current state.
+9. OUT_FOR_DELIVERY / READY_FOR_PICKUP are not DELIVERED.
+10. Payment-only email cannot create a Purchase.
+11. Generic machine params such as `id`, `ids`, `code`, `ref` have no identity meaning without exact typed/provider context.
+12. Raw evidence can contain private identifiers; repo-safe reports contain only opaque ids/status/aggregates.
+13. Production protocol activation remains explicit; research/shadow evidence has no automatic write authority.
 
-## NEXT ACTION
+## NEXT HIGH-VALUE TASK
 
-Implement **TechnicalEvidence v1.1** as another shadow-only step, focused on generic machine semantics rather than merchant patches:
-
-1. normalize composite provider/template event tags (`order-confirm`, `order-sent`, `order-invoice` and equivalent forms);
-2. extract labelled English machine identities (`shipment ID`, `air waybill`, `parcel number`, `order number`, `invoice number`);
-3. extract stable alternate-language lifecycle phrases (processing/inbound, out for delivery, delivered, invoice/order confirmation) with exact provenance;
-4. add provider/host-qualified URL aliases only when generic aliases would be unsafe;
-5. rerun the same development GT measurement and compare rescue count against frozen Extraction Engine v2;
-6. only after that consider a fresh untouched blind set.
+Build PDF TechnicalEvidence first using the existing PDF text extraction stack. Then add exact authenticated FOXPOST and DPD technical adapters, rerun the same broad development set, and only then create a new untouched blind holdout.
