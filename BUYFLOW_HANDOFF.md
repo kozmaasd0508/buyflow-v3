@@ -1,170 +1,81 @@
 # BuyFlow V3 — persistent handoff
 
-> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then the newest entries in `BUYFLOW_WORKLOG.md`. Code/live state outranks this handoff if anything conflicts.
+> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG.md`. Reconcile with current GitHub/Supabase/Render state before changing runtime code.
 
 **Last updated:** 2026-08-23 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**GitHub main HEAD observed:** `92461ac103d4e337baa69ef91d09717eeb488d00`  
-**Active development base:** `codex/mailgun-inbound-shadow-v3` @ `c2f0e8c7223e1fa0b20d087864a3b6f9ff28624f`  
-**Active PR:** #256 — TechnicalEvidence v1 multi-layer shadow collector  
-**Production deploy:** not re-verified by the #256 change; do not infer live deployment from Git state.
+**Active development base:** `codex/mailgun-inbound-shadow-v3`  
+**TechnicalEvidence work:** PR #256 / `codex/technical-evidence-shadow-v1`
 
-## RESUME CONTRACT
+## CURRENT TECHNICALEVIDENCE STATE — 2026-08-23
 
-Do not ask the user to retell BuyFlow history when GitHub/Supabase can recover it. Minimal resume phrase: **Folytasd a BuyFlowot a GitHubból.**
+PR #256 adds a separate `TechnicalEvidence v1` observational lane. It does **not** change the frozen Extraction Engine v2, Purchase Identity Graph v2, production deterministic parser, database schema or production writes.
 
-## CURRENT PRODUCT / ARCHITECTURE
+Current v1 extractor families:
+- semantic/authentication headers;
+- semantic URL query/path identifiers;
+- HTML title/class/id/data/alternate-text evidence;
+- JSON-LD/schema.org evidence.
 
-BuyFlow turns purchase, payment, shipment, invoice, warranty and return/refund emails into one safe lifecycle view.
+Safety invariants:
+- shadow only;
+- 0 production writes;
+- 0 AI calls;
+- raw TechnicalEvidence must not be persisted/logged; use privacy-reduced summary;
+- no automatic identity/merge authority.
 
-Core safety direction:
-- deterministic-first production recognition;
-- precision > recall;
-- ambiguity/conflict => REVIEW or PENDING, never unsafe merge;
-- lifecycle-only mail cannot create a Purchase;
-- hard identity is namespace-scoped;
-- AI is disabled in current production recognition work;
-- raw message-derived evidence must remain auditable and privacy-safe.
+### First Real Gmail development measurement
 
-Relevant layers now exist separately:
-1. normalized email / `EmailDocumentV1`;
-2. frozen **Extraction Engine v2** shadow candidate;
-3. direct Extraction v2 -> canonical event adapter;
-4. **Purchase Identity Graph v2** zero-write shadow orchestration;
-5. privacy-safe Real Gmail Ground Truth v1 harness;
-6. new **TechnicalEvidence v1** observational lane in PR #256.
+A six-case RAW preflight used already-reviewed development cases covering Sportvision order, GymBeam sent/invoice and Express One processing/out-for-delivery/delivered.
 
-## EXTRACTION ENGINE v2 — FROZEN SHADOW CANDIDATE
+Current TechnicalEvidence v1 preflight:
+- auth/transport evidence: **6/6**;
+- commerce-specific technical evidence: **3/6**;
+- hard identifier evidence: **1/6**;
+- explicit event evidence: **2/6**;
+- explicit tracking evidence: **1/6**;
+- structured JSON-LD in this slice: **0/6**.
 
-`runExtractionEngineV2()` remains shadow-only:
-- `mode = shadow`;
-- `productionWrites = 0`;
-- `aiCalls = 0`;
-- no legacy parser output is used as truth;
-- field provenance is preserved;
-- conflicts and cross-field contradictions can require REVIEW.
+Key positive signals:
+- Sportvision HTML title -> `order_created` evidence;
+- Express One delivered tracking URL `trackingNr` -> hard tracking evidence;
+- GymBeam invoice HTML title -> invoice event evidence.
 
-Do not tune the frozen Extraction Engine v2 directly against already-reviewed Ground Truth cases. New extraction ideas should first be measured in a separate observational lane.
+Key gaps exposed before any cutover:
+- `X-Mailin-Tag: order-sent` is not yet mapped to shipment;
+- `X-Mailin-Tag: order-invoice` composite tag is not yet mapped directly;
+- alternate English body semantics (`shipment ID`, `air waybill`, `has been delivered`, delivery-day wording) are not yet parsed;
+- host-qualified URL aliases need a safe design.
 
-## PURCHASE IDENTITY GRAPH v2 — CURRENT DEVELOPMENT STATE
+A new privacy-safe side-by-side evaluator exists at `technical-evidence-real-gmail-measurement-v1.ts`; it can compare exact TechnicalEvidence support and potential rescue of baseline Extraction v2 misses on private Real Gmail GT cases without returning raw values.
 
-Recent development PRs on `codex/mailgun-inbound-shadow-v3` established the identity foundation:
-- #245 — namespace-scoped identity contracts and collision safety;
-- #246 — namespace-qualified hard evidence + Hard Conflict Gate;
-- #247 — direct Extraction Engine v2 -> CanonicalEvent adapter;
-- #248 — end-to-end zero-write shadow orchestration;
-- #249 — deterministic Merchant Identity Registry foundation;
-- #251/#252 — time-safe merchant identity signals and explicit sender-domain authority;
-- #253/#254 — real `@buyflow.hu` shopping mail runs through Identity Graph v2 in shadow using user-scoped legacy snapshots;
-- #255 — privacy-safe Real Gmail Ground Truth v1 harness.
+**Conclusion:** architecture is promising, but v1 is not broad enough to claim recall improvement. Keep it shadow-only. Safest next step is TechnicalEvidence v1.1 generic machine-semantic expansion, then rerun development GT before any fresh blind claim.
 
-Important identity rules:
-- order number is hard only inside a compatible merchant namespace;
-- tracking number is hard only inside a carrier namespace;
-- invoice number is hard only inside an issuer namespace;
-- payment reference is hard only inside a payment-provider namespace;
-- unscoped identifiers may discover candidates but must not become unsafe hard links;
-- unresolved hard conflicts block automatic correlation;
-- REVIEW/PENDING must not mutate graph state.
+Detailed protocol: `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V1-2026-08-23.md`.
 
-## REAL GMAIL GROUND TRUTH v1
+## PURCHASE IDENTITY / REAL GMAIL STATE
 
-PR #255 added a privacy-safe evaluator for real Gmail cases:
-- opaque SHA-256 case IDs;
-- raw subject/body/sender/message IDs do not enter reports;
-- independent ground truth is separate from engine output;
-- current reviewed Gmail cases are **development ground truth**, not a fresh blind holdout;
-- fresh accuracy claims require unseen cases frozen before tuning.
-
-Known real-life motivation for the identity work includes the GymBeam -> Express One lifecycle where an order/shipment email and later carrier delivery mail share the same tracking identity, but legacy projection/correlation failed to create/link the Shipment correctly.
-
-## TECHNICAL EVIDENCE v1 — PR #256
-
-PR #256 is intentionally a **separate observational lane**. It does not feed Extraction Engine v2 or Identity Graph v2 yet.
-
-Added contract:
-- field kind;
-- raw + normalized value;
-- optional namespace;
-- exact technical source;
-- exact `sourcePath`;
-- extractor id/version;
-- confidence + qualifiers.
-
-First four extractor families:
-1. **Header evidence**
-   - semantic order/tracking/invoice/payment-reference headers;
-   - template/event tags;
-   - authentication headers preserved as a separate source.
-2. **URL evidence**
-   - semantic query parameters;
-   - semantic URL path segments;
-   - malformed URLs/percent encoding fail closed/non-fatally.
-3. **HTML semantic evidence**
-   - `<title>` lifecycle cues;
-   - class/id platform fingerprints;
-   - `data-*` / `itemprop` identifiers;
-   - alt/title/aria-label carrier evidence.
-4. **Structured data evidence**
-   - JSON-LD/schema.org event types;
-   - order/tracking/invoice/payment identifiers;
-   - amount/currency/payment method/carrier/date;
-   - nested merchant/product evidence.
-
-Safety invariants in #256:
-- no production parser modification;
-- frozen Extraction Engine v2 untouched;
-- Purchase Identity Graph v2 untouched;
-- no DB migration;
-- no runtime wiring;
-- `productionWrites = 0`;
-- `aiCalls = 0`;
-- collector does not mutate `EmailDocumentV1`;
-- malformed JSON-LD does not fail the collector;
-- raw TechnicalEvidence must not be persisted/logged; privacy-reduced diagnostics use only the summary API.
-
-Validation so far for #256:
-- isolated strict TypeScript (`strict + noUncheckedIndexedAccess`) compile PASS;
-- isolated runtime smoke PASS;
-- PR is mergeable;
-- full repository CI has **not** run because `.github/workflows/ci.yml` triggers only for `main` pushes/PRs.
+Purchase Identity Graph v2 and the Real Gmail Ground Truth v1 harness already exist on the active development base. The graph remains namespace-safe and zero-write in shadow. Real Gmail GT uses opaque SHA-256 case IDs and forbids raw private email content in the public repository.
 
 ## NON-NEGOTIABLE SAFETY
 
 1. Purchase creation and lifecycle updates are separate decisions.
 2. Lifecycle-only mail cannot create a Purchase.
 3. Multiple plausible candidates => REVIEW; never guess.
-4. Hard identifiers require their correct namespace.
-5. Hard conflicts block automatic correlation until explicitly resolved.
-6. Public/shared/provider/relay sender identity cannot establish merchant identity alone.
-7. Storefront domain is not automatically email sender authority.
-8. `SHIPMENT_CREATED` / label / pre-advice does not prove physical shipment.
-9. Future/conditional fulfillment wording does not prove current fulfillment state.
-10. `OUT_FOR_DELIVERY`, `READY_FOR_PICKUP`, `DELIVERED` remain distinct.
-11. Payment-only email must never create a Purchase.
-12. Raw private Gmail content must never be committed to the public repository.
-13. Do not claim accuracy from differential agreement; only independent frozen ground truth can support accuracy claims.
-14. Do not connect TechnicalEvidence directly to automatic merge/write decisions before side-by-side measurement and explicit safety gates.
+4. Hard identifiers require compatible namespaces for automatic linking.
+5. Hard conflict blocks automatic correlation.
+6. Generic/domain/time similarity is never sufficient for unsafe merge.
+7. New evidence layers remain shadow until independently measured.
+8. AI remains disabled in current production recognition.
+9. No raw customer email bodies, private IDs or secrets in repository docs.
 
 ## NEXT ACTION
 
-1. Review PR #256 scope and keep it observational-only.
-2. Add a **privacy-safe side-by-side TechnicalEvidence audit** to Real Gmail Ground Truth v1:
-   - current Extraction v2 field coverage;
-   - TechnicalEvidence layer coverage;
-   - source-layer contribution counts;
-   - whether missing legacy/v2 fields are recoverable from deeper evidence;
-   - no raw message content in output.
-3. Use development GT only for diagnosis, not a fresh accuracy claim.
-4. Do **not** feed TechnicalEvidence into Identity Graph v2 yet.
-5. Only after measurement, design deterministic evidence promotion rules and namespace validators.
-6. PDF/QR/raw-MIME expansion comes after the first header/URL/HTML/JSON-LD measurement proves value.
+Implement **TechnicalEvidence v1.1** as another shadow-only step, focused on generic machine semantics rather than merchant patches:
 
-## QUALITY TARGET
-
-- false automatic Purchase = 0;
-- wrong automatic link = 0;
-- duplicate Purchase/Shipment/Document = 0;
-- REVIEW/PENDING preferred over unsafe automation;
-- true purchase recognition should improve through stronger evidence, not merchant-specific one-off patches;
-- target principle: **tolerant recognition, strict identity, nothing silently discarded**.
+1. normalize composite provider/template event tags (`order-confirm`, `order-sent`, `order-invoice` and equivalent forms);
+2. extract labelled English machine identities (`shipment ID`, `air waybill`, `parcel number`, `order number`, `invoice number`);
+3. extract stable alternate-language lifecycle phrases (processing/inbound, out for delivery, delivered, invoice/order confirmation) with exact provenance;
+4. add provider/host-qualified URL aliases only when generic aliases would be unsafe;
+5. rerun the same development GT measurement and compare rescue count against frozen Extraction Engine v2;
+6. only after that consider a fresh untouched blind set.
