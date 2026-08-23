@@ -13,12 +13,14 @@ import {
   parseNormalizedDeterministicEmail,
 } from '../ingestion/normalized-email-deterministic.js';
 import { isShadowOnlyParserVersion } from './automatic-write-gate.js';
+import { evaluateShoppingEmailPurpose } from './shopping-email-purpose-gate.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
 export type NormalizedInboundStatus =
   | 'unknown_recipient'
   | 'security_rejected'
   | 'quarantined'
+  | 'non_commerce_ignored'
   | 'review'
   | 'recognized';
 
@@ -72,6 +74,7 @@ function baseDiagnostic(input: {
     schema_version: 1,
     ingestion_source: 'normalized-inbound',
     provider: input.email.provider,
+    shopping_email_purpose: 'shopping_only',
     ...(input.security ? { gateway_security: securitySnapshot(input.security) } : {}),
   };
 }
@@ -109,6 +112,23 @@ export function planNormalizedInboundEmail(input: {
       },
       validatedResult: null,
       validationStatus: 'review',
+    };
+  }
+
+  const purpose = evaluateShoppingEmailPurpose(input.email);
+  if (purpose.action === 'ignore') {
+    return {
+      status: 'non_commerce_ignored',
+      processingStatus: 'ignored',
+      classification: 'non_commerce',
+      parserVersion: null,
+      structuredResult: {
+        ...diagnostic,
+        reason: purpose.reason,
+        stored: false,
+      },
+      validatedResult: null,
+      validationStatus: null,
     };
   }
 
@@ -156,6 +176,7 @@ export function planNormalizedInboundEmail(input: {
     parser_version: parsed.parserVersion,
     parser_reasons: parsed.reasons,
     ingestion_source: 'normalized-inbound',
+    shopping_email_purpose: 'shopping_only',
     ...(input.security ? { gateway_security: securitySnapshot(input.security) } : {}),
     ...(shadowOnly ? { shadow_only: true, would_write: false } : {}),
   };
@@ -165,6 +186,7 @@ export function planNormalizedInboundEmail(input: {
   validatedResult.parser_version = parsed.parserVersion;
   validatedResult.parser_reasons = parsed.reasons;
   validatedResult.ingestion_source = 'normalized-inbound';
+  validatedResult.shopping_email_purpose = 'shopping_only';
   if (input.security) validatedResult.gateway_security = securitySnapshot(input.security);
   if (parsed.shipmentPhase) validatedResult.shipment_phase = parsed.shipmentPhase;
   if (shadowOnly) {
@@ -232,6 +254,28 @@ export async function persistNormalizedInboundEmail(input: {
     };
   }
 
+  const plan = planNormalizedInboundEmail({
+    email: input.email,
+    security: input.security,
+  });
+
+  // Strongly proven non-shopping mail is deliberately not persisted. The
+  // BuyFlow address is a shopping inbox, not a general-purpose mailbox.
+  // Unknown mail is NOT handled here: it remains REVIEW and is persisted.
+  if (plan.status === 'non_commerce_ignored') {
+    return {
+      status: plan.status,
+      recipient,
+      classification: plan.classification,
+      parserVersion: null,
+      deduped: false,
+      purchaseWrites: 0,
+      shipmentWrites: 0,
+      documentWrites: 0,
+      aiCalls: 0,
+    };
+  }
+
   const { data: existing, error: existingError } = await db
     .from('source_emails')
     .select('id,classification,processing_status,validated_result')
@@ -259,10 +303,6 @@ export async function persistNormalizedInboundEmail(input: {
     };
   }
 
-  const plan = planNormalizedInboundEmail({
-    email: input.email,
-    security: input.security,
-  });
   const payload = sourceInsertPayload({
     email: input.email,
     recipient,
