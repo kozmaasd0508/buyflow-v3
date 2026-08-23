@@ -185,26 +185,24 @@ test('old and new sender domains can coexist without changing historical identit
   assert.equal(staleOldDomain.merchantId, null);
 });
 
-test('same alias and domain can move to another identity in non-overlapping time windows', () => {
+test('same name and domain can move to another identity in non-overlapping time windows', () => {
   const firstOwner: MerchantIdentityDefinition = {
     ...merchantA,
     canonicalName: 'Shared Shop',
     storefrontAliases: [],
     domains: [],
-    senderDomains: [],
-    identitySignals: [
-      { kind: 'sender_domain', value: 'shared.example', validTo: '2026-01-01T00:00:00.000Z', status: 'historical' },
-    ],
+    senderDomains: ['shared.example'],
+    status: 'historical',
+    validTo: '2026-01-01T00:00:00.000Z',
   };
   const secondOwner: MerchantIdentityDefinition = {
     ...merchantB,
     canonicalName: 'Shared Shop',
     storefrontAliases: [],
     domains: [],
-    senderDomains: [],
-    identitySignals: [
-      { kind: 'sender_domain', value: 'shared.example', validFrom: '2026-01-01T00:00:00.000Z', status: 'active' },
-    ],
+    senderDomains: ['shared.example'],
+    status: 'active',
+    validFrom: '2026-01-01T00:00:00.000Z',
   };
   const registry = new MerchantIdentityRegistry([firstOwner, secondOwner]);
 
