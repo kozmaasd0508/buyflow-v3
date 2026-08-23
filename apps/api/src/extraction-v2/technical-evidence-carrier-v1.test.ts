@@ -183,6 +183,25 @@ test('Packeta accepted-for-transport template yields shipment plus corroborated 
     && row.normalizedValue === 'shipment'));
 });
 
+test('Packeta legacy buyer shipment template yields event and hard Z-id only with endpoint corroboration', () => {
+  const tracking = 'Z3394543991';
+  const result = collectCarrierTechnicalEvidenceV1(fixture({
+    sender: sender('packeta.hu'),
+    subject: 'A szállítmányt elfogadták a szállításra',
+    text: [
+      'Az Example Shop feladó most adta fel az Ön csomagját, amely Z-BOXba kerül kézbesítésre.',
+      'Csomagszám Z 339 4543 991',
+      'https://tracking.packeta.com/?id=Z3394543991',
+    ].join('\n'),
+  }));
+
+  assert.ok(result.evidence.some((row) => row.kind === 'tracking_number'
+    && row.normalizedValue === tracking
+    && row.namespace === 'PACKETA'));
+  assert.ok(result.evidence.some((row) => row.kind === 'event'
+    && row.normalizedValue === 'shipment'));
+});
+
 test('Packeta hard identifier requires exact sender authority and corroborating Z-id primitives', () => {
   const body = [
     'adja meg csomagja Z-számát Z 349 3891 717',
@@ -219,6 +238,7 @@ test('Packeta conflicting Z identifiers never produce a hard tracking identifier
     sender: sender('packeta.hu'),
     subject: 'Tájékoztatás',
     text: [
+      'Csomagszám Z 349 3891 717',
       'adja meg csomagja Z-számát Z 349 3891 717',
       'csomag nyomonkövetése Z 349 3891 718',
       'https://tracking.packeta.com?id=Z3493891719',
