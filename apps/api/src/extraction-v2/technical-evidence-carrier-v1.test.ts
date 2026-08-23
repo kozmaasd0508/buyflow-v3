@@ -155,3 +155,76 @@ test('FOXPOST adapter refuses CLFOX-looking identifier from unrelated sender', (
   }));
   assert.deepEqual(result.evidence, []);
 });
+
+test('Packeta accepted-for-transport template yields shipment plus corroborated Z identifier', () => {
+  const tracking = 'Z3493891717';
+  const result = collectCarrierTechnicalEvidenceV1(fixture({
+    sender: sender('packeta.hu'),
+    subject: 'A szállítmányt elfogadták a szállításra',
+    text: [
+      'Webáruház Example Shop átadta nekünk az Ön alábbi megrendelését Z 349 3891 717,',
+      'melyet szerződéses szállítópartnerünk fog kézbesíteni.',
+      'Részletekért keresse fel a tracking.packeta.com oldalt',
+      'és adja meg csomagja Z-számát Z 349 3891 717,',
+      'csomag nyomonkövetése Z 349 3891 717',
+      'https://tracking.packeta.com?id=Z3493891717',
+    ].join('\n'),
+  }));
+
+  assert.equal(result.productionWrites, 0);
+  assert.equal(result.aiCalls, 0);
+  assert.ok(result.evidence.some((row) => row.kind === 'carrier'
+    && row.normalizedValue === 'Packeta'
+    && row.namespace === 'PACKETA'));
+  assert.ok(result.evidence.some((row) => row.kind === 'tracking_number'
+    && row.normalizedValue === tracking
+    && row.namespace === 'PACKETA'));
+  assert.ok(result.evidence.some((row) => row.kind === 'event'
+    && row.normalizedValue === 'shipment'));
+});
+
+test('Packeta hard identifier requires exact sender authority and corroborating Z-id primitives', () => {
+  const body = [
+    'adja meg csomagja Z-számát Z 349 3891 717',
+    'csomag nyomonkövetése Z 349 3891 717',
+    'https://tracking.packeta.com?id=Z3493891717',
+  ].join('\n');
+
+  const marketingSubdomain = collectCarrierTechnicalEvidenceV1(fixture({
+    sender: sender('hirek.packeta.hu'),
+    subject: 'A szállítmányt elfogadták a szállításra',
+    text: body,
+  }));
+  assert.deepEqual(marketingSubdomain.evidence, []);
+
+  const unrelatedSender = collectCarrierTechnicalEvidenceV1(fixture({
+    sender: sender('example.test'),
+    subject: 'A szállítmányt elfogadták a szállításra',
+    text: body,
+  }));
+  assert.deepEqual(unrelatedSender.evidence, []);
+
+  const onePrimitiveOnly = collectCarrierTechnicalEvidenceV1(fixture({
+    sender: sender('packeta.hu'),
+    subject: 'Tájékoztatás',
+    text: 'adja meg csomagja Z-számát Z 349 3891 717',
+  }));
+  assert.ok(onePrimitiveOnly.evidence.some((row) => row.kind === 'carrier'));
+  assert.ok(!onePrimitiveOnly.evidence.some((row) => row.kind === 'tracking_number'));
+  assert.ok(!onePrimitiveOnly.evidence.some((row) => row.kind === 'event'));
+});
+
+test('Packeta conflicting Z identifiers never produce a hard tracking identifier', () => {
+  const result = collectCarrierTechnicalEvidenceV1(fixture({
+    sender: sender('packeta.hu'),
+    subject: 'Tájékoztatás',
+    text: [
+      'adja meg csomagja Z-számát Z 349 3891 717',
+      'csomag nyomonkövetése Z 349 3891 718',
+      'https://tracking.packeta.com?id=Z3493891719',
+    ].join('\n'),
+  }));
+
+  assert.ok(result.evidence.some((row) => row.kind === 'carrier'));
+  assert.ok(!result.evidence.some((row) => row.kind === 'tracking_number'));
+});
