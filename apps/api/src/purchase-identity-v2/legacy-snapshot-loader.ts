@@ -49,7 +49,7 @@ export async function loadLegacyPurchaseIdentitySnapshot(input: {
     .limit(PURCHASE_LIMIT);
   if (purchaseError) throw new Error(`Failed to load Purchase Identity shadow purchases: ${purchaseError.message}`);
 
-  const purchases = (purchaseRows ?? []).map((row: any) => ({
+  const purchases: PurchaseIdentitySnapshot['purchases'] = (purchaseRows ?? []).map((row: any) => ({
     purchaseId: String(row.id),
     userId,
     canonicalMerchantId: null,
@@ -57,7 +57,7 @@ export async function loadLegacyPurchaseIdentitySnapshot(input: {
     state: state(row.current_state),
   }));
 
-  const orders = (purchaseRows ?? []).flatMap((row: any) => {
+  const orders: PurchaseIdentitySnapshot['orders'] = (purchaseRows ?? []).flatMap((row: any) => {
     const orderId = stringOrNull(row.order_number);
     if (!orderId) return [];
     return [{
@@ -94,7 +94,7 @@ export async function loadLegacyPurchaseIdentitySnapshot(input: {
     documentRows = documentResult.data ?? [];
   }
 
-  const shipments = shipmentRows.flatMap((row: any) => {
+  const shipments: PurchaseIdentitySnapshot['shipments'] = shipmentRows.flatMap((row: any) => {
     const purchaseId = stringOrNull(row.purchase_id);
     if (!purchaseId || !purchaseIds.includes(purchaseId)) return [];
     return [{
@@ -106,7 +106,7 @@ export async function loadLegacyPurchaseIdentitySnapshot(input: {
     }];
   });
 
-  const invoices = documentRows.flatMap((row: any) => {
+  const invoices: PurchaseIdentitySnapshot['invoices'] = documentRows.flatMap((row: any) => {
     const purchaseId = stringOrNull(row.purchase_id);
     const documentNumber = stringOrNull(row.document_number);
     const type = stringOrNull(row.type)?.toLowerCase();
