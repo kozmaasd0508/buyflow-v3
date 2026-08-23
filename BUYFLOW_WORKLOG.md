@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-23 — TechnicalEvidence v1 Real Gmail development measurement
+
+- PR #256 gained a privacy-safe side-by-side measurement harness: `technical-evidence-real-gmail-measurement-v1.ts` plus regression coverage.
+- Six already-reviewed RAW Gmail development cases were preflighted: Sportvision order, GymBeam sent/invoice, Express One processing/out-for-delivery/delivered.
+- Current TechnicalEvidence v1 result: auth/transport evidence 6/6, commerce-specific technical evidence 3/6, hard identifier evidence 1/6, explicit event evidence 2/6, explicit tracking evidence 1/6, JSON-LD 0/6 in this slice.
+- Positive signals: Sportvision HTML title -> order event; Express One delivered `trackingNr` URL -> tracking identity; GymBeam invoice HTML title -> invoice event.
+- Measurement exposed generic gaps before any cutover: composite `order-sent` / `order-invoice` provider tags are not fully mapped, and alternate English machine semantics (`shipment ID`, `air waybill`, delivery lifecycle wording) are not yet parsed.
+- Conclusion: provenance architecture is useful but v1 is not broad enough to claim recall improvement. Keep shadow-only; next step is TechnicalEvidence v1.1 machine-semantic expansion and rerun against the same development GT.
+- Detailed report: `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V1-2026-08-23.md`.
+- Safety unchanged: 0 AI, 0 production writes, no DB migration, no production parser/Identity Graph cutover, no raw private email values in repo outputs.
+
 ## 2026-08-23 — TechnicalEvidence v1 multi-layer shadow foundation
 
 - PR #256 opened from `codex/technical-evidence-shadow-v1` onto `codex/mailgun-inbound-shadow-v3`.
@@ -11,7 +22,6 @@
 - Regressions cover independent multi-layer evidence for order identity/event, invoice header, tracking URL, WooCommerce fingerprint, carrier alt text, JSON-LD merchant/product/amount/currency, malformed JSON/URL fail-safe behavior, input immutability, 0 writes and 0 AI.
 - Isolated strict TypeScript (`strict + noUncheckedIndexedAccess`) compile PASS and isolated runtime smoke PASS. Full repo CI has not run because the repository CI workflow triggers only for `main` pushes/PRs.
 - PR #256 is mergeable. No DB migration, no runtime wiring, no production parser change, no automatic identity/merge authority.
-- Next: privacy-safe side-by-side measurement on Real Gmail Ground Truth v1 before any TechnicalEvidence promotion into correlation.
 
 ## 2026-08-20 — Frozen v6 blind holdout and scoped provider fixes
 
@@ -45,59 +55,6 @@
 - Exact privacy-safe fingerprint comparison: Manna 2 -> 2, Scitec 1 -> 1, Zákány 1 -> 1, Vitál-Kolor 2 -> 1 (quoted reply removed, original retained); reviewed ABOUT YOU and both unsafe strong non-acceptance families disappeared.
 - No DB writes, production registry use, automatic Purchase writes or protocol activation. Generic unknown-merchant order evidence remains REVIEW/shadow-only with `would_write=false`.
 - Release gate: final PR #147 CI -> merge -> exact main CI -> exact Render smoke.
-
-## 2026-08-15 — Gyerekjatekbolt failure/cancel + Szidibox/MPL recovery
-
-- Reviewed the remaining second-Gmail REVIEW/unlinked backlog and prioritized real commerce clusters over obvious subscription/promo/noise.
-- Gyerekjatekbolt order `535574` already had the correct deterministic lifecycle rules in current main. Targeted 30-day rerun: 5 checked / 4 processed / 1 REVIEW / 0 unlinked / 0 writes / AI 0.
-- Final `535574`: `payment_status=failed`, `current_state=cancelled`, `cancelled_at=2026-08-04 11:21:36+00`, paid_at null, no Shipment. The standalone retry-payment-link email intentionally remains REVIEW.
-- Inspected four real McDonald's payment-summary emails. Each uses a short 4-digit restaurant/POS order number and explicitly says the email is only an order summary; no separate receipt email was found. Because those IDs can repeat and current uniqueness is merchant-domain + order-number, the cluster remains REVIEW. Follow-up architecture: POS/local-order identity using location/time/provider identity rather than globally trusting the 4-digit number.
-- Found Szidibox order `SO-2024-30411`: historical Purchase already existed but incorrectly used `merchant_domain=gmail.com`; merchant sends from `szidibox@gmail.com`, message contains `kartonshop.hu`, and MPL carrier chain uses tracking `PB9S650307180`.
-- PR #80 / main `3d53c3cefb61d9c2452cb9f677214fc32c0cf22d`: added deterministic MPL lifecycle and public-mailbox safety. Exact `kozponti.ertesites@posta.hu`; shipped/out-for-delivery/ready-for-pickup states; tracking/parcel-sender/COD extraction; MPL slug normalization; narrow Szidibox packing anchor as `shipment_created`; generic public-mailbox Purchase creation now stays REVIEW. PR CI #429, main CI #430, exact Render smoke #324 passed.
-- First live Szidibox rerun correctly reparsed merchant packing as `shipment_created`, but exposed two real gaps: carrier bridge used the packing timestamp as physical `shipped_at`, and Nylas flattened MPL labels prevented the new parser from replacing legacy carrier results.
-- PR #81 / main `5139fda8bcad1f743aef37b49340bef93ca446e4`: `shipment_created` anchors can no longer define physical shipped time; first physical carrier event does. MPL parser now handles line-oriented and flattened Nylas text. PR CI #433, main CI #434, exact Render smoke #328 passed.
-- Final MPL targeted rerun: 3 checked / 3 processed / 0 REVIEW / 0 unlinked / AI 0. All three carrier sources now use `deterministic-lifecycle-v1`, confidence 0.995, COD 26,390 HUF, parcel sender Szidibox Karton Kft.; phases `shipped -> out_for_delivery -> ready_for_pickup`.
-- PR #82 / main `e320ac5593f95f6535c97b865f569c9d7bbde181`: canonicalized bridged MPL display name from raw `mpl` to `MPL`. PR CI #435, main CI #436, exact Render smoke #330 passed.
-- Guarded historical repair updated exactly one Purchase and one Shipment. Final Purchase `24b05d2e-be2c-4ea8-9836-befce30b4ddd`: merchant domain `kartonshop.hu`, legal name Szidibox Karton Kft., 26,388 HUF COD, expected carrier MPL, state `ready_for_pickup`, shipped_at `2026-07-23 14:44:56+00`, delivered_at null.
-- Final Shipment `f6ed4ca1-7750-4d48-99ee-3ece45a5213c`: MPL / `mpl`, tracking `PB9S650307180`, `ready_for_pickup`, shipped_at `2026-07-23 14:44:56+00`, last_event_at `2026-07-24 11:46:49+00`, delivered_at null, 4 shipment source links.
-- Integrity: exactly 1 Purchase and 1 Shipment for this identity. Historical AI count remains 98; no new AI calls. Backlog reduced to **35 REVIEW + 13 unlinked**.
-- Safety follow-up: new unverified Gmail/Outlook/Yahoo merchant evidence cannot create a Purchase. A future verified public-mailbox merchant identity layer is still needed before legitimate public-mailbox merchants can auto-create new Purchases; until then REVIEW is intentional.
-
-## 2026-08-15 — Second Gmail blind test + All In Packaging historical recovery
-
-- PRs #73–#76 completed second-Gmail OAuth and repeat 7/30/90 scan reliability.
-- Second Gmail 7-day scan: 34 checked / 30 ignored / 4 REVIEW / 0 unlinked / AI 0.
-- Real 30-day blind scan: 149 checked / 130 ignored / 14 REVIEW / 5 unlinked / 0 Purchase / 0 Shipment / 0 Document writes / AI 0; zero false automatic Purchases.
-- All In Packaging order `148810` exposed a real false negative with merchant dispatch + merchant invoice + GLS chain but no order-created mail.
-- PR #77 was closed unmerged after CI exposed a safety issue; existing stricter historical architecture was used instead.
-- PR #78 / runtime `ebe06d3ee8c6c203bc363ed58eb992670758f667`: extended strict 90-day historical reconstruction for carrier-only tracking with merchant/domain anchors, exact negative proof, multi-event carrier corroboration, parcel sender, COD+currency and uniqueness checks.
-- Live `148810`: exactly 1 Purchase (16,670 HUF COD, GLS) and 1 Shipment tracking `3219379224`; second no-COD GLS tracking `3219379250` remains unlinked. AI 0.
-
-## 2026-08-15 — Multi-Gmail + deterministic scan UI
-
-- PR #69 added all connected Gmail accounts and per-account 7/30/90 full deterministic scans.
-- PR #70 fixed repeated same-window UI polling.
-- PR #71 added exact Render deployment ancestry verification.
-- PR #75 repaired server-only OAuth-state DB grants; PR #76 repaired repeat scan enqueue/reset semantics.
-- Browser-first remains the project rule; no APK for routine backend/UI changes.
-
-## 2026-08-15 — Key deterministic recognition milestones
-
-- Gate.shop / Foxpost: ready-for-pickup lifecycle and exact carrier bridge.
-- Scitec / BioTechUSA / Foxpost: generic Hungarian confirmation + verified legal-entity COD bridge + Foxpost lifecycle.
-- Ars Una / GLS: exact sender, parcel sender + COD bridge, correct physical shipment semantics.
-- Allegro / HappyBox24: order lifecycle, DPD tracking and seller invoice.
-- GymBeam / Express One: processing enrichment, strict missing-purchase reconstruction, terminal receipt payment resolution and outbound pickup-noise exclusion.
-- Promotional/repurchase hard negatives and Limone deterministic merchant parsing remain active.
-- Three Barion payment-only rows intentionally remain unlinked without merchant corroboration.
-
-## 2026-08-14/15 — Foundation / security / frontend
-
-- Persistent `AGENTS.md`, `BUYFLOW_HANDOFF.md`, `BUYFLOW_WORKLOG.md` allow new chats to continue from GitHub.
-- Auth reset and SECURITY DEFINER hardening completed.
-- Browser frontend supports purchase list/detail, current state/next action, timeline, product edit/remove, order/tracking/documents, targeted recovery and multi-Gmail scans.
-- AI/Flow audit UI stays hidden while AI is disabled.
-- Remaining UI gaps: top-level lifecycle label/count alignment, Warranty, Return/refund, Felfedezés.
 
 ## Maintenance format
 
