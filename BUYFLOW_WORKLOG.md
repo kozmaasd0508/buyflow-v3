@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-23 — TechnicalEvidence v1 multi-layer shadow foundation
+
+- PR #256 opened from `codex/technical-evidence-shadow-v1` onto `codex/mailgun-inbound-shadow-v3`.
+- Added a separate TechnicalEvidence v1 observational lane with exact field-level provenance (`source`, `sourcePath`, extractor id/version, confidence, qualifiers) without changing the frozen Extraction Engine v2 or Purchase Identity Graph v2.
+- First extractor families: semantic headers/authentication headers, URL query/path identifiers, HTML title/class/id/data/alternate-text semantics, and JSON-LD/schema.org fields.
+- Added privacy-reduced summary output; raw TechnicalEvidence is explicitly not for persistence/logging.
+- Regressions cover independent multi-layer evidence for order identity/event, invoice header, tracking URL, WooCommerce fingerprint, carrier alt text, JSON-LD merchant/product/amount/currency, malformed JSON/URL fail-safe behavior, input immutability, 0 writes and 0 AI.
+- Isolated strict TypeScript (`strict + noUncheckedIndexedAccess`) compile PASS and isolated runtime smoke PASS. Full repo CI has not run because the repository CI workflow triggers only for `main` pushes/PRs.
+- PR #256 is mergeable. No DB migration, no runtime wiring, no production parser change, no automatic identity/merge authority.
+- Next: privacy-safe side-by-side measurement on Real Gmail Ground Truth v1 before any TechnicalEvidence promotion into correlation.
+
 ## 2026-08-20 — Frozen v6 blind holdout and scoped provider fixes
 
 - Gmail v6 holdout frozen before audit implementation: 50 commerce + 50 hard noise; prior v4/v5 labels excluded.
