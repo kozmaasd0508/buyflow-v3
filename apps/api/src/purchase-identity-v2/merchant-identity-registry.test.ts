@@ -47,6 +47,7 @@ test('resolves only when exact alias and sender-domain namespace agree', () => {
   assert.equal(result.merchantId, 'merchant:a');
   assert.deepEqual(result.aliasCandidateIds, ['merchant:a']);
   assert.deepEqual(result.domainCandidateIds, ['merchant:a']);
+  assert.equal(result.registryVersion, 'merchant-identity-registry-v2');
 });
 
 test('accepts subdomains inside a registered sender namespace', () => {
@@ -126,6 +127,163 @@ test('similar but non-exact merchant names do not fuzzy match', () => {
     senderDomain: 'mail.example-shop.hu',
     provenance: provenance(),
   }), null);
+});
+
+test('old and new sender domains can coexist without changing historical identity', () => {
+  const changingMerchant: MerchantIdentityDefinition = {
+    ...merchantA,
+    senderDomains: [],
+    identitySignals: [
+      {
+        kind: 'sender_domain',
+        value: 'old-mail.example-shop.hu',
+        status: 'historical',
+        validTo: '2026-07-01T00:00:00.000Z',
+        evidenceSource: 'verified-provider-history',
+      },
+      {
+        kind: 'sender_domain',
+        value: 'new-mail.example-shop.hu',
+        status: 'active',
+        validFrom: '2026-07-01T00:00:00.000Z',
+        evidenceSource: 'verified-provider-change',
+      },
+    ],
+  };
+  const registry = new MerchantIdentityRegistry([changingMerchant], { registryVersion: 'test-registry-2026-08' });
+
+  const oldMail = registry.resolveDetailed({
+    merchantRaw: 'Example Shop',
+    senderDomain: 'old-mail.example-shop.hu',
+    observedAt: '2026-06-15T12:00:00.000Z',
+    provenance: provenance(),
+  });
+  const newMail = registry.resolveDetailed({
+    merchantRaw: 'Example Shop',
+    senderDomain: 'new-mail.example-shop.hu',
+    observedAt: '2026-08-15T12:00:00.000Z',
+    provenance: provenance(),
+  });
+  const staleOldDomain = registry.resolveDetailed({
+    merchantRaw: 'Example Shop',
+    senderDomain: 'old-mail.example-shop.hu',
+    observedAt: '2026-08-15T12:00:00.000Z',
+    provenance: provenance(),
+  });
+
+  assert.equal(oldMail.status, 'resolved');
+  assert.equal(oldMail.merchantId, 'merchant:a');
+  assert.equal(oldMail.registryVersion, 'test-registry-2026-08');
+  assert.ok(oldMail.reasons.includes('historical_merchant_identity_signal_used'));
+  assert.ok(oldMail.matchedSignals.some((signal) => signal.evidenceSource === 'verified-provider-history'));
+
+  assert.equal(newMail.status, 'resolved');
+  assert.equal(newMail.merchantId, 'merchant:a');
+  assert.ok(newMail.matchedSignals.some((signal) => signal.evidenceSource === 'verified-provider-change'));
+
+  assert.equal(staleOldDomain.status, 'unresolved');
+  assert.equal(staleOldDomain.merchantId, null);
+});
+
+test('same name and domain can move to another identity in non-overlapping time windows', () => {
+  const firstOwner: MerchantIdentityDefinition = {
+    ...merchantA,
+    canonicalName: 'Shared Shop',
+    storefrontAliases: [],
+    domains: [],
+    senderDomains: ['shared.example'],
+    status: 'historical',
+    validTo: '2026-01-01T00:00:00.000Z',
+  };
+  const secondOwner: MerchantIdentityDefinition = {
+    ...merchantB,
+    canonicalName: 'Shared Shop',
+    storefrontAliases: [],
+    domains: [],
+    senderDomains: ['shared.example'],
+    status: 'active',
+    validFrom: '2026-01-01T00:00:00.000Z',
+  };
+  const registry = new MerchantIdentityRegistry([firstOwner, secondOwner]);
+
+  assert.equal(registry.resolve({
+    merchantRaw: 'Shared Shop',
+    senderDomain: 'shared.example',
+    observedAt: '2025-12-01T00:00:00.000Z',
+    provenance: provenance(),
+  }), 'merchant:a');
+
+  assert.equal(registry.resolve({
+    merchantRaw: 'Shared Shop',
+    senderDomain: 'shared.example',
+    observedAt: '2026-02-01T00:00:00.000Z',
+    provenance: provenance(),
+  }), 'merchant:b');
+});
+
+test('disabled identity signals never resolve', () => {
+  const registry = new MerchantIdentityRegistry([{
+    ...merchantA,
+    senderDomains: [],
+    identitySignals: [{
+      kind: 'sender_domain',
+      value: 'disabled.example-shop.hu',
+      status: 'disabled',
+      evidenceSource: 'revoked-domain',
+    }],
+  }]);
+
+  const result = registry.resolveDetailed({
+    merchantRaw: 'Example Shop',
+    senderDomain: 'disabled.example-shop.hu',
+    observedAt: '2026-08-23T00:00:00.000Z',
+    provenance: provenance(),
+  });
+  assert.equal(result.status, 'unresolved');
+  assert.equal(result.merchantId, null);
+});
+
+test('historical or time-bounded signals require an observation time', () => {
+  const registry = new MerchantIdentityRegistry([{
+    ...merchantA,
+    senderDomains: [],
+    identitySignals: [{
+      kind: 'sender_domain',
+      value: 'old.example-shop.hu',
+      status: 'historical',
+      validTo: '2026-07-01T00:00:00.000Z',
+    }],
+  }]);
+
+  assert.equal(registry.resolve({
+    merchantRaw: 'Example Shop',
+    senderDomain: 'old.example-shop.hu',
+    provenance: provenance(),
+  }), null);
+});
+
+test('invalid observation time never guesses an identity', () => {
+  const registry = new MerchantIdentityRegistry([merchantA]);
+  const result = registry.resolveDetailed({
+    merchantRaw: 'Example Shop',
+    senderDomain: 'mail.example-shop.hu',
+    observedAt: 'not-a-date',
+    provenance: provenance(),
+  });
+  assert.equal(result.status, 'unresolved');
+  assert.ok(result.reasons.includes('merchant_identity_observed_at_invalid'));
+});
+
+test('rejects invalid identity validity windows at construction time', () => {
+  assert.throws(() => new MerchantIdentityRegistry([{
+    ...merchantA,
+    identitySignals: [{
+      kind: 'sender_domain',
+      value: 'bad-window.example',
+      validFrom: '2026-08-02T00:00:00.000Z',
+      validTo: '2026-08-01T00:00:00.000Z',
+    }],
+  }]), /validTo to be later than validFrom/);
 });
 
 test('rejects duplicate merchant ids at construction time', () => {

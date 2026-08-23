@@ -131,6 +131,23 @@ export interface InvoiceIdentity {
   orderId: string | null;
 }
 
+export type IdentityRecordStatus = 'active' | 'historical' | 'disabled';
+
+export type MerchantIdentitySignalKind =
+  | 'canonical_name'
+  | 'storefront_alias'
+  | 'domain'
+  | 'sender_domain';
+
+export interface MerchantIdentitySignalDefinition {
+  kind: MerchantIdentitySignalKind;
+  value: string;
+  status?: IdentityRecordStatus;
+  validFrom?: string | null;
+  validTo?: string | null;
+  evidenceSource?: string | null;
+}
+
 export interface MerchantIdentityDefinition {
   merchantId: string;
   canonicalName: string;
@@ -139,6 +156,11 @@ export interface MerchantIdentityDefinition {
   storefrontAliases: string[];
   invoiceIssuers: string[];
   paymentDescriptors: string[];
+  status?: IdentityRecordStatus;
+  validFrom?: string | null;
+  validTo?: string | null;
+  evidenceSource?: string | null;
+  identitySignals?: MerchantIdentitySignalDefinition[];
 }
 
 export type EvidenceType =

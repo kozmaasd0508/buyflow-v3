@@ -16,6 +16,7 @@ export interface ExtractionV2MerchantIdentityResolver {
     merchantRaw: string;
     senderDomain: string | null;
     provenance: EvidenceProvenance[];
+    observedAt?: string | null;
   }): string | null;
 }
 
@@ -203,7 +204,12 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
   const carrierRaw = resolvedValue(extraction.resolved.carrier);
   const senderDomain = document.sender.primaryDomain;
   const merchantId = merchantRaw && input.merchantResolver
-    ? input.merchantResolver.resolve({ merchantRaw, senderDomain, provenance })
+    ? input.merchantResolver.resolve({
+        merchantRaw,
+        senderDomain,
+        provenance,
+        observedAt: document.receivedAt,
+      })
     : null;
   const carrierId = carrierRaw
     ? input.carrierResolver?.resolve({ carrierRaw, senderDomain, provenance }) ?? normalizeMerchantToken(carrierRaw)
