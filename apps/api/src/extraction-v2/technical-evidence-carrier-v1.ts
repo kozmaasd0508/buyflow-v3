@@ -187,8 +187,8 @@ function extractPacketa(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[]
   // template primitives, and every present primitive must resolve to the same Z-id.
   const observedIds = [labelled, linkLabel, endpoint].filter((value): value is string => Boolean(value));
   const uniqueIds = new Set(observedIds);
-  if (observedIds.length >= 2 && uniqueIds.size === 1) {
-    const tracking = observedIds[0];
+  const tracking = observedIds[0];
+  if (tracking && observedIds.length >= 2 && uniqueIds.size === 1) {
     pushTracking(
       rows,
       tracking,
