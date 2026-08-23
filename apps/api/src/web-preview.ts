@@ -14,6 +14,7 @@ import { registerFieldBlindDiagnosticV1 } from './api/field-blind-diagnostic-v1.
 import { registerFieldDiagnosticV1 } from './api/field-diagnostic-v1.js';
 import { registerLifecycleCorrelationAuditV1 } from './api/lifecycle-correlation-audit-v1.js';
 import { registerLifecycleCorrelationAuditV11 } from './api/lifecycle-correlation-audit-v1-1.js';
+import { registerPurchaseIdentityV2Audit } from './api/purchase-identity-v2-audit.js';
 import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
 
 const mobileDistDir = fileURLToPath(new URL('../../mobile/dist/', import.meta.url));
@@ -61,6 +62,7 @@ export async function registerWebPreview(app: FastifyInstance) {
   await registerFieldDiagnosticV1(app);
   await registerLifecycleCorrelationAuditV1(app);
   await registerLifecycleCorrelationAuditV11(app);
+  await registerPurchaseIdentityV2Audit(app);
 
   app.get('/app', async (_request, reply) => reply.redirect('/app/'));
 
