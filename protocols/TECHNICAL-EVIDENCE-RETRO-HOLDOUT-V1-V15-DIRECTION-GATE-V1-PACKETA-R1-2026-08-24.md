@@ -126,7 +126,7 @@ This does NOT prove the Packeta rule will have 100% precision on future unseen m
 
 ## Executable integration
 
-Packeta R1 is not a disconnected helper. `technical-evidence-v1-5.ts` already composes `collectCarrierTechnicalEvidenceV1`, and a v1.5 regression test now verifies that strict Packeta carrier, hard tracking and shipment evidence are visible through the executable composite collector.
+Packeta R1 is not a disconnected helper. `technical-evidence-v1-5.ts` already composes `collectCarrierTechnicalEvidenceV1`, and a v1.5 regression test verifies that strict Packeta carrier, hard tracking and shipment evidence are visible through the executable composite collector.
 
 Additional carrier regression tests cover:
 
@@ -137,19 +137,25 @@ Additional carrier regression tests cover:
 - one-primitive hard-ID rejection;
 - conflicting Z-ID rejection.
 
-## CI status
+## CI status — GREEN
 
-The previous exact TechnicalEvidence v1.5 + Direction Gate v1 head was repository-CI green through CI-only PR #261 / run #947:
+Fresh repository CI validated the current Packeta R1 candidate through CI-only draft PR #262 / GitHub Actions run #955.
 
-- API typecheck PASS;
-- API tests PASS — 1096/1096;
-- API build PASS;
-- mobile typecheck PASS;
-- mobile web build PASS.
+Validated branch head:
 
-The Packeta R1 delta adds new code/tests after that validated head. A fresh repository CI result must be checked on the Packeta candidate before treating the latest code as fully CI-validated.
+`7192bd438876464e7201c342df1296c64a790b3b`
 
-A temporary CI-only PR must never be merged into production merely to obtain validation evidence.
+Required checks:
+
+- API typecheck: **PASS**;
+- API tests: **PASS — 1101/1101**;
+- API build: **PASS**;
+- mobile typecheck: **PASS**;
+- mobile web build: **PASS**.
+
+The CI-only PR was closed without merge after capturing the result. It was never a production merge path.
+
+Dependency-hygiene note: `npm install` reported three high-severity audit findings. They did not fail this workflow and are not evidence of a Packeta semantic regression, but they should be reviewed separately before production release hardening.
 
 ## Blind boundary
 
@@ -158,6 +164,16 @@ The historical Packeta message used here is regression-only and is permanently e
 The active future blind protocol is:
 
 `TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V3-2026-08-24.md`
+
+Freeze snapshot:
+
+`ca3ae62b358f7b7cdcde63a6e1c0960c54b49513`
+
+Cutoff:
+
+`2026-08-23T23:28:16Z` (`2026-08-24 01:28:16 Europe/Budapest`)
+
+The first ID-only Gmail preflight after this cutoff returned **0 messages**, so no v3 candidate content has been inspected.
 
 Only genuinely unseen post-v3-cutoff messages may enter that set.
 
