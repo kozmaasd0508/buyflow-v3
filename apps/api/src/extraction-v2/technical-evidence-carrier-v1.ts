@@ -158,10 +158,70 @@ function extractFoxpost(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[]
   return rows;
 }
 
+function normalizePacketaTracking(value: string): string | null {
+  const normalized = value.toUpperCase().replace(/[\s-]+/g, '');
+  return /^Z\d{8,20}$/.test(normalized) ? normalized : null;
+}
+
+function extractPacketa(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[] {
+  // Keep provider authority narrow: marketing/newsletter subdomains are intentionally excluded.
+  if (normalizedDomain(document.sender.primaryDomain) !== 'packeta.hu') return [];
+
+  const rows: CarrierTechnicalEvidenceV1[] = [];
+  const subject = document.subject ?? '';
+  const text = document.text ?? '';
+
+  pushCarrier(rows, 'Packeta', 'PACKETA', 0.995, 'packeta_sender_domain');
+
+  const labelled = normalizePacketaTracking(
+    text.match(/csomagja\s+Z-számát\s+(Z(?:[\s-]*\d){8,20})\b/i)?.[1] ?? '',
+  );
+  const linkLabel = normalizePacketaTracking(
+    text.match(/csomag\s+nyomonkövetése\s+(Z(?:[\s-]*\d){8,20})\b/i)?.[1] ?? '',
+  );
+  const endpoint = normalizePacketaTracking(
+    text.match(/https?:\/\/tracking\.packeta\.com\/?\?id=(Z\d{8,20})\b/i)?.[1] ?? '',
+  );
+
+  // A Packeta hard identifier requires corroboration by at least two independent
+  // template primitives, and every present primitive must resolve to the same Z-id.
+  const observedIds = [labelled, linkLabel, endpoint].filter((value): value is string => Boolean(value));
+  const uniqueIds = new Set(observedIds);
+  if (observedIds.length >= 2 && uniqueIds.size === 1) {
+    const tracking = observedIds[0];
+    pushTracking(
+      rows,
+      tracking,
+      'PACKETA',
+      'body.packeta.corroborated_z_identifier',
+      ['packeta_sender_domain', 'packeta_tracking_endpoint', 'corroborated_packeta_z_identifier'],
+      0.995,
+    );
+  }
+
+  const acceptedForTransport = /^A\s+szállítmányt\s+elfogadták\s+a\s+szállításra$/i.test(subject)
+    && /átadta\s+nekünk\s+az\s+Ön\s+alábbi\s+megrendelését/i.test(text)
+    && /szerződéses\s+szállítópartnerünk\s+fog\s+kézbesíteni/i.test(text)
+    && /tracking\.packeta\.com/i.test(text);
+
+  if (acceptedForTransport) {
+    pushEvent(
+      rows,
+      'shipment',
+      'subject+body.packeta.accepted_for_transport',
+      ['packeta_sender_domain', 'packeta_accepted_for_transport_template'],
+      0.995,
+    );
+  }
+
+  return rows;
+}
+
 export function collectCarrierTechnicalEvidenceV1(document: EmailDocumentV1): CarrierTechnicalEvidenceV1Result {
   const evidence = [
     ...extractDpd(document),
     ...extractFoxpost(document),
+    ...extractPacketa(document),
   ];
 
   return {
