@@ -101,6 +101,55 @@ test('supports multiple shipments under one purchase', () => {
   assert.equal(graph.snapshot().shipments.length, 2);
 });
 
+test('does not collapse identical external ids across different namespaces inside one purchase', () => {
+  const graph = new PurchaseIdentityGraph();
+  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ORDER-1' }));
+
+  graph.applyEvent(event({
+    eventType: 'shipment_created',
+    orderIdRaw: 'ORDER1',
+    carrierId: 'gls',
+    trackingIdRaw: 'SAME-77',
+  }));
+  graph.applyEvent(event({
+    eventType: 'shipment_created',
+    orderIdRaw: 'ORDER1',
+    carrierId: 'dpd',
+    trackingIdRaw: 'SAME-77',
+  }));
+
+  graph.applyEvent(event({
+    eventType: 'payment_completed',
+    orderIdRaw: 'ORDER1',
+    paymentProviderId: 'barion',
+    paymentReference: 'SAME-PAY',
+  }));
+  graph.applyEvent(event({
+    eventType: 'payment_completed',
+    orderIdRaw: 'ORDER1',
+    paymentProviderId: 'stripe',
+    paymentReference: 'SAME-PAY',
+  }));
+
+  graph.applyEvent(event({
+    eventType: 'invoice_created',
+    orderIdRaw: 'ORDER1',
+    invoiceIssuerId: 'billingo',
+    invoiceIdRaw: 'SAME-INV',
+  }));
+  graph.applyEvent(event({
+    eventType: 'invoice_created',
+    orderIdRaw: 'ORDER1',
+    invoiceIssuerId: 'szamlazzhu',
+    invoiceIdRaw: 'SAME-INV',
+  }));
+
+  const snapshot = graph.snapshot();
+  assert.deepEqual(snapshot.shipments.map((item) => item.carrierId).sort(), ['dpd', 'gls']);
+  assert.deepEqual(snapshot.payments.map((item) => item.providerId).sort(), ['barion', 'stripe']);
+  assert.deepEqual(snapshot.invoices.map((item) => item.issuerId).sort(), ['billingo', 'szamlazzhu']);
+});
+
 test('keeps ambiguous event review-only and does not mutate graph', () => {
   const graph = new PurchaseIdentityGraph({
     purchases: [
