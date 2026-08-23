@@ -105,7 +105,7 @@ function classifyDirection(
 
   const sellerOutboundPatterns: Array<[RegExp, string]> = [
     [/\bon a csomagautomatan a feladas soran\b[\s\S]{0,260}\bcsomag feladasat rogzitette\b/, 'carrier_self_service_dropoff_recorded'],
-    [/\barufelvetel(?:i)?\b[\s\S]{0,220}\b(?:megbizas|megrendeles)\b/, 'carrier_pickup_booking_language'],
+    [/\barufelvetel(?:i)?\b[\s\S]{0,80}\bmegbizas(?:t|a|sal|bol|hoz|nak)?\b/, 'carrier_pickup_booking_language'],
     [/\b(?:pickup|collection) (?:request|booking|order)\b[\s\S]{0,180}\b(?:courier|driver)\b/, 'carrier_pickup_booking_language_en'],
   ];
   for (const [pattern, reason] of sellerOutboundPatterns) {
