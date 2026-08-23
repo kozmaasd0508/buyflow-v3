@@ -1,6 +1,7 @@
 import type { CanonicalEvent, CorrelationDecision, EvidenceEdge, PurchaseIdentitySnapshot } from './types.js';
 import { buildCandidateIndex, candidatePurchaseIds } from './candidate-index.js';
 import { buildEvidenceForCandidate } from './evidence.js';
+import { evaluateHardConflictGate } from './hard-conflict-gate.js';
 
 function hardEdges(edges: EvidenceEdge[]) {
   return edges.filter((edge) => edge.strength === 'hard');
@@ -16,6 +17,16 @@ export function decideCorrelation(
 
   for (const purchaseId of candidates) {
     evidenceByPurchase.set(purchaseId, buildEvidenceForCandidate(event, purchaseId, snapshot));
+  }
+
+  const conflictGate = evaluateHardConflictGate(event);
+  if (conflictGate.blocked) {
+    return {
+      kind: 'PENDING',
+      candidatePurchaseIds: candidates.sort(),
+      reasons: candidates.flatMap((purchaseId) => evidenceByPurchase.get(purchaseId) ?? []),
+      conflicts: conflictGate.conflicts,
+    };
   }
 
   const hardCandidateIds = candidates.filter((purchaseId) => hardEdges(evidenceByPurchase.get(purchaseId) ?? []).length > 0);
