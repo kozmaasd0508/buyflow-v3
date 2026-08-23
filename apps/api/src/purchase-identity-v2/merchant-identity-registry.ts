@@ -208,11 +208,12 @@ function uniqueMatchedSignals(signals: NormalizedSignal[]): MerchantIdentityMatc
  * Deterministic canonical merchant identity resolver.
  *
  * Auto-resolution requires two independent namespace signals: an exact merchant
- * name/alias match AND a sender-domain match to the same registry identity.
+ * name/alias match AND an explicitly registered sender-domain match to the same
+ * registry identity. Storefront/web domains are deliberately not sender authority.
  * Time-bounded or historical signals are evaluated against the email's observed
- * timestamp, so a provider can safely change names or domains without rewriting
- * historical identity. Disabled signals never resolve. Unknown or conflicting
- * signals never guess a winner.
+ * timestamp, so a provider can safely change names or sender domains without
+ * rewriting historical identity. Disabled signals never resolve. Unknown or
+ * conflicting signals never guess a winner.
  */
 export class MerchantIdentityRegistry implements ExtractionV2MerchantIdentityResolver {
   private readonly definitions: MerchantIdentityDefinition[];
@@ -311,7 +312,7 @@ export class MerchantIdentityRegistry implements ExtractionV2MerchantIdentityRes
       && signal.normalizedValue === merchantName,
     );
     const domainSignals = usableSignals.filter((signal) =>
-      (signal.kind === 'domain' || signal.kind === 'sender_domain')
+      signal.kind === 'sender_domain'
       && domainMatches(senderDomain, signal.normalizedValue),
     );
 
