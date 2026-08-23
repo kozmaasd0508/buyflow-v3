@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-23 — TechnicalEvidence v1.1/v1.2 broad development measurement
+
+- PR #256 remains open and mergeable on `codex/technical-evidence-shadow-v1`; still shadow-only, 0 production writes, 0 AI, no runtime/DB/Identity Graph wiring.
+- Same six already-reviewed Gmail cases: v1 -> v1.1 commerce-specific technical coverage **3/6 -> 6/6**, explicit event **2/6 -> 6/6**, hard identifier **1/6 -> 3/6**. v1.1 added exact composite template tags plus strict current-message English machine labels/lifecycle semantics.
+- Broader ten-case development slice covers WooCommerce, UNAS, Shopify, GLS, MPL, FOXPOST, DPD, Billingo, Számlázz.hu and merchant-invoice/PDF families. v1.1 broad result: commerce-specific **3/10**, event **2/10**, hard identifier **1/10**.
+- v1.2 added audited platform/provider semantics without weakening global matching: WooCommerce multi-primitive order identity, UNAS exact generator-action discrimination, Shopify multi-signal platform fingerprint, official Posta tracking `ids` alias, and dedicated `X-Szamlazz-Invoice` evidence.
+- Broad v1.2 development remeasurement: commerce-specific **6/10**, explicit event **3/10**, hard identifier **4/10**; auth/transport remains 10/10. These are development coverage figures, not blind accuracy claims.
+- Safety regressions explicitly reject generic `ID`, `Reference`, `ids`, `code` and `ref` interpretations outside typed/provider-qualified contexts; Shopify platform evidence grants no lifecycle authority; WooCommerce order table grants identity but no event authority.
+- Remaining high-value technical gaps: FOXPOST dual-id/QR/redirect semantics, DPD authenticated template semantics, PDF TechnicalEvidence, and only then stronger Shopify notification-type discrimination if stable machine evidence is proven.
+- Measurement docs: `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V11-2026-08-23.md`, `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V11-2026-08-23.md`, `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V12-2026-08-23.md`.
+
 ## 2026-08-23 — TechnicalEvidence v1 Real Gmail development measurement
 
 - PR #256 gained a privacy-safe side-by-side measurement harness: `technical-evidence-real-gmail-measurement-v1.ts` plus regression coverage.
@@ -32,7 +43,7 @@
 - PR #191 added five provider-scoped rules requiring exact sender/domain plus explicit lifecycle evidence, with positive and fail-closed negative tests. Frozen fixtures and broad generic matching were unchanged.
 - Exact merged shadow head and live Render commit: `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce`.
 - Live v6 regression: **TP 50 / FN 0 / FP 0 / TN 50**, precision 100%, recall 100%, 100/100 coverage, 0 writes, 0 AI.
-- GitHub Actions did not publish checks for PRs #190/#191; exact Render commit verification plus the read-only live audit are recorded.
+- GitHub Actions did not publish checks for PRs #190/#191; exact Render commit verification plus the read-only audit are recorded.
 - The v6 set is now regression evidence; use a newly frozen holdout for any next unbiased generalization gate.
 
 ## 2026-08-20 — Frozen v5 blind holdout and scoped provider fixes
