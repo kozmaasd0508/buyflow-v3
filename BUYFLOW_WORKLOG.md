@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-23 — TechnicalEvidence Blind Holdout v1 freeze
+
+- TechnicalEvidence candidate logic is frozen at commit `df221aa42856179c3c1b0b9e94d5d364b4ac7048`, timestamp/cutoff `2026-08-23T21:58:12Z` (`2026-08-23 23:58:12 Europe/Budapest`).
+- Added `protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V1-2026-08-23.md` after the candidate freeze; protocol/evaluation-only changes do not alter the frozen evidence logic.
+- Only messages received strictly after the cutoff may enter the first TechnicalEvidence Blind Holdout v1. Selection is mailbox-first and parser-blind; TechnicalEvidence/Extraction v2/legacy/Identity Graph/AI output cannot be used to select cases.
+- Immediate Gmail ID-only preflight after the cutoff returned **0 eligible messages**. No candidate subject/body/raw MIME was inspected. The cutoff was NOT moved backward to manufacture a sample.
+- No TechnicalEvidence extractor/provider/PDF/carrier/Shopify rule may change before the first frozen blind prediction. If evidence logic changes, the blind set must version forward.
+- Ground truth must be annotated from source content before TechnicalEvidence predictions are viewed. Repo-safe bundles may contain only opaque case ids + GT states/values; raw Gmail identifiers/content stay private.
+- Blind gate explicitly treats unsafe identity authority as critical: untyped `id/ids/code/ref`, Shopify fingerprint-only lifecycle, future shipment as current state, pre-advice as physical shipment, QR pickup code as tracking, carrier-less tracking hard merge, or contradictory hard ids merged instead of REVIEW.
+- Current state remains shadow-only: 0 production writes, 0 AI, no production parser/DB/Identity Graph cutover.
+
 ## 2026-08-23 — TechnicalEvidence v1.4/v1.5 deep-layer expansion
 
 - PR #256 remains open on `codex/technical-evidence-shadow-v1`; production parser, DB and Purchase Identity Graph decision authority remain untouched. Shadow invariants remain 0 writes / 0 AI.
