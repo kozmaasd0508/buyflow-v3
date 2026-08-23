@@ -176,6 +176,9 @@ function extractPacketa(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[]
   const labelled = normalizePacketaTracking(
     text.match(/csomagja\s+Z-számát\s+(Z(?:[\s-]*\d){8,20})\b/i)?.[1] ?? '',
   );
+  const parcelNumberLabel = normalizePacketaTracking(
+    text.match(/\bCsomagszám\s*:?[\s]*(Z(?:[\s-]*\d){8,20})\b/i)?.[1] ?? '',
+  );
   const linkLabel = normalizePacketaTracking(
     text.match(/csomag\s+nyomonkövetése\s+(Z(?:[\s-]*\d){8,20})\b/i)?.[1] ?? '',
   );
@@ -185,7 +188,8 @@ function extractPacketa(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[]
 
   // A Packeta hard identifier requires corroboration by at least two independent
   // template primitives, and every present primitive must resolve to the same Z-id.
-  const observedIds = [labelled, linkLabel, endpoint].filter((value): value is string => Boolean(value));
+  const observedIds = [labelled, parcelNumberLabel, linkLabel, endpoint]
+    .filter((value): value is string => Boolean(value));
   const uniqueIds = new Set(observedIds);
   const tracking = observedIds[0];
   if (tracking && observedIds.length >= 2 && uniqueIds.size === 1) {
@@ -199,9 +203,12 @@ function extractPacketa(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[]
     );
   }
 
+  const modernAcceptedForTransport = /átadta\s+nekünk\s+az\s+Ön\s+alábbi\s+megrendelését/i.test(text)
+    && /szerződéses\s+szállítópartnerünk\s+fog\s+kézbesíteni/i.test(text);
+  const legacyBuyerShipment = /feladó\s+most\s+adta\s+fel\s+az\s+Ön\s+csomagját/i.test(text)
+    && /kerül\s+kézbesítésre/i.test(text);
   const acceptedForTransport = /^A\s+szállítmányt\s+elfogadták\s+a\s+szállításra$/i.test(subject)
-    && /átadta\s+nekünk\s+az\s+Ön\s+alábbi\s+megrendelését/i.test(text)
-    && /szerződéses\s+szállítópartnerünk\s+fog\s+kézbesíteni/i.test(text)
+    && (modernAcceptedForTransport || legacyBuyerShipment)
     && /tracking\.packeta\.com/i.test(text);
 
   if (acceptedForTransport) {
