@@ -55,6 +55,30 @@ Extended 11-family slice adding the separately reviewed GLS COD receipt PDF:
 
 These are development coverage figures only, NOT blind precision/recall or production accuracy.
 
+## BLIND HOLDOUT V1 — FROZEN
+
+TechnicalEvidence candidate logic is frozen at:
+
+`df221aa42856179c3c1b0b9e94d5d364b4ac7048`
+
+Selection cutoff:
+
+`2026-08-23T21:58:12Z` (`2026-08-23 23:58:12 Europe/Budapest`)
+
+Protocol:
+- `protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V1-2026-08-23.md`
+
+Rules:
+- only messages received strictly after the cutoff may enter the first blind set;
+- selection is Gmail/mailbox-first and parser-blind;
+- do not inspect TechnicalEvidence/Extraction v2/legacy/Identity Graph/AI output while selecting cases;
+- annotate ground truth from source content before any TechnicalEvidence prediction is viewed;
+- no TechnicalEvidence extractor/provider/PDF/carrier/Shopify rule change before the first blind result;
+- if evidence logic changes, version the holdout forward;
+- after the first prediction, the set becomes regression-only.
+
+Immediate Gmail ID-only preflight after the cutoff returned **0 eligible messages**. No post-freeze candidate content has been inspected, and the cutoff was not moved backward.
+
 ### Shopify v1.5 finding
 
 Two independent real merchants now prove the same native Shopify order-confirmation stack:
@@ -63,7 +87,7 @@ Two independent real merchants now prove the same native Shopify order-confirmat
 - explicit current-message order reference;
 - explicit current-message confirmation semantics.
 
-The new adapter requires all of those layers before emitting order/lifecycle evidence. Shopify assets alone are insufficient. A merchant custom/Amazon SES email that still contains Shopify assets receives no native Shopify lifecycle authority. Shopify login/security mail also fails closed.
+The adapter requires all of those layers before emitting order/lifecycle evidence. Shopify assets alone are insufficient. Merchant custom/Amazon SES mail containing Shopify assets receives no native Shopify lifecycle authority. Shopify login/security mail also fails closed.
 
 Order number is merchant-scoped when storefront scope is recoverable. Native shipment/delivery evidence remains marked as reviewed from only one independent merchant lifecycle family. Tracking captured from Shopify remains without carrier namespace and cannot hard-merge to a carrier Shipment until carrier namespace is resolved independently.
 
@@ -79,7 +103,7 @@ Order number is merchant-scoped when storefront scope is recoverable. Native shi
 
 ## CURRENT MODULES / REPORTS
 
-Key new shadow modules:
+Key shadow modules:
 - `apps/api/src/extraction-v2/technical-evidence-v1.ts`
 - `apps/api/src/extraction-v2/technical-evidence-v1-1.ts`
 - `apps/api/src/extraction-v2/technical-evidence-v1-2.ts`
@@ -93,6 +117,7 @@ Latest reports:
 - `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V14-2026-08-23.md`
 - `protocols/TECHNICAL-EVIDENCE-QR-PREFLIGHT-2026-08-23.md`
 - `protocols/TECHNICAL-EVIDENCE-SHOPIFY-DEVELOPMENT-PREFLIGHT-2026-08-23.md`
+- `protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V1-2026-08-23.md`
 
 ## RESUME CONTRACT
 
@@ -128,4 +153,4 @@ TechnicalEvidence observes; it never directly grants unsafe merge authority. Ide
 
 ## NEXT HIGH-VALUE TASK
 
-Do not tune further on the reviewed development families. First run repository typecheck/tests when a CI-capable target is available, then freeze a completely new untouched broad holdout. The next unbiased gate must explicitly contain commerce plus hard-noise families, including Shopify security/marketing/custom-mail negatives, and must be frozen before any parser/evidence rule is changed from its first result.
+Do not tune the frozen TechnicalEvidence logic further. Accumulate only genuinely new post-cutoff messages for Blind Holdout v1. Once enough unseen cases exist, freeze their opaque case-id + human ground-truth bundle BEFORE exposing TechnicalEvidence predictions. Until then, documentation/evaluation harness work may continue, but evidence-producing logic must remain frozen.
