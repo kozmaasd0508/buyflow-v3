@@ -12,6 +12,7 @@ import {
   normalizedEmailToDeterministicInput,
   parseNormalizedDeterministicEmail,
 } from '../ingestion/normalized-email-deterministic.js';
+import { runShoppingEmailIdentityShadow } from '../purchase-identity-v2/shopping-email-shadow-runtime.js';
 import { isShadowOnlyParserVersion } from './automatic-write-gate.js';
 import { evaluateShoppingEmailPurpose } from './shopping-email-purpose-gate.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
@@ -301,6 +302,18 @@ export async function persistNormalizedInboundEmail(input: {
       documentWrites: 0,
       aiCalls: 0,
     };
+  }
+
+  // The new Purchase Identity Graph runs only as a diagnostic observer here.
+  // It may read this user's existing purchase snapshot, but it cannot write to
+  // purchases, shipments, documents, or any graph table. Shadow failures are
+  // contained inside the diagnostic and never block normal inbound ingestion.
+  if (plan.status === 'review' || plan.status === 'recognized') {
+    plan.structuredResult.purchase_identity_shadow_v2 = await runShoppingEmailIdentityShadow({
+      db,
+      userId: recipient.userId,
+      email: input.email,
+    });
   }
 
   const payload = sourceInsertPayload({
