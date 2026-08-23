@@ -2,6 +2,19 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-23 — TechnicalEvidence v1.4/v1.5 deep-layer expansion
+
+- PR #256 remains open on `codex/technical-evidence-shadow-v1`; production parser, DB and Purchase Identity Graph decision authority remain untouched. Shadow invariants remain 0 writes / 0 AI.
+- v1.4 added deterministic PDF invoice evidence, authenticated DPD lifecycle/parcel semantics, authenticated FOXPOST lifecycle/dual-id semantics, provider-qualified GLS COD receipt PDF evidence, and QR preflight.
+- Same ten-family development slice progressed from v1.2 commerce/event/hard-id **6/10 / 3/10 / 4/10** to v1.4 **9/10 / 6/10 / 7/10**. Extended with GLS COD receipt: **10/11 / 7/11 / 8/11**.
+- FOXPOST QR preflight proved the QR payload is pickup/opening code, not parcel identity; generic QR-to-tracking extraction is explicitly rejected.
+- Shopify preflight found two independent native Shopify order-confirmation merchant families with the same transport + transactional DOM + explicit order-reference stack. Added `technical-evidence-shopify-v1.ts` and fail-closed regressions.
+- Shopify v1.5 requires native `mailer.shopify.com` relay + independent Shopify auth/message evidence + standard transactional order DOM + explicit current-message order id. Shopify CDN/CSS alone, merchant custom/SES mail, and Shopify account/security mail grant no lifecycle authority.
+- Order confirmation now has two-independent-merchant evidence. Native shipment/delivery is retained with a narrower one-independent-lifecycle-family qualifier. Shopify tracking stays without carrier namespace and cannot hard-merge until carrier namespace is independently resolved.
+- Development projection on the same original ten families is now commerce-specific **10/10**, explicit event **7/10**, merchant-scoped/namespaced identifier **8/10**. Extended 11-family slice: **11/11 / 8/11 / 9/11**. These are development coverage figures, not blind accuracy/precision/recall.
+- Report: `protocols/TECHNICAL-EVIDENCE-SHOPIFY-DEVELOPMENT-PREFLIGHT-2026-08-23.md`.
+- Full repository CI/typecheck has NOT been claimed for this non-main-targeting PR. Next unbiased gate is a completely fresh frozen holdout before any further tuning or production authority.
+
 ## 2026-08-23 — TechnicalEvidence v1.1/v1.2 broad development measurement
 
 - PR #256 remains open and mergeable on `codex/technical-evidence-shadow-v1`; still shadow-only, 0 production writes, 0 AI, no runtime/DB/Identity Graph wiring.
