@@ -40,7 +40,7 @@ export class PurchaseIdentityGraph {
   applyEvent(event: CanonicalEvent): GraphApplyResult {
     const decision = decideCorrelation(event, this.snapshotState);
 
-    if (decision.kind === 'REVIEW' || decision.kind === 'UNLINKED') {
+    if (decision.kind === 'REVIEW' || decision.kind === 'PENDING' || decision.kind === 'UNLINKED') {
       return this.result(decision, false);
     }
 

@@ -12,10 +12,48 @@ export type CanonicalEventType =
   | 'cancelled'
   | 'other';
 
+export type SourceRole =
+  | 'merchant'
+  | 'marketplace'
+  | 'carrier'
+  | 'payment_provider'
+  | 'invoice_issuer'
+  | 'customer'
+  | 'unknown';
+
 export interface EvidenceProvenance {
   field: string;
-  source: 'subject' | 'body' | 'header' | 'attachment' | 'provider_adapter';
+  source:
+    | 'subject'
+    | 'body'
+    | 'sender'
+    | 'header'
+    | 'attachment'
+    | 'document_structure'
+    | 'provider_adapter';
   parserVersion: string | null;
+  extractorId?: string | null;
+  extractorVersion?: string | null;
+  confidence?: number | null;
+  qualifiers?: string[];
+}
+
+export interface EvidenceReference {
+  field: string;
+  value: unknown;
+  source: EvidenceProvenance['source'];
+  confidence: number | null;
+  extractorId: string | null;
+  extractorVersion: string | null;
+  qualifiers: string[];
+}
+
+export interface EvidenceConflict {
+  field: string;
+  values: unknown[];
+  evidence: EvidenceReference[];
+  severity: 'hard' | 'soft';
+  explanation: string;
 }
 
 export interface CanonicalEvent {
@@ -42,6 +80,13 @@ export interface CanonicalEvent {
   trackingUrl: string | null;
   productFingerprints: string[];
   provenance: EvidenceProvenance[];
+  sourceRole?: SourceRole;
+  carrierId?: string | null;
+  paymentProviderId?: string | null;
+  invoiceIssuerId?: string | null;
+  platformMerchantId?: string | null;
+  sellerMerchantId?: string | null;
+  conflicts?: EvidenceConflict[];
 }
 
 export interface PurchaseIdentity {
@@ -121,6 +166,7 @@ export type CorrelationDecision =
   | { kind: 'NEW_PURCHASE'; reasons: EvidenceEdge[] }
   | { kind: 'LINKED'; purchaseId: string; reasons: EvidenceEdge[] }
   | { kind: 'REVIEW'; candidatePurchaseIds: string[]; reasons: EvidenceEdge[] }
+  | { kind: 'PENDING'; candidatePurchaseIds: string[]; reasons: EvidenceEdge[]; conflicts: EvidenceConflict[] }
   | { kind: 'UNLINKED'; reasons: EvidenceEdge[] };
 
 export interface PurchaseIdentitySnapshot {
