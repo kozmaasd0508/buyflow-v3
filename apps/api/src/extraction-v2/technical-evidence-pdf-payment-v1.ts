@@ -62,7 +62,9 @@ export function collectPdfPaymentTechnicalEvidenceV1(input: {
 
   const tracking = input.text.match(/\bCSOMAGSZ[AÁ]M\s*:\s*(0?\d{9,14})\b/i)?.[1];
   const transaction = input.text.match(/\bTRANZAKCI[ÓO]S\s+SZ[AÁ]M\s*:\s*([A-Z0-9._/-]{8,80})\b/i)?.[1];
-  const amount = input.text.match(/\b(?:ÖSSZEG|OSSZEG)\s*:\s*([0-9][0-9 .\u00a0]*[,.][0-9]{2})\b/i)?.[1];
+  // Do not use a leading `\b` before ÖSSZEG: JavaScript word boundaries are
+  // ASCII-oriented, so a Unicode initial letter can fail even on exact text.
+  const amount = input.text.match(/(?:ÖSSZEG|OSSZEG)\s*:\s*([0-9][0-9 .\u00a0]*[,.][0-9]{2})\b/i)?.[1];
   if (!tracking || !transaction || !amount) return empty();
 
   const normalizedTracking = tracking.replace(/^0(?=\d{9,13}$)/, '');
