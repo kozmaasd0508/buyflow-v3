@@ -28,6 +28,10 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
     trackingUrl: overrides.trackingUrl ?? null,
     productFingerprints: overrides.productFingerprints ?? [],
     provenance: overrides.provenance ?? [],
+    carrierId: overrides.carrierId ?? null,
+    paymentProviderId: overrides.paymentProviderId ?? null,
+    invoiceIssuerId: overrides.invoiceIssuerId ?? null,
+    conflicts: overrides.conflicts ?? [],
   };
 }
 
@@ -53,20 +57,46 @@ function snapshot(): PurchaseIdentitySnapshot {
   };
 }
 
-test('links by exact normalized order id', () => {
+test('links by exact normalized order identity inside merchant namespace', () => {
   const result = decideCorrelation(event({ eventType: 'shipment_created', merchantId: 'shop', orderIdRaw: 'abc 123' }), snapshot());
   assert.equal(result.kind, 'LINKED');
   if (result.kind === 'LINKED') assert.equal(result.purchaseId, 'p1');
 });
 
-test('links by exact tracking id without merchant subject logic', () => {
-  const result = decideCorrelation(event({ eventType: 'delivered', trackingIdRaw: 'GLS77' }), snapshot());
+test('links by exact tracking identity inside carrier namespace', () => {
+  const result = decideCorrelation(event({ eventType: 'delivered', carrierId: 'gls', trackingIdRaw: 'GLS77' }), snapshot());
   assert.equal(result.kind, 'LINKED');
   if (result.kind === 'LINKED') assert.equal(result.purchaseId, 'p1');
 });
 
-test('links by exact payment reference', () => {
+test('tracking id without carrier namespace is review-only', () => {
+  const result = decideCorrelation(event({ eventType: 'delivered', trackingIdRaw: 'GLS77' }), snapshot());
+  assert.equal(result.kind, 'REVIEW');
+  if (result.kind === 'REVIEW') assert.deepEqual(result.candidatePurchaseIds, ['p1']);
+});
+
+test('links by exact payment identity inside provider namespace', () => {
+  const result = decideCorrelation(event({
+    eventType: 'payment_completed',
+    paymentProviderId: 'barion',
+    paymentReference: 'pay 555',
+  }), snapshot());
+  assert.equal(result.kind, 'LINKED');
+  if (result.kind === 'LINKED') assert.equal(result.purchaseId, 'p1');
+});
+
+test('payment reference without provider namespace is review-only', () => {
   const result = decideCorrelation(event({ eventType: 'payment_completed', paymentReference: 'pay 555' }), snapshot());
+  assert.equal(result.kind, 'REVIEW');
+  if (result.kind === 'REVIEW') assert.deepEqual(result.candidatePurchaseIds, ['p1']);
+});
+
+test('links by exact invoice identity inside issuer namespace', () => {
+  const result = decideCorrelation(event({
+    eventType: 'invoice_created',
+    invoiceIssuerId: 'billingo',
+    invoiceIdRaw: 'inv 42',
+  }), snapshot());
   assert.equal(result.kind, 'LINKED');
   if (result.kind === 'LINKED') assert.equal(result.purchaseId, 'p1');
 });
@@ -81,12 +111,57 @@ test('lifecycle-only event without a hard identifier stays unlinked', () => {
   assert.equal(result.kind, 'UNLINKED');
 });
 
-test('ambiguous exact identifier becomes review instead of merge', () => {
+test('ambiguous unscoped order id becomes review instead of merge', () => {
   const ambiguous = snapshot();
   ambiguous.orders.push({ orderIdentityId: 'o3', purchaseId: 'p2', merchantId: 'other', orderId: 'ABC-123', relation: 'primary', parentOrderIdentityId: null });
   const result = decideCorrelation(event({ eventType: 'payment_completed', orderIdRaw: 'ABC123' }), ambiguous);
   assert.equal(result.kind, 'REVIEW');
   if (result.kind === 'REVIEW') assert.deepEqual(result.candidatePurchaseIds, ['p1', 'p2']);
+});
+
+test('same tracking id under different carriers links only the matching carrier namespace', () => {
+  const ambiguous = snapshot();
+  ambiguous.shipments.push({ shipmentId: 's2', purchaseId: 'p2', carrierId: 'dpd', trackingId: 'GLS-77', status: 'in_transit' });
+
+  const result = decideCorrelation(event({
+    eventType: 'delivered',
+    carrierId: 'gls',
+    trackingIdRaw: 'GLS77',
+  }), ambiguous);
+
+  assert.equal(result.kind, 'LINKED');
+  if (result.kind === 'LINKED') assert.equal(result.purchaseId, 'p1');
+});
+
+test('same tracking id under different carriers without carrier namespace stays review-only', () => {
+  const ambiguous = snapshot();
+  ambiguous.shipments.push({ shipmentId: 's2', purchaseId: 'p2', carrierId: 'dpd', trackingId: 'GLS-77', status: 'in_transit' });
+
+  const result = decideCorrelation(event({ eventType: 'delivered', trackingIdRaw: 'GLS77' }), ambiguous);
+
+  assert.equal(result.kind, 'REVIEW');
+  if (result.kind === 'REVIEW') assert.deepEqual(result.candidatePurchaseIds, ['p1', 'p2']);
+});
+
+test('hard source conflict becomes pending even with an otherwise exact identity', () => {
+  const result = decideCorrelation(event({
+    eventType: 'shipment_created',
+    merchantId: 'shop',
+    orderIdRaw: 'ABC123',
+    conflicts: [{
+      field: 'order_number',
+      values: ['ABC123', 'XYZ999'],
+      evidence: [],
+      severity: 'hard',
+      explanation: 'two strong current-message order identifiers disagree',
+    }],
+  }), snapshot());
+
+  assert.equal(result.kind, 'PENDING');
+  if (result.kind === 'PENDING') {
+    assert.deepEqual(result.candidatePurchaseIds, ['p1']);
+    assert.equal(result.conflicts.length, 1);
+  }
 });
 
 test('different exact order ids never merge', () => {
