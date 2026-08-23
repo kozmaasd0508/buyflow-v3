@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, codex/technical-evidence-shadow-v1]
+    branches: [main]
   pull_request:
     branches: [main]
 
