@@ -8,16 +8,11 @@
     "total": 200,
     "commerce": 33,
     "noise": 167,
-    "mixed": {
-      "total": 100,
-      "commerce": 30,
-      "noise": 70
-    },
-    "noiseEnriched": {
-      "total": 100,
-      "commerce": 3,
-      "noise": 97
-    }
+    "mixed": {"total": 100, "commerce": 30, "noise": 70},
+    "noiseEnriched": {"total": 100, "commerce": 3, "noise": 97}
+  },
+  "measurement": {
+    "v15ManualReplay": "protocols/TECHNICAL-EVIDENCE-RETRO-HOLDOUT-V1-V15-MANUAL-REPLAY-2026-08-24.md"
   },
   "notes": [
     "Ground truth was assigned from original Gmail messages before TechnicalEvidence predictions for these cases were viewed.",
