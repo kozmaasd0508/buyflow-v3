@@ -10,16 +10,18 @@ Measure whether the Universal Commerce Grammar + Universal Semantic Layer genera
 
 This is the code snapshot to score. No parser/grammar/semantic rule changes are allowed before the first v2 score is recorded.
 
-## Candidate selection
+## Candidate selection — Noise Set
 Gmail ID-only query used before reading candidate content:
 
 `after:2023/01/01 before:2024/01/01 -from:me -in:spam -in:trash {rendelés megrendelés order rendelésed megrendelésed}`
 
 Selected: 60 incoming messages.
 
+The first post-freeze read showed this set is overwhelmingly promotional/noise. It remains part of v2 as the false-positive stress set and is not discarded.
+
 Only opaque SHA-256 prefixes are stored below. Raw Gmail message IDs, addresses, order numbers, tracking numbers and email bodies are intentionally not committed.
 
-## Frozen candidate hashes
+## Frozen Noise Set hashes
 - `9f3f4f98338d8e99`
 - `1369cb55887625e1`
 - `f42a186a43521315`
@@ -80,6 +82,25 @@ Only opaque SHA-256 prefixes are stored below. Raw Gmail message IDs, addresses,
 - `a58b24ad96501cd6`
 - `ee0ffc0fab18f976`
 - `552fa7edac6af494`
+
+## Candidate selection — Transaction-Enriched Set
+The Gmail `category:purchases` route contained no messages in the historical window, so a second ID-only query was frozen using generic transactional structure words, not merchant names:
+
+`after:2021/01/01 before:2024/01/01 -from:me -in:spam -in:trash {"rendelésszám" "megrendelési szám" "végösszeg" "fizetési mód" "szállítási mód" "köszönjük rendelését" "köszönjük megrendelését" "order number" "order total" "payment method"}`
+
+Selected: 10 incoming messages before reading content.
+
+## Frozen Transaction-Enriched hashes
+- `7589eae7e5815cf7`
+- `7916c2008a80b678`
+- `b603abc519ecc751`
+- `2195092a6ab04ed7`
+- `bd4947488fdc112e`
+- `c7c2494e330ec54d`
+- `391a6a4fec5af799`
+- `182030e92a434c3a`
+- `41b4f3a7ea918cad`
+- `7ca8445ba31945cc`
 
 ## Scoring rules
 Report separately:
