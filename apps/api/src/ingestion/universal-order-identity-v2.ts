@@ -36,6 +36,7 @@ function isStrongBareIdentifier(value: string): boolean {
 
 const ORDER_WORD = '(?:order|purchase|bestellung|commande|pedido|(?:meg)?rendeles[a-z]{0,14})';
 const IDENTIFIER = '([A-Z0-9][A-Z0-9._/-]{3,39})';
+const ID_LABEL = '(?:number|no\\.?|nr\\.?|nummer|numero|id|szam|szama|azonosito|azonositoja|reference|ref\\.?)';
 
 const PATTERNS: Array<{
   pattern: RegExp;
@@ -44,7 +45,7 @@ const PATTERNS: Array<{
   requireStrongBare?: boolean;
 }> = [
   {
-    pattern: new RegExp(`\\b${ORDER_WORD}\\s*(?:number|no\\.?|nr\\.?|id|szam|szama|azonosito|azonositoja|reference|ref\\.?)\\s*[:#-]?\\s*#?${IDENTIFIER}\\b`, 'gi'),
+    pattern: new RegExp(`\\b${ORDER_WORD}\\s*${ID_LABEL}\\s*[:#-]?\\s*#?${IDENTIFIER}\\b`, 'gi'),
     qualifier: 'explicit_order_label',
     confidence: 0.995,
   },
