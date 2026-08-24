@@ -17,6 +17,14 @@ Only messages whose received timestamp is strictly after this cutoff may enter t
 
 Blind Holdout v5 supersedes v4 because REGIO R1 changed evidence/authority behavior after the v4 freeze. No v4 post-cutoff candidate content was inspected before this version increment. Only historical 2025 REGIO development/retro messages were reviewed.
 
+## First post-cutoff preflight
+
+A Gmail **ID-only** query strictly after the cutoff returned:
+
+**0 messages**
+
+No post-cutoff message body, subject, attachment or prediction was inspected. Blind Holdout v5 therefore remains untouched.
+
 ## Current executable stack under test
 
 - TechnicalEvidence v1.2 base layers
