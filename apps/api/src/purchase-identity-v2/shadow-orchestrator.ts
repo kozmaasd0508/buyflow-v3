@@ -6,6 +6,7 @@ import {
   type ExtractionV2MerchantIdentityResolver,
 } from './extraction-v2-adapter.js';
 import { PurchaseIdentityGraph } from './graph.js';
+import { deriveMerchantSenderNamespace } from './merchant-sender-namespace.js';
 import type { CanonicalEvent, CorrelationDecision, PurchaseIdentitySnapshot } from './types.js';
 
 export interface PurchaseIdentityShadowInput {
@@ -64,6 +65,8 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
       simulatedSnapshot: graph.snapshot(),
     };
   }
+
+  canonicalEvent.merchantNamespace = deriveMerchantSenderNamespace(canonicalEvent);
 
   const applied = graph.applyEvent(canonicalEvent);
   return {
