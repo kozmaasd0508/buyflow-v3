@@ -99,7 +99,7 @@ const NEGATED_PATTERN = /\b(?:nem|nincs|meg nem|not|no longer|has not|have not|n
 const CONDITIONAL_PATTERN = /\b(?:ha|amennyiben|if|when possible|falls|wenn|si|lorsque)\b/i;
 const COMPLETED_PATTERN = /\b(?:megtortent|sikeresen|atadtuk|kezbesitve|completed|successful|handed|delivered|erfolgt|erfolgreich|zugestellt|effectue|livre|completado|entregado)\b/i;
 
-const TECHNICAL_MARKERS: Array<[UniversalSemanticObject | UniversalSemanticAction, RegExp, string]> = [
+const TECHNICAL_MARKERS: Array<[UniversalSemanticObject | 'HANDOFF_TO_CARRIER', RegExp, string]> = [
   ['ORDER', /(?:data[-_:]?order[-_:]?id|order[-_:]?(?:number|no|id|status|summary|details)|woocommerce[-_:]?order|shopify[-_:]?order|parent_order_sn)/i, 'technical_order'],
   ['PRODUCT', /(?:order[-_:]?item|line[-_:]?item|product[-_:]?(?:name|row)|item[-_:]?quantity|\bquantity\b|woocommerce[-_:]?price[-_:]?amount)/i, 'technical_product'],
   ['PAYMENT', /(?:payment[-_:]?(?:method|status|reference)|transaction[-_:]?id|paid[-_:]?status)/i, 'technical_payment'],
