@@ -65,26 +65,26 @@ function unique<T extends string>(values: T[]): T[] {
 }
 
 const VISIBLE_OBJECTS: Array<[UniversalSemanticObject, RegExp]> = [
-  ['ORDER', /\b(?:rendeles|megrendeles|order|bestellung|commande|pedido)\b/i],
-  ['PAYMENT', /\b(?:fizetes|tranzakcio|payment|zahlung|paiement|pago|pago|pago)\b/i],
-  ['SHIPMENT', /\b(?:csomag|kuldemeny|shipment|parcel|sendung|paket|colis|paquete|envio)\b/i],
-  ['DELIVERY', /\b(?:kezbesites|delivery|zustellung|livraison|entrega)\b/i],
-  ['INVOICE', /\b(?:szamla|invoice|rechnung|facture|factura)\b/i],
-  ['REFUND', /\b(?:visszaterites|visszafizetes|refund|ruckerstattung|remboursement|reembolso)\b/i],
-  ['RETURN', /\b(?:visszakuldes|elallas|return|retoure|rucksendung|retour|devolucion)\b/i],
-  ['PRODUCT', /\b(?:termek|product|artikel|produit|producto)\b/i],
-  ['CARRIER', /\b(?:futar|futarszolgalat|carrier|courier|transportdienstleister|transporteur|transportista)\b/i],
+  ['ORDER', /\b(?:(?:meg)?rendeles(?:ed(?:et)?|e(?:t)?|unk(?:et)?|uk(?:et)?)?|order|bestellung|commande|pedido)\b/i],
+  ['PAYMENT', /\b(?:fizetes(?:ed|e|t)?|tranzakcio(?:d|ja|t)?|payment|zahlung|paiement|pago)\b/i],
+  ['SHIPMENT', /\b(?:csomag(?:od(?:at)?|ja(?:t)?|unk(?:at)?|ot)?|kuldemeny(?:ed(?:et)?|e(?:t)?|unk(?:et)?)?|shipment|parcel|sendung|paket|colis|paquete|envio)\b/i],
+  ['DELIVERY', /\b(?:kezbesites(?:e|ed|t)?|delivery|zustellung|livraison|entrega)\b/i],
+  ['INVOICE', /\b(?:szamla(?:d|ja|t)?|invoice|rechnung|facture|factura)\b/i],
+  ['REFUND', /\b(?:visszaterites(?:ed|e|t)?|visszafizetes(?:ed|e|t)?|refund|ruckerstattung|remboursement|reembolso)\b/i],
+  ['RETURN', /\b(?:visszakuldes(?:ed|e|t)?|elallas(?:i)?|return|retoure|rucksendung|retour|devolucion)\b/i],
+  ['PRODUCT', /\b(?:termek(?:ed|e|et|ek)?|product|artikel|produit|producto)\b/i],
+  ['CARRIER', /\b(?:futar(?:nak|ral|hoz|szolgalat(?:nak|tal)?)?|carrier|courier|transportdienstleister|transporteur|transportista)\b/i],
 ];
 
 const VISIBLE_ACTIONS: Array<[UniversalSemanticAction, RegExp]> = [
   ['CREATE', /\b(?:letrejott|rogzitettuk|rogzitve|created|placed|erstellt|cree|creada|creado)\b/i],
-  ['CONFIRM', /\b(?:visszaigazol|megerosit|confirm(?:ed|ation)?|bestatig|confirme|confirmad[oa])\b/i],
+  ['CONFIRM', /\b(?:visszaigazol\w*|megerosit\w*|confirm(?:ed|ation)?|bestatig\w*|confirme\w*|confirmad[oa])\b/i],
   ['RECEIVE', /\b(?:megkaptuk|beerkezett|received|eingegangen|recu|recibido)\b/i],
-  ['PROCESS', /\b(?:feldolgoz|processing|bearbeit|traitement|procesando)\b/i],
-  ['PACK', /\b(?:osszekeszit|csomagol|packing|packed|being packed|verpack|prepar|empaquet)\b/i],
-  ['HANDOFF_TO_CARRIER', /\b(?:atadtuk|atadasra kerult|handed to (?:the )?carrier|handed over to (?:the )?carrier|ubergeben.{0,40}(?:dienstleister|carrier)|remis.{0,40}transporteur|entregado.{0,40}transportista)\b/i],
+  ['PROCESS', /\b(?:feldolgoz\w*|processing|bearbeit\w*|traitement|procesando)\b/i],
+  ['PACK', /\b(?:osszekeszit\w*|csomagol\w*|packing|packed|being packed|verpack\w*|prepar\w*|empaquet\w*)\b/i],
+  ['HANDOFF_TO_CARRIER', /\b(?:atad(?:tuk|juk)|atadasra kerult|handed to (?:the )?carrier|handed over to (?:the )?carrier|ubergeben.{0,40}(?:dienstleister|carrier)|remis.{0,40}transporteur|entregado.{0,40}transportista)\b/i],
   ['MOVE', /\b(?:uton van|szallitas alatt|in transit|unterwegs|en transit|en transito)\b/i],
-  ['OUT_FOR_DELIVERY', /\b(?:kezbesitonel|kezbesites alatt|ma kezbesit|out for delivery|in zustellung|en cours de livraison|en reparto)\b/i],
+  ['OUT_FOR_DELIVERY', /\b(?:kezbesitonel|kezbesites alatt|ma kezbesit\w*|out for delivery|in zustellung|en cours de livraison|en reparto)\b/i],
   ['DELIVER', /\b(?:kezbesitve|kezbesitettuk|delivery completed|delivered|zugestellt|livre|entregado)\b/i],
   ['CANCEL', /\b(?:torolve|toroltuk|megszunt|cancelled|canceled|storniert|annule|cancelad[oa])\b/i],
   ['PAY_SUCCESS', /\b(?:sikeres fizetes|fizetes sikeres|tranzakcio sikeres|payment successful|payment completed|zahlung erfolgreich|paiement reussi|pago confirmado|pago completado)\b/i],
@@ -94,7 +94,7 @@ const VISIBLE_ACTIONS: Array<[UniversalSemanticAction, RegExp]> = [
   ['RETURN', /\b(?:visszakuldes.{0,50}(?:elindult|elfogadva|beerkezett)|return.{0,50}(?:started|approved|received)|retoure.{0,50}(?:gestartet|erhalten)|retour.{0,50}(?:accepte|recu)|devolucion.{0,50}(?:iniciada|recibida))\b/i],
 ];
 
-const FUTURE_PATTERN = /\b(?:hamarosan|rovidesen|majd|fogjuk|fogjuk atadni|will|soon|going to|wird|werden|bientot|sera|se entregara|sera entregado)\b/i;
+const FUTURE_PATTERN = /\b(?:hamarosan|rovidesen|majd|fogjuk|atadjuk|will|soon|going to|wird|werden|bientot|sera|se entregara|sera entregado)\b/i;
 const NEGATED_PATTERN = /\b(?:nem|nincs|meg nem|not|no longer|has not|have not|nicht|kein|pas encore|ne pas|no se ha|todavia no)\b/i;
 const CONDITIONAL_PATTERN = /\b(?:ha|amennyiben|if|when possible|falls|wenn|si|lorsque)\b/i;
 const COMPLETED_PATTERN = /\b(?:megtortent|sikeresen|atadtuk|kezbesitve|completed|successful|handed|delivered|erfolgt|erfolgreich|zugestellt|effectue|livre|completado|entregado)\b/i;
