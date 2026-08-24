@@ -56,6 +56,12 @@ function normalize(value: string): string {
     .toLowerCase();
 }
 
+function stripTechnicalUrls(value: string): string {
+  return value
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\bwww\.\S+/gi, ' ');
+}
+
 function has(pattern: RegExp, value: string): boolean {
   return pattern.test(value);
 }
@@ -189,7 +195,7 @@ function modifiers(text: string, actions: UniversalSemanticAction[]): UniversalS
 export function evaluateUniversalCommerceSemanticsV1(
   document: EmailDocumentV1,
 ): UniversalCommerceSemanticsV1Result {
-  const visibleText = normalize(`${document.subject ?? ''}\n${document.text}`);
+  const visibleText = normalize(`${document.subject ?? ''}\n${stripTechnicalUrls(document.text)}`);
   const visible = visibleSemantics(visibleText);
   const technical = technicalSemantics(document.html);
   const allObjects = unique([...visible.objects, ...technical.objects]);
