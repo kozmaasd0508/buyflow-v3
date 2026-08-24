@@ -1,23 +1,13 @@
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
+import {
+  extractUniversalOrderIdentityV2,
+  normalizeUniversalOrderIdentifierV2,
+  UNIVERSAL_ORDER_IDENTITY_V2_VERSION,
+} from '../ingestion/universal-order-identity-v2.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION = 'universal-order-number-v4';
-
-function normalizeText(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\u00a0/g, ' ');
-}
-
-function normalizeIdentifier(value: string): string | null {
-  const cleaned = value.trim().replace(/^#+/, '').replace(/[.,;:)]+$/, '');
-  if (cleaned.length < 4 || cleaned.length > 40 || !/\d/.test(cleaned)) return null;
-  if (/https?:\/\/|www\./i.test(cleaned)) return null;
-  if (/[a-z0-9-]+\.[a-z]{2,}(?:\/|$)/i.test(cleaned)) return null;
-  return cleaned;
-}
+export const UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION = 'universal-order-number-v5';
 
 function key(value: string): string {
   return value.trim().toUpperCase();
@@ -26,54 +16,17 @@ function key(value: string): string {
 function collectExplicit(
   text: string,
   source: 'subject' | 'body',
-  confidence: number,
+  confidenceCap: number,
 ): EvidenceClaim<string>[] {
-  const normalized = normalizeText(text);
-  const patterns: Array<{ pattern: RegExp; qualifier: string }> = [
-    {
-      pattern: /\b(?:order|rendeles|megrendeles)(?:\s*(?:number|no\.?|nr\.?|id|szam|szama|azonosito|azonositoja|reference|ref\.?))\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
-      qualifier: 'explicit_order_label',
-    },
-    {
-      pattern: /\b(?:rendelesi|megrendelesi)\s+(?:szam(?:a)?|azonosito(?:ja)?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
-      qualifier: 'explicit_order_label',
-    },
-    {
-      pattern: /\b(?:order|rendeles|megrendeles)\s+(?:confirmation|visszaigazolas(?:a)?)\s*[:#-]?\s*#?([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
-      qualifier: 'explicit_order_confirmation_label',
-    },
-    {
-      pattern: /\b(?:order|rendeles|megrendeles)\s*#\s*([A-Z0-9][A-Z0-9._/-]{3,39})\b/gi,
-      qualifier: 'explicit_order_hash',
-    },
-    {
-      pattern: /\b([A-Z0-9][A-Z0-9._/-]{3,39})\s+szamu\s+(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\b/gi,
-      qualifier: 'explicit_numbered_order_phrase',
-    },
-    {
-      pattern: /\b([A-Z]{1,10}[A-Z0-9._/-]*\d[A-Z0-9._/-]{3,39})\s+(?:rendeles|megrendeles)(?:\s*\/\s*foglalas)?\b/gi,
-      qualifier: 'contextual_order_identifier',
-    },
-  ];
-
-  const claims: EvidenceClaim<string>[] = [];
-  for (const { pattern, qualifier } of patterns) {
-    pattern.lastIndex = 0;
-    for (const match of normalized.matchAll(pattern)) {
-      const value = normalizeIdentifier(match[1] ?? '');
-      if (!value) continue;
-      claims.push({
-        field: 'order_number',
-        value,
-        confidence: qualifier === 'contextual_order_identifier' ? confidence - 0.04 : confidence,
-        source,
-        extractorId: 'universal-order-number',
-        extractorVersion: UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION,
-        qualifiers: [qualifier],
-      });
-    }
-  }
-  return claims;
+  return extractUniversalOrderIdentityV2(text).map((match) => ({
+    field: 'order_number',
+    value: match.value,
+    confidence: Math.min(confidenceCap, match.confidence),
+    source,
+    extractorId: 'universal-order-number',
+    extractorVersion: UNIVERSAL_ORDER_NUMBER_EXTRACTOR_VERSION,
+    qualifiers: [match.qualifier, UNIVERSAL_ORDER_IDENTITY_V2_VERSION],
+  }));
 }
 
 function dedupe(claims: EvidenceClaim<string>[]): EvidenceClaim<string>[] {
@@ -96,7 +49,7 @@ export const universalOrderNumberExtractor: EvidenceExtractor = {
     ];
 
     for (const candidate of document.signals.orderNumbers) {
-      const value = normalizeIdentifier(candidate);
+      const value = normalizeUniversalOrderIdentifierV2(candidate);
       if (!value) continue;
       claims.push({
         field: 'order_number',
