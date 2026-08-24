@@ -2,6 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { collectCarrierTechnicalEvidenceV1 } from './technical-evidence-carrier-v1.js';
 import { collectPdfPaymentTechnicalEvidenceV1 } from './technical-evidence-pdf-payment-v1.js';
 import { collectPdfTechnicalEvidenceV1 } from './technical-evidence-pdf-v1.js';
+import { collectRegioTechnicalEvidenceV1 } from './technical-evidence-regio-v1.js';
 import { collectShopifyTechnicalEvidenceV1 } from './technical-evidence-shopify-v1.js';
 import { collectTechnicalEvidenceV12 } from './technical-evidence-v1-2.js';
 
@@ -33,6 +34,7 @@ export type TechnicalEvidenceV15Source =
   | 'url'
   | 'carrier_semantic'
   | 'shopify_semantic'
+  | 'merchant_semantic'
   | 'pdf';
 
 export interface TechnicalEvidenceV15 {
@@ -148,8 +150,8 @@ function dedupeEvidence(rows: TechnicalEvidenceV15[]): TechnicalEvidenceV15[] {
 /**
  * Executable TechnicalEvidence v1.5 composition.
  *
- * This is the first single entry point that actually runs the previously
- * measured v1.2 + carrier + native Shopify + PDF invoice + GLS COD PDF layers.
+ * Runs the v1.2 base plus provider-qualified carrier, native Shopify,
+ * reviewed merchant-semantic and deterministic PDF evidence layers.
  * It remains observational only: no DB writes, no identity decision, no
  * Purchase creation/linking and no AI call.
  *
@@ -161,20 +163,24 @@ export function collectTechnicalEvidenceV15(input: TechnicalEvidenceV15Input): T
   const base = collectTechnicalEvidenceV12(input.document);
   const carrier = collectCarrierTechnicalEvidenceV1(input.document);
   const shopify = collectShopifyTechnicalEvidenceV1(input.document);
+  const regio = collectRegioTechnicalEvidenceV1(input.document);
   assertShadowInvariant(base, 'v1.2');
   assertShadowInvariant(carrier, 'carrier');
   assertShadowInvariant(shopify, 'shopify');
+  assertShadowInvariant(regio, 'regio-siteengine');
 
   const rows: TechnicalEvidenceV15[] = [
     ...base.evidence.map(asV15),
     ...carrier.evidence.map(asV15),
     ...shopify.evidence.map(asV15),
+    ...regio.evidence.map(asV15),
   ];
 
   const ranExtractors: TechnicalEvidenceV15ExtractorRun[] = [
     ...base.ranExtractors.map((run) => ({ id: run.id, version: run.version, evidenceCount: run.evidenceCount })),
     { id: 'carrier-semantic-evidence-v1', version: '1.0.0', evidenceCount: carrier.evidence.length },
     { id: 'shopify-semantic-evidence-v1', version: '1.0.0', evidenceCount: shopify.evidence.length },
+    { id: 'regio-siteengine-evidence-v1', version: '1.0.0', evidenceCount: regio.evidence.length },
   ];
 
   const pdfAttachments = (input.pdfAttachments ?? [])
