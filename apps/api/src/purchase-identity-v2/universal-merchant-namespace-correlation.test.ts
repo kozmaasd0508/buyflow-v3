@@ -19,6 +19,7 @@ function commerceEvent(input: {
   orderId: string;
   sourceRole?: CanonicalEvent['sourceRole'];
   invoiceId?: string | null;
+  creationAuthority?: CanonicalEvent['purchaseCreationAuthority'];
 }): CanonicalEvent {
   const event: CanonicalEvent = {
     eventId: input.id,
@@ -51,12 +52,14 @@ function commerceEvent(input: {
     platformMerchantId: null,
     sellerMerchantId: null,
     conflicts: [],
+    purchaseCreationAuthority: input.creationAuthority ?? (input.type === 'order_created' ? 'authorized' : 'none'),
+    purchaseCreationReasons: [],
   };
   event.merchantNamespace = deriveMerchantSenderNamespace(event);
   return event;
 }
 
-test('unknown merchant order creates Purchase inside exact safe sender namespace', () => {
+test('unknown merchant order creates Purchase inside exact safe sender namespace only with upstream authority', () => {
   const graph = new PurchaseIdentityGraph(EMPTY);
   const created = graph.applyEvent(commerceEvent({
     id: 'order-a',
@@ -69,6 +72,21 @@ test('unknown merchant order creates Purchase inside exact safe sender namespace
   assert.equal(created.snapshot.purchases.length, 1);
   assert.equal(created.snapshot.purchases[0]?.canonicalMerchantId, null);
   assert.equal(created.snapshot.orders[0]?.merchantNamespace, 'sender-domain:orders.never-seen-shop.hu');
+});
+
+test('unknown merchant order without upstream creation authority stays REVIEW', () => {
+  const graph = new PurchaseIdentityGraph(EMPTY);
+  const result = graph.applyEvent(commerceEvent({
+    id: 'order-review',
+    type: 'order_created',
+    senderDomain: 'orders.never-seen-shop.hu',
+    orderId: 'AB-9918274',
+    creationAuthority: 'review',
+  }));
+
+  assert.equal(result.decision.kind, 'REVIEW');
+  assert.equal(result.mutated, false);
+  assert.equal(result.snapshot.purchases.length, 0);
 });
 
 test('same unknown merchant plus same order id links invoice to the existing Purchase', () => {
