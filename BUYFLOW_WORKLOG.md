@@ -2,6 +2,62 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-23 — TechnicalEvidence Blind Holdout v1 freeze
+
+- TechnicalEvidence candidate logic is frozen at commit `df221aa42856179c3c1b0b9e94d5d364b4ac7048`, timestamp/cutoff `2026-08-23T21:58:12Z` (`2026-08-23 23:58:12 Europe/Budapest`).
+- Added `protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V1-2026-08-23.md` after the candidate freeze; protocol/evaluation-only changes do not alter the frozen evidence logic.
+- Only messages received strictly after the cutoff may enter the first TechnicalEvidence Blind Holdout v1. Selection is mailbox-first and parser-blind; TechnicalEvidence/Extraction v2/legacy/Identity Graph/AI output cannot be used to select cases.
+- Immediate Gmail ID-only preflight after the cutoff returned **0 eligible messages**. No candidate subject/body/raw MIME was inspected. The cutoff was NOT moved backward to manufacture a sample.
+- No TechnicalEvidence extractor/provider/PDF/carrier/Shopify rule may change before the first frozen blind prediction. If evidence logic changes, the blind set must version forward.
+- Ground truth must be annotated from source content before TechnicalEvidence predictions are viewed. Repo-safe bundles may contain only opaque case ids + GT states/values; raw Gmail identifiers/content stay private.
+- Blind gate explicitly treats unsafe identity authority as critical: untyped `id/ids/code/ref`, Shopify fingerprint-only lifecycle, future shipment as current state, pre-advice as physical shipment, QR pickup code as tracking, carrier-less tracking hard merge, or contradictory hard ids merged instead of REVIEW.
+- Current state remains shadow-only: 0 production writes, 0 AI, no production parser/DB/Identity Graph cutover.
+
+## 2026-08-23 — TechnicalEvidence v1.4/v1.5 deep-layer expansion
+
+- PR #256 remains open on `codex/technical-evidence-shadow-v1`; production parser, DB and Purchase Identity Graph decision authority remain untouched. Shadow invariants remain 0 writes / 0 AI.
+- v1.4 added deterministic PDF invoice evidence, authenticated DPD lifecycle/parcel semantics, authenticated FOXPOST lifecycle/dual-id semantics, provider-qualified GLS COD receipt PDF evidence, and QR preflight.
+- Same ten-family development slice progressed from v1.2 commerce/event/hard-id **6/10 / 3/10 / 4/10** to v1.4 **9/10 / 6/10 / 7/10**. Extended with GLS COD receipt: **10/11 / 7/11 / 8/11**.
+- FOXPOST QR preflight proved the QR payload is pickup/opening code, not parcel identity; generic QR-to-tracking extraction is explicitly rejected.
+- Shopify preflight found two independent native Shopify order-confirmation merchant families with the same transport + transactional DOM + explicit order-reference stack. Added `technical-evidence-shopify-v1.ts` and fail-closed regressions.
+- Shopify v1.5 requires native `mailer.shopify.com` relay + independent Shopify auth/message evidence + standard transactional order DOM + explicit current-message order id. Shopify CDN/CSS alone, merchant custom/SES mail, and Shopify account/security mail grant no lifecycle authority.
+- Order confirmation now has two-independent-merchant evidence. Native shipment/delivery is retained with a narrower one-independent-lifecycle-family qualifier. Shopify tracking stays without carrier namespace and cannot hard-merge until carrier namespace is independently resolved.
+- Development projection on the same original ten families is now commerce-specific **10/10**, explicit event **7/10**, merchant-scoped/namespaced identifier **8/10**. Extended 11-family slice: **11/11 / 8/11 / 9/11**. These are development coverage figures, not blind accuracy/precision/recall.
+- Report: `protocols/TECHNICAL-EVIDENCE-SHOPIFY-DEVELOPMENT-PREFLIGHT-2026-08-23.md`.
+- Full repository CI/typecheck has NOT been claimed for this non-main-targeting PR. Next unbiased gate is a completely fresh frozen holdout before any further tuning or production authority.
+
+## 2026-08-23 — TechnicalEvidence v1.1/v1.2 broad development measurement
+
+- PR #256 remains open and mergeable on `codex/technical-evidence-shadow-v1`; still shadow-only, 0 production writes, 0 AI, no runtime/DB/Identity Graph wiring.
+- Same six already-reviewed Gmail cases: v1 -> v1.1 commerce-specific technical coverage **3/6 -> 6/6**, explicit event **2/6 -> 6/6**, hard identifier **1/6 -> 3/6**. v1.1 added exact composite template tags plus strict current-message English machine labels/lifecycle semantics.
+- Broader ten-case development slice covers WooCommerce, UNAS, Shopify, GLS, MPL, FOXPOST, DPD, Billingo, Számlázz.hu and merchant-invoice/PDF families. v1.1 broad result: commerce-specific **3/10**, event **2/10**, hard identifier **1/10**.
+- v1.2 added audited platform/provider semantics without weakening global matching: WooCommerce multi-primitive order identity, UNAS exact generator-action discrimination, Shopify multi-signal platform fingerprint, official Posta tracking `ids` alias, and dedicated `X-Szamlazz-Invoice` evidence.
+- Broad v1.2 development remeasurement: commerce-specific **6/10**, explicit event **3/10**, hard identifier **4/10**; auth/transport remains 10/10. These are development coverage figures, not blind accuracy claims.
+- Safety regressions explicitly reject generic `ID`, `Reference`, `ids`, `code` and `ref` interpretations outside typed/provider-qualified contexts; Shopify platform evidence grants no lifecycle authority; WooCommerce order table grants identity but no event authority.
+- Remaining high-value technical gaps: FOXPOST dual-id/QR/redirect semantics, DPD authenticated template semantics, PDF TechnicalEvidence, and only then stronger Shopify notification-type discrimination if stable machine evidence is proven.
+- Measurement docs: `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V11-2026-08-23.md`, `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V11-2026-08-23.md`, `protocols/TECHNICAL-EVIDENCE-BROAD-DEVELOPMENT-MEASUREMENT-V12-2026-08-23.md`.
+
+## 2026-08-23 — TechnicalEvidence v1 Real Gmail development measurement
+
+- PR #256 gained a privacy-safe side-by-side measurement harness: `technical-evidence-real-gmail-measurement-v1.ts` plus regression coverage.
+- Six already-reviewed RAW Gmail development cases were preflighted: Sportvision order, GymBeam sent/invoice, Express One processing/out-for-delivery/delivered.
+- Current TechnicalEvidence v1 result: auth/transport evidence 6/6, commerce-specific technical evidence 3/6, hard identifier evidence 1/6, explicit event evidence 2/6, explicit tracking evidence 1/6, JSON-LD 0/6 in this slice.
+- Positive signals: Sportvision HTML title -> order event; Express One delivered `trackingNr` URL -> tracking identity; GymBeam invoice HTML title -> invoice event.
+- Measurement exposed generic gaps before any cutover: composite `order-sent` / `order-invoice` provider tags are not fully mapped, and alternate English machine semantics (`shipment ID`, `air waybill`, delivery lifecycle wording) are not yet parsed.
+- Conclusion: provenance architecture is useful but v1 is not broad enough to claim recall improvement. Keep shadow-only; next step is TechnicalEvidence v1.1 machine-semantic expansion and rerun against the same development GT.
+- Detailed report: `protocols/TECHNICAL-EVIDENCE-REAL-GMAIL-MEASUREMENT-V1-2026-08-23.md`.
+- Safety unchanged: 0 AI, 0 production writes, no DB migration, no production parser/Identity Graph cutover, no raw private email values in repo outputs.
+
+## 2026-08-23 — TechnicalEvidence v1 multi-layer shadow foundation
+
+- PR #256 opened from `codex/technical-evidence-shadow-v1` onto `codex/mailgun-inbound-shadow-v3`.
+- Added a separate TechnicalEvidence v1 observational lane with exact field-level provenance (`source`, `sourcePath`, extractor id/version, confidence, qualifiers) without changing the frozen Extraction Engine v2 or Purchase Identity Graph v2.
+- First extractor families: semantic headers/authentication headers, URL query/path identifiers, HTML title/class/id/data/alternate-text semantics, and JSON-LD/schema.org fields.
+- Added privacy-reduced summary output; raw TechnicalEvidence is explicitly not for persistence/logging.
+- Regressions cover independent multi-layer evidence for order identity/event, invoice header, tracking URL, WooCommerce fingerprint, carrier alt text, JSON-LD merchant/product/amount/currency, malformed JSON/URL fail-safe behavior, input immutability, 0 writes and 0 AI.
+- Isolated strict TypeScript (`strict + noUncheckedIndexedAccess`) compile PASS and isolated runtime smoke PASS. Full repo CI has not run because the repository CI workflow triggers only for `main` pushes/PRs.
+- PR #256 is mergeable. No DB migration, no runtime wiring, no production parser change, no automatic identity/merge authority.
+
 ## 2026-08-20 — Frozen v6 blind holdout and scoped provider fixes
 
 - Gmail v6 holdout frozen before audit implementation: 50 commerce + 50 hard noise; prior v4/v5 labels excluded.
@@ -11,7 +67,7 @@
 - PR #191 added five provider-scoped rules requiring exact sender/domain plus explicit lifecycle evidence, with positive and fail-closed negative tests. Frozen fixtures and broad generic matching were unchanged.
 - Exact merged shadow head and live Render commit: `2f8e3e2d39c8e9e94fce9cf671a47d0e401a48ce`.
 - Live v6 regression: **TP 50 / FN 0 / FP 0 / TN 50**, precision 100%, recall 100%, 100/100 coverage, 0 writes, 0 AI.
-- GitHub Actions did not publish checks for PRs #190/#191; exact Render commit verification plus the read-only live audit are recorded.
+- GitHub Actions did not publish checks for PRs #190/#191; exact Render commit verification plus the read-only audit are recorded.
 - The v6 set is now regression evidence; use a newly frozen holdout for any next unbiased generalization gate.
 
 ## 2026-08-20 — Frozen v5 blind holdout and scoped provider fixes
@@ -34,59 +90,6 @@
 - Exact privacy-safe fingerprint comparison: Manna 2 -> 2, Scitec 1 -> 1, Zákány 1 -> 1, Vitál-Kolor 2 -> 1 (quoted reply removed, original retained); reviewed ABOUT YOU and both unsafe strong non-acceptance families disappeared.
 - No DB writes, production registry use, automatic Purchase writes or protocol activation. Generic unknown-merchant order evidence remains REVIEW/shadow-only with `would_write=false`.
 - Release gate: final PR #147 CI -> merge -> exact main CI -> exact Render smoke.
-
-## 2026-08-15 — Gyerekjatekbolt failure/cancel + Szidibox/MPL recovery
-
-- Reviewed the remaining second-Gmail REVIEW/unlinked backlog and prioritized real commerce clusters over obvious subscription/promo/noise.
-- Gyerekjatekbolt order `535574` already had the correct deterministic lifecycle rules in current main. Targeted 30-day rerun: 5 checked / 4 processed / 1 REVIEW / 0 unlinked / 0 writes / AI 0.
-- Final `535574`: `payment_status=failed`, `current_state=cancelled`, `cancelled_at=2026-08-04 11:21:36+00`, paid_at null, no Shipment. The standalone retry-payment-link email intentionally remains REVIEW.
-- Inspected four real McDonald's payment-summary emails. Each uses a short 4-digit restaurant/POS order number and explicitly says the email is only an order summary; no separate receipt email was found. Because those IDs can repeat and current uniqueness is merchant-domain + order-number, the cluster remains REVIEW. Follow-up architecture: POS/local-order identity using location/time/provider identity rather than globally trusting the 4-digit number.
-- Found Szidibox order `SO-2024-30411`: historical Purchase already existed but incorrectly used `merchant_domain=gmail.com`; merchant sends from `szidibox@gmail.com`, message contains `kartonshop.hu`, and MPL carrier chain uses tracking `PB9S650307180`.
-- PR #80 / main `3d53c3cefb61d9c2452cb9f677214fc32c0cf22d`: added deterministic MPL lifecycle and public-mailbox safety. Exact `kozponti.ertesites@posta.hu`; shipped/out-for-delivery/ready-for-pickup states; tracking/parcel-sender/COD extraction; MPL slug normalization; narrow Szidibox packing anchor as `shipment_created`; generic public-mailbox Purchase creation now stays REVIEW. PR CI #429, main CI #430, exact Render smoke #324 passed.
-- First live Szidibox rerun correctly reparsed merchant packing as `shipment_created`, but exposed two real gaps: carrier bridge used the packing timestamp as physical `shipped_at`, and Nylas flattened MPL labels prevented the new parser from replacing legacy carrier results.
-- PR #81 / main `5139fda8bcad1f743aef37b49340bef93ca446e4`: `shipment_created` anchors can no longer define physical shipped time; first physical carrier event does. MPL parser now handles line-oriented and flattened Nylas text. PR CI #433, main CI #434, exact Render smoke #328 passed.
-- Final MPL targeted rerun: 3 checked / 3 processed / 0 REVIEW / 0 unlinked / AI 0. All three carrier sources now use `deterministic-lifecycle-v1`, confidence 0.995, COD 26,390 HUF, parcel sender Szidibox Karton Kft.; phases `shipped -> out_for_delivery -> ready_for_pickup`.
-- PR #82 / main `e320ac5593f95f6535c97b865f569c9d7bbde181`: canonicalized bridged MPL display name from raw `mpl` to `MPL`. PR CI #435, main CI #436, exact Render smoke #330 passed.
-- Guarded historical repair updated exactly one Purchase and one Shipment. Final Purchase `24b05d2e-be2c-4ea8-9836-befce30b4ddd`: merchant domain `kartonshop.hu`, legal name Szidibox Karton Kft., 26,388 HUF COD, expected carrier MPL, state `ready_for_pickup`, shipped_at `2026-07-23 14:44:56+00`, delivered_at null.
-- Final Shipment `f6ed4ca1-7750-4d48-99ee-3ece45a5213c`: MPL / `mpl`, tracking `PB9S650307180`, `ready_for_pickup`, shipped_at `2026-07-23 14:44:56+00`, last_event_at `2026-07-24 11:46:49+00`, delivered_at null, 4 shipment source links.
-- Integrity: exactly 1 Purchase and 1 Shipment for this identity. Historical AI count remains 98; no new AI calls. Backlog reduced to **35 REVIEW + 13 unlinked**.
-- Safety follow-up: new unverified Gmail/Outlook/Yahoo merchant evidence cannot create a Purchase. A future verified public-mailbox merchant identity layer is still needed before legitimate public-mailbox merchants can auto-create new Purchases; until then REVIEW is intentional.
-
-## 2026-08-15 — Second Gmail blind test + All In Packaging historical recovery
-
-- PRs #73–#76 completed second-Gmail OAuth and repeat 7/30/90 scan reliability.
-- Second Gmail 7-day scan: 34 checked / 30 ignored / 4 REVIEW / 0 unlinked / AI 0.
-- Real 30-day blind scan: 149 checked / 130 ignored / 14 REVIEW / 5 unlinked / 0 Purchase / 0 Shipment / 0 Document writes / AI 0; zero false automatic Purchases.
-- All In Packaging order `148810` exposed a real false negative with merchant dispatch + merchant invoice + GLS chain but no order-created mail.
-- PR #77 was closed unmerged after CI exposed a safety issue; existing stricter historical architecture was used instead.
-- PR #78 / runtime `ebe06d3ee8c6c203bc363ed58eb992670758f667`: extended strict 90-day historical reconstruction for carrier-only tracking with merchant/domain anchors, exact negative proof, multi-event carrier corroboration, parcel sender, COD+currency and uniqueness checks.
-- Live `148810`: exactly 1 Purchase (16,670 HUF COD, GLS) and 1 Shipment tracking `3219379224`; second no-COD GLS tracking `3219379250` remains unlinked. AI 0.
-
-## 2026-08-15 — Multi-Gmail + deterministic scan UI
-
-- PR #69 added all connected Gmail accounts and per-account 7/30/90 full deterministic scans.
-- PR #70 fixed repeated same-window UI polling.
-- PR #71 added exact Render deployment ancestry verification.
-- PR #75 repaired server-only OAuth-state DB grants; PR #76 repaired repeat scan enqueue/reset semantics.
-- Browser-first remains the project rule; no APK for routine backend/UI changes.
-
-## 2026-08-15 — Key deterministic recognition milestones
-
-- Gate.shop / Foxpost: ready-for-pickup lifecycle and exact carrier bridge.
-- Scitec / BioTechUSA / Foxpost: generic Hungarian confirmation + verified legal-entity COD bridge + Foxpost lifecycle.
-- Ars Una / GLS: exact sender, parcel sender + COD bridge, correct physical shipment semantics.
-- Allegro / HappyBox24: order lifecycle, DPD tracking and seller invoice.
-- GymBeam / Express One: processing enrichment, strict missing-purchase reconstruction, terminal receipt payment resolution and outbound pickup-noise exclusion.
-- Promotional/repurchase hard negatives and Limone deterministic merchant parsing remain active.
-- Three Barion payment-only rows intentionally remain unlinked without merchant corroboration.
-
-## 2026-08-14/15 — Foundation / security / frontend
-
-- Persistent `AGENTS.md`, `BUYFLOW_HANDOFF.md`, `BUYFLOW_WORKLOG.md` allow new chats to continue from GitHub.
-- Auth reset and SECURITY DEFINER hardening completed.
-- Browser frontend supports purchase list/detail, current state/next action, timeline, product edit/remove, order/tracking/documents, targeted recovery and multi-Gmail scans.
-- AI/Flow audit UI stays hidden while AI is disabled.
-- Remaining UI gaps: top-level lifecycle label/count alignment, Warranty, Return/refund, Felfedezés.
 
 ## Maintenance format
 
