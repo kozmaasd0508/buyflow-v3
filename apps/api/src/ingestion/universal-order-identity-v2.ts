@@ -65,7 +65,7 @@ const PATTERNS: Array<{
     confidence: 0.995,
   },
   {
-    pattern: new RegExp(`(?:^|\\b)(?:a\\s+)?#?${IDENTIFIER}\\s+szamu\\s+${ORDER_WORD}\\b`, 'gi'),
+    pattern: new RegExp(`(?:^|\\b)(?:a\\s+)?#?${IDENTIFIER}\\s+(?:szamu|sz\\.?)\\s+${ORDER_WORD}\\b`, 'gi'),
     qualifier: 'numbered_order_phrase',
     confidence: 0.995,
   },
