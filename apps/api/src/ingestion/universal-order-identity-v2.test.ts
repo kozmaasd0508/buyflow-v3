@@ -25,7 +25,8 @@ test('recognizes explicit order identity labels across common languages', () => 
   assert.equal(first('Megrendelés azonosítója: 85701-284761'), '85701-284761');
   assert.equal(first('Order number: AB-9918274'), 'AB-9918274');
   assert.equal(first('Bestellung Nr.: DE-778812'), 'DE-778812');
-  assert.equal(first('Commande numéro: FR-778812'), null);
+  assert.equal(first('Commande numéro: FR-778812'), 'FR-778812');
+  assert.equal(first('Pedido numero: ES-778812'), 'ES-778812');
 });
 
 test('does not reinterpret invoice or account numbers as order identity', () => {
