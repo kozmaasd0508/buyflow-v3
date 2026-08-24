@@ -15,6 +15,7 @@ import {
 import { runShoppingEmailIdentityShadow } from '../purchase-identity-v2/shopping-email-shadow-runtime.js';
 import { isShadowOnlyParserVersion } from './automatic-write-gate.js';
 import { evaluateShoppingEmailPurpose } from './shopping-email-purpose-gate.js';
+import { runUniversalCommerceGrammarShadow } from './universal-commerce-grammar-shadow.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
 export type NormalizedInboundStatus =
@@ -133,6 +134,7 @@ export function planNormalizedInboundEmail(input: {
     };
   }
 
+  const universalGrammarShadow = runUniversalCommerceGrammarShadow(input.email);
   const deterministicInput = normalizedEmailToDeterministicInput(input.email);
   const parsed = parseNormalizedDeterministicEmail(input.email);
   if (!parsed) {
@@ -144,6 +146,7 @@ export function planNormalizedInboundEmail(input: {
       structuredResult: {
         ...diagnostic,
         reason: 'no_deterministic_match',
+        universal_commerce_grammar_shadow: universalGrammarShadow,
       },
       validatedResult: null,
       validationStatus: 'review',
@@ -178,6 +181,7 @@ export function planNormalizedInboundEmail(input: {
     parser_reasons: parsed.reasons,
     ingestion_source: 'normalized-inbound',
     shopping_email_purpose: 'shopping_only',
+    universal_commerce_grammar_shadow: universalGrammarShadow,
     ...(input.security ? { gateway_security: securitySnapshot(input.security) } : {}),
     ...(shadowOnly ? { shadow_only: true, would_write: false } : {}),
   };
