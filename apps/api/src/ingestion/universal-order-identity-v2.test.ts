@@ -13,6 +13,7 @@ test('recognizes Hungarian identifier-before-order inflections', () => {
   assert.equal(first('#1000579244 számú rendeléshez tartozó számla'), '1000579244');
   assert.equal(first('A #44609 számú rendelést megkaptuk.'), '44609');
   assert.equal(first('Számla a 90458062 számú megrendeléshez.'), '90458062');
+  assert.equal(first('A 75031507 sz. rendelés átadása a szállítónak'), '75031507');
 });
 
 test('recognizes order noun before hash or strong bare identifier', () => {
@@ -33,6 +34,7 @@ test('does not reinterpret invoice or account numbers as order identity', () => 
   assert.equal(first('Számlaszám: 8021932478'), null);
   assert.equal(first('Ügyfélazonosító: 690000194345'), null);
   assert.equal(first('SimplePay tranzakció azonosító: 1234567890'), null);
+  assert.equal(first('75031507 sz. számla'), null);
 });
 
 test('bare short year/date-like values are not treated as order ids', () => {
