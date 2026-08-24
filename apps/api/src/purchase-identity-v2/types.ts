@@ -21,6 +21,8 @@ export type SourceRole =
   | 'customer'
   | 'unknown';
 
+export type PurchaseCreationAuthority = 'authorized' | 'review' | 'none';
+
 export interface EvidenceProvenance {
   field: string;
   source:
@@ -74,6 +76,12 @@ export interface CanonicalEvent {
    * before a Merchant Identity Registry entry exists.
    */
   merchantNamespace?: string | null;
+  /**
+   * Upstream semantic permission for creating a new Purchase. The graph may
+   * use this for unknown merchants but must never infer it from order id alone.
+   */
+  purchaseCreationAuthority?: PurchaseCreationAuthority;
+  purchaseCreationReasons?: string[];
   orderIdRaw: string | null;
   orderIdNormalized: string | null;
   trackingIdRaw: string | null;
