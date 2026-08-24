@@ -4,9 +4,14 @@ import {
   evaluateUniversalCommerceGrammarV1,
   UNIVERSAL_COMMERCE_GRAMMAR_V1_VERSION,
 } from '../ingestion/universal-commerce-grammar-v1.js';
+import {
+  evaluateUniversalCommerceSemanticsV1,
+  UNIVERSAL_COMMERCE_SEMANTICS_V1_VERSION,
+} from '../ingestion/universal-commerce-semantics-v1.js';
 
 export interface UniversalCommerceGrammarShadowDiagnostic {
   version: typeof UNIVERSAL_COMMERCE_GRAMMAR_V1_VERSION;
+  semanticVersion: typeof UNIVERSAL_COMMERCE_SEMANTICS_V1_VERSION;
   mode: 'shadow';
   productionWrites: 0;
   aiCalls: 0;
@@ -16,6 +21,12 @@ export interface UniversalCommerceGrammarShadowDiagnostic {
   confidence: number;
   evidence: string[];
   negativeEvidence: string[];
+  semanticObjects: string[];
+  semanticActions: string[];
+  semanticModifiers: string[];
+  semanticVisibleEvidence: string[];
+  semanticTechnicalEvidence: string[];
+  semanticCorroboratedEvidence: string[];
 }
 
 /**
@@ -25,10 +36,13 @@ export interface UniversalCommerceGrammarShadowDiagnostic {
 export function runUniversalCommerceGrammarShadow(
   email: NormalizedEmail,
 ): UniversalCommerceGrammarShadowDiagnostic {
-  const result = evaluateUniversalCommerceGrammarV1(buildEmailDocumentV1(email));
+  const document = buildEmailDocumentV1(email);
+  const result = evaluateUniversalCommerceGrammarV1(document);
+  const semantics = evaluateUniversalCommerceSemanticsV1(document);
 
   return {
     version: UNIVERSAL_COMMERCE_GRAMMAR_V1_VERSION,
+    semanticVersion: UNIVERSAL_COMMERCE_SEMANTICS_V1_VERSION,
     mode: 'shadow',
     productionWrites: 0,
     aiCalls: 0,
@@ -38,5 +52,11 @@ export function runUniversalCommerceGrammarShadow(
     confidence: result.confidence,
     evidence: result.positiveEvidence,
     negativeEvidence: result.negativeEvidence,
+    semanticObjects: semantics.objects,
+    semanticActions: semantics.actions,
+    semanticModifiers: semantics.modifiers,
+    semanticVisibleEvidence: semantics.visibleEvidence,
+    semanticTechnicalEvidence: semantics.technicalEvidence,
+    semanticCorroboratedEvidence: semantics.corroboratedEvidence,
   };
 }
