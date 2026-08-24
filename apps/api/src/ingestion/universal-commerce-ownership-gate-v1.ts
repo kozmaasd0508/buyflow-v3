@@ -37,6 +37,20 @@ function hasCommerceStructure(document: EmailDocumentV1): boolean {
   ].filter(Boolean).length >= 2;
 }
 
+function hasIndependentOrderStructure(
+  document: EmailDocumentV1,
+  observation: UniversalCommerceObservationV11,
+): boolean {
+  if (hasCommerceStructure(document)) return true;
+
+  // The composition layer may have already established independent structure
+  // from two different evidence layers (visible ORDER meaning + technical ORDER
+  // structure). Reuse only those named, privacy-safe proofs; never infer from
+  // confidence alone.
+  return observation.evidence.includes('commerce_structure')
+    || observation.evidence.includes('cross_layer_order_corroboration');
+}
+
 function decision(
   observation: UniversalCommerceObservationV11,
   purchaseAuthority: PurchaseAuthorityV1,
@@ -79,7 +93,7 @@ export function evaluateUniversalCommerceOwnershipV1(
     if (!hasOrderIdentity) {
       return decision(observation, 'review', ['missing_hard_order_identity']);
     }
-    if (!hasCommerceStructure(document)) {
+    if (!hasIndependentOrderStructure(document, observation)) {
       return decision(observation, 'review', ['insufficient_independent_commerce_structure']);
     }
     if (senderIsPublicMailbox) {
