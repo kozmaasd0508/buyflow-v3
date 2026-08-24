@@ -247,6 +247,9 @@ export function buildEmailDocumentV1(email: NormalizedEmail): EmailDocumentV1 {
   const orderNumbers = uniqueMatches(normalized, [
     /\b(?:order|rendeles|megrendeles)(?:\s*(?:number|no\.?|id|szam|szama|azonosito))?\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/gi,
     /\ba\s+([a-z0-9][a-z0-9._/-]{4,39})\s+szamu\s+(?:rendelesed|megrendelesed|rendeles|megrendeles)\b/gi,
+    /\b(?:rendeles|megrendeles)\s+visszaigazolasa\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/gi,
+    /\border\s+confirmation\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/gi,
+    /\b(?:bestellbestatigung|confirmation de commande|confirmacion de pedido)\s*[:#-]?\s*#?([a-z0-9][a-z0-9._/-]{3,39})\b/gi,
   ]);
   const trackingNumbers = uniqueMatches(normalized, [
     /\b(?:tracking(?:\s*(?:number|no\.?|id))?|nyomkovetesi\s*(?:szam|azonosito)|csomag(?:szam|azonosito))\s*[:#-]?\s*([a-z0-9][a-z0-9-]{7,31})\b/gi,
