@@ -1,5 +1,6 @@
 import type { EmailDocumentV1 } from './email-document.js';
 import type { UniversalCommerceObservationV11 } from './universal-commerce-composition-v1-1.js';
+import { extractUniversalOrderIdentityV2 } from './universal-order-identity-v2.js';
 
 export const UNIVERSAL_COMMERCE_OWNERSHIP_GATE_V1_VERSION = 'universal-commerce-ownership-gate-v1';
 
@@ -51,6 +52,15 @@ function hasIndependentOrderStructure(
     || observation.evidence.includes('cross_layer_order_corroboration');
 }
 
+function hardOrderIdentityValues(document: EmailDocumentV1): string[] {
+  const values = new Set<string>();
+  for (const value of document.signals.orderNumbers) values.add(value.toUpperCase());
+  for (const match of extractUniversalOrderIdentityV2(`${document.subject ?? ''}\n${document.text}`)) {
+    values.add(match.value.toUpperCase());
+  }
+  return [...values];
+}
+
 function decision(
   observation: UniversalCommerceObservationV11,
   purchaseAuthority: PurchaseAuthorityV1,
@@ -84,7 +94,7 @@ export function evaluateUniversalCommerceOwnershipV1(
     return decision(observation, 'review', ['semantic_event_requires_review']);
   }
 
-  const hasOrderIdentity = document.signals.orderNumbers.length > 0;
+  const hasOrderIdentity = hardOrderIdentityValues(document).length > 0;
   const hasTrackingIdentity = document.signals.trackingNumbers.length > 0;
   const senderDomain = document.sender.primaryDomain?.toLowerCase() ?? null;
   const senderIsPublicMailbox = senderDomain ? PUBLIC_MAILBOX_DOMAINS.has(senderDomain) : true;
