@@ -54,13 +54,16 @@ export function decideCorrelation(
     };
   }
 
+  const knownMerchantCreationAuthorized = Boolean(event.merchantId);
+  const unknownMerchantCreationAuthorized =
+    event.sourceRole === 'merchant' &&
+    Boolean(event.merchantNamespace) &&
+    event.purchaseCreationAuthority === 'authorized';
+
   const hasSafeNewPurchaseAnchor =
     event.eventType === 'order_created' &&
     Boolean(event.orderIdNormalized ?? event.orderIdRaw) &&
-    (
-      Boolean(event.merchantId) ||
-      (event.sourceRole === 'merchant' && Boolean(event.merchantNamespace))
-    );
+    (knownMerchantCreationAuthorized || unknownMerchantCreationAuthorized);
 
   const onlySameNumberOtherNamespaces =
     candidates.length > 0 &&
@@ -68,6 +71,14 @@ export function decideCorrelation(
 
   if (hasSafeNewPurchaseAnchor && (candidates.length === 0 || onlySameNumberOtherNamespaces)) {
     return { kind: 'NEW_PURCHASE', reasons: [] };
+  }
+
+  if (event.eventType === 'order_created' && event.purchaseCreationAuthority === 'review') {
+    return {
+      kind: 'REVIEW',
+      candidatePurchaseIds: candidates.sort(),
+      reasons: candidates.flatMap((purchaseId) => evidenceByPurchase.get(purchaseId) ?? []),
+    };
   }
 
   if (candidates.length > 0) {
