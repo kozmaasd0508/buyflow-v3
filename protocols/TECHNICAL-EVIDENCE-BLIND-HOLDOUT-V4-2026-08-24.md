@@ -17,6 +17,14 @@ Only messages whose received timestamp is strictly after this cutoff may enter t
 
 Blind Holdout v4 supersedes v3 because MPL R1 changed evidence/authority behavior after the v3 freeze. No v3 post-cutoff candidate content was inspected before this version increment.
 
+## First mailbox preflight
+
+A Gmail **ID-only** query was run strictly after the v4 cutoff using the cutoff epoch. Result:
+
+**0 post-cutoff messages**
+
+No post-v4 candidate message content, parser output or TechnicalEvidence prediction was inspected. The v4 unseen pool therefore remains untouched.
+
 ## Executable collector under test
 
 Entry point:
