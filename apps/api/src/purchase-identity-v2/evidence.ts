@@ -5,6 +5,7 @@ import {
   paymentIdentityKey,
   shipmentIdentityKey,
 } from './identity-keys.js';
+import { merchantNamespaceOrderKey } from './candidate-index.js';
 import { normalizeStableIdentifier } from './identifier-normalizer.js';
 
 export function buildEvidenceForCandidate(
@@ -31,19 +32,36 @@ export function buildEvidenceForCandidate(
     : [];
   if (matchingOrders.length > 0) {
     const eventKey = orderIdentityKey(event.userId, event.merchantId, orderId);
-    const namespaceMatch = Boolean(eventKey && matchingOrders.some(
+    const canonicalNamespaceMatch = Boolean(eventKey && matchingOrders.some(
       (item) => orderIdentityKey(event.userId, item.merchantId, item.orderId) === eventKey,
     ));
+    const senderNamespaceKey = merchantNamespaceOrderKey(event.userId, event.merchantNamespace, orderId);
+    const senderNamespaceMatch = event.sourceRole === 'merchant' && Boolean(senderNamespaceKey && matchingOrders.some(
+      (item) => merchantNamespaceOrderKey(event.userId, item.merchantNamespace, item.orderId) === senderNamespaceKey,
+    ));
+    const hardNamespaceMatch = canonicalNamespaceMatch || senderNamespaceMatch;
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: event.eventType === 'invoice_created' ? 'INVOICE_ORDER_ID_EXACT' : 'ORDER_ID_EXACT',
-      strength: namespaceMatch ? 'hard' : 'soft',
-      score: namespaceMatch ? 100 : 35,
-      explanation: namespaceMatch
-        ? `exact order identity ${eventKey}`
-        : `order id ${orderId} matched without canonical merchant namespace agreement`,
+      strength: hardNamespaceMatch ? 'hard' : 'soft',
+      score: hardNamespaceMatch ? 100 : 35,
+      explanation: canonicalNamespaceMatch
+        ? `exact canonical order identity ${eventKey}`
+        : senderNamespaceMatch
+          ? `exact order identity inside merchant sender namespace ${senderNamespaceKey}`
+          : `order id ${orderId} matched without merchant namespace agreement`,
     });
+    if (senderNamespaceMatch) {
+      edges.push({
+        sourceEventId: event.eventId,
+        candidatePurchaseId: purchaseId,
+        evidenceType: 'MERCHANT_NAMESPACE_MATCH',
+        strength: 'soft',
+        score: 25,
+        explanation: `merchant sender namespace ${event.merchantNamespace}`,
+      });
+    }
   }
 
   const matchingShipments = trackingId
