@@ -50,7 +50,8 @@ export class PurchaseIdentityGraph {
     }
 
     if (decision.kind === 'NEW_PURCHASE') {
-      const purchaseId = `purchase:${event.userId}:${event.merchantId}:${normalizeStableIdentifier(event.orderIdNormalized ?? event.orderIdRaw)}`;
+      const merchantIdentity = event.merchantId ?? event.merchantNamespace ?? 'unknown';
+      const purchaseId = `purchase:${event.userId}:${merchantIdentity}:${normalizeStableIdentifier(event.orderIdNormalized ?? event.orderIdRaw)}`;
       if (!this.snapshotState.purchases.some((item) => item.purchaseId === purchaseId)) {
         const orderIdentityId = `order:${purchaseId}:primary`;
         this.snapshotState.purchases.push({
@@ -64,6 +65,7 @@ export class PurchaseIdentityGraph {
           orderIdentityId,
           purchaseId,
           merchantId: event.merchantId,
+          merchantNamespace: event.merchantNamespace ?? null,
           orderId: event.orderIdNormalized ?? event.orderIdRaw ?? '',
           relation: 'primary',
           parentOrderIdentityId: null,
@@ -104,6 +106,7 @@ export class PurchaseIdentityGraph {
         orderIdentityId: `order:${parent.purchaseId}:${childId}`,
         purchaseId: parent.purchaseId,
         merchantId: hint.merchantId ?? parent.merchantId,
+        merchantNamespace: parent.merchantNamespace ?? null,
         orderId: hint.childOrderId,
         relation: hint.relation,
         parentOrderIdentityId: parent.orderIdentityId,
