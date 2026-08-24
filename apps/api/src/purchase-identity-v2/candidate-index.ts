@@ -9,6 +9,7 @@ import { normalizeStableIdentifier } from './identifier-normalizer.js';
 
 export interface CandidateIndex {
   orderExact: Map<string, Set<string>>;
+  orderMerchantNamespaceExact: Map<string, Set<string>>;
   orderDiscovery: Map<string, Set<string>>;
   trackingExact: Map<string, Set<string>>;
   trackingDiscovery: Map<string, Set<string>>;
@@ -29,9 +30,21 @@ function discoveryKey(userId: string, id: string | null): string | null {
   return id ? `${encodeURIComponent(userId.trim().toLowerCase())}:${id}` : null;
 }
 
+export function merchantNamespaceOrderKey(
+  userId: string,
+  merchantNamespace: string | null | undefined,
+  orderId: string | null,
+): string | null {
+  const normalizedNamespace = merchantNamespace?.trim().toLowerCase() || null;
+  const normalizedOrder = normalizeStableIdentifier(orderId);
+  if (!normalizedNamespace || !normalizedOrder) return null;
+  return `${encodeURIComponent(userId.trim().toLowerCase())}:${encodeURIComponent(normalizedNamespace)}:${normalizedOrder}`;
+}
+
 export function buildCandidateIndex(snapshot: PurchaseIdentitySnapshot): CandidateIndex {
   const index: CandidateIndex = {
     orderExact: new Map(),
+    orderMerchantNamespaceExact: new Map(),
     orderDiscovery: new Map(),
     trackingExact: new Map(),
     trackingDiscovery: new Map(),
@@ -48,6 +61,7 @@ export function buildCandidateIndex(snapshot: PurchaseIdentitySnapshot): Candida
     if (!purchase) continue;
     const normalizedOrder = normalizeStableIdentifier(order.orderId);
     add(index.orderExact, orderIdentityKey(purchase.userId, order.merchantId, order.orderId), order.purchaseId);
+    add(index.orderMerchantNamespaceExact, merchantNamespaceOrderKey(purchase.userId, order.merchantNamespace, order.orderId), order.purchaseId);
     add(index.orderDiscovery, discoveryKey(purchase.userId, normalizedOrder), order.purchaseId);
   }
 
@@ -87,6 +101,7 @@ export function candidatePurchaseIds(event: CanonicalEvent, index: CandidateInde
 
   const keys: Array<[Map<string, Set<string>>, string | null]> = [
     [index.orderExact, orderIdentityKey(event.userId, event.merchantId, order)],
+    [index.orderMerchantNamespaceExact, merchantNamespaceOrderKey(event.userId, event.merchantNamespace, order)],
     [index.orderDiscovery, discoveryKey(event.userId, order)],
     [index.trackingExact, shipmentIdentityKey(event.userId, event.carrierId, tracking)],
     [index.trackingDiscovery, discoveryKey(event.userId, tracking)],
