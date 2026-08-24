@@ -1,6 +1,10 @@
 import type { NormalizedEmail } from '../email/types.js';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
 import {
+  composeUniversalCommerceEventV1,
+  UNIVERSAL_COMMERCE_COMPOSITION_V1_VERSION,
+} from '../ingestion/universal-commerce-composition-v1.js';
+import {
   evaluateUniversalCommerceGrammarV1,
   UNIVERSAL_COMMERCE_GRAMMAR_V1_VERSION,
 } from '../ingestion/universal-commerce-grammar-v1.js';
@@ -12,6 +16,7 @@ import {
 export interface UniversalCommerceGrammarShadowDiagnostic {
   version: typeof UNIVERSAL_COMMERCE_GRAMMAR_V1_VERSION;
   semanticVersion: typeof UNIVERSAL_COMMERCE_SEMANTICS_V1_VERSION;
+  compositionVersion: typeof UNIVERSAL_COMMERCE_COMPOSITION_V1_VERSION;
   mode: 'shadow';
   productionWrites: 0;
   aiCalls: 0;
@@ -27,6 +32,12 @@ export interface UniversalCommerceGrammarShadowDiagnostic {
   semanticVisibleEvidence: string[];
   semanticTechnicalEvidence: string[];
   semanticCorroboratedEvidence: string[];
+  compositionLifecycle: string;
+  compositionEventType: string | null;
+  compositionDecision: 'actionable' | 'review' | 'blocked';
+  compositionConfidence: number;
+  compositionEvidence: string[];
+  compositionNegativeEvidence: string[];
 }
 
 /**
@@ -39,10 +50,12 @@ export function runUniversalCommerceGrammarShadow(
   const document = buildEmailDocumentV1(email);
   const result = evaluateUniversalCommerceGrammarV1(document);
   const semantics = evaluateUniversalCommerceSemanticsV1(document);
+  const composition = composeUniversalCommerceEventV1(document, semantics);
 
   return {
     version: UNIVERSAL_COMMERCE_GRAMMAR_V1_VERSION,
     semanticVersion: UNIVERSAL_COMMERCE_SEMANTICS_V1_VERSION,
+    compositionVersion: UNIVERSAL_COMMERCE_COMPOSITION_V1_VERSION,
     mode: 'shadow',
     productionWrites: 0,
     aiCalls: 0,
@@ -58,5 +71,11 @@ export function runUniversalCommerceGrammarShadow(
     semanticVisibleEvidence: semantics.visibleEvidence,
     semanticTechnicalEvidence: semantics.technicalEvidence,
     semanticCorroboratedEvidence: semantics.corroboratedEvidence,
+    compositionLifecycle: composition.lifecycle,
+    compositionEventType: composition.eventType,
+    compositionDecision: composition.decision,
+    compositionConfidence: composition.confidence,
+    compositionEvidence: composition.evidence,
+    compositionNegativeEvidence: composition.negativeEvidence,
   };
 }
