@@ -224,11 +224,82 @@ function extractPacketa(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[]
   return rows;
 }
 
+function normalizeMplTracking(value: string): string | null {
+  const normalized = value.toUpperCase().replace(/[\s-]+/g, '');
+  return /^[A-Z0-9]{8,40}$/.test(normalized) && /\d/.test(normalized) ? normalized : null;
+}
+
+function mplTrackingUrlIds(document: EmailDocumentV1): Set<string> {
+  const ids = new Set<string>();
+  const combined = `${document.text ?? ''}\n${document.html ?? ''}`.replace(/&amp;/gi, '&');
+  const pattern = /https?:\/\/(?:www\.)?posta\.hu\/(?:ugyfelszolgalat\/nyomkovetes|nyomkovetes\/nyitooldal)\?[^\s"'<>]*\bids=([A-Z0-9-]{8,48})/gi;
+  for (const match of combined.matchAll(pattern)) {
+    const normalized = normalizeMplTracking(match[1] ?? '');
+    if (normalized) ids.add(normalized);
+  }
+  return ids;
+}
+
+function extractMpl(document: EmailDocumentV1): CarrierTechnicalEvidenceV1[] {
+  // Exact direct Posta channel only. Merchant relays and lookalikes cannot inherit MPL lifecycle authority.
+  if (normalizedDomain(document.sender.primaryDomain) !== 'posta.hu') return [];
+
+  const rows: CarrierTechnicalEvidenceV1[] = [];
+  const subject = document.subject ?? '';
+  const text = document.text ?? '';
+  pushCarrier(rows, 'MPL', 'MPL', 0.995, 'mpl_sender_domain');
+
+  const labelled = new Set<string>();
+  for (const match of text.matchAll(/\b(?:Nemzetközi\s+)?Küldeményazonosító:\s*([A-Z0-9-]{8,48})\b/gi)) {
+    const normalized = normalizeMplTracking(match[1] ?? '');
+    if (normalized) labelled.add(normalized);
+  }
+  const urlIds = mplTrackingUrlIds(document);
+  const corroborated = [...labelled].filter((id) => urlIds.has(id));
+  const uniqueCorroborated = new Set(corroborated);
+  const tracking = uniqueCorroborated.size === 1 ? [...uniqueCorroborated][0] : undefined;
+
+  if (tracking) {
+    pushTracking(
+      rows,
+      tracking,
+      'MPL',
+      'body.mpl.corroborated_tracking_identifier',
+      ['mpl_sender_domain', 'explicit_mpl_identifier_label', 'official_posta_tracking_endpoint'],
+      0.997,
+    );
+  }
+
+  // Lifecycle authority is intentionally narrower than provider identity: require
+  // one exact observed buyer-inbound template AND the same-message corroborated MPL id.
+  if (!tracking) return rows;
+
+  if (/^Csomagküldemény$/i.test(subject)
+    && /csomagküldeményt\s+adtak\s+fel\s+Önnek/i.test(text)) {
+    pushEvent(rows, 'shipment', 'subject+body.mpl.pre_advice', ['mpl_buyer_inbound', 'mpl_pre_advice_template'], 0.995);
+  } else if (/^Küldeménye\s+megérkezett\s+az\s+országba$/i.test(subject)
+    && /nemzetközi\s+csomagja\s+megérkezett\s+Magyarországra/i.test(text)
+    && /kézbesítünk\s+Önnek/i.test(text)) {
+    pushEvent(rows, 'shipment', 'subject+body.mpl.in_country', ['mpl_buyer_inbound', 'mpl_in_country_template'], 0.995);
+  } else if (/^Csomagja\s+a\s+kézbesítőnél\s+van$/i.test(subject)
+    && /csomagját\s+kézbesítőnk\s+átvette/i.test(text)
+    && /mai\s+napon\s+megkíséreljük[\s\S]{0,100}kézbesíteni/i.test(text)) {
+    pushEvent(rows, 'shipment', 'subject+body.mpl.out_for_delivery', ['mpl_buyer_inbound', 'mpl_out_for_delivery_template'], 0.997);
+  } else if (/^Csomagja\s+érkezett$/i.test(subject)
+    && /küldeménye\s+átvehető\s+az\s+alábbi\s+postán/i.test(text)) {
+    pushEvent(rows, 'shipment', 'subject+body.mpl.ready_for_pickup', ['mpl_buyer_inbound', 'mpl_ready_for_pickup_template'], 0.997);
+  }
+
+  // Deliberately no automatic DELIVERED rule for generic MPL feedback/survey mail in R1.
+  return rows;
+}
+
 export function collectCarrierTechnicalEvidenceV1(document: EmailDocumentV1): CarrierTechnicalEvidenceV1Result {
   const evidence = [
     ...extractDpd(document),
     ...extractFoxpost(document),
     ...extractPacketa(document),
+    ...extractMpl(document),
   ];
 
   return {
