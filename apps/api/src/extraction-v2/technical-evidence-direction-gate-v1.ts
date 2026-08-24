@@ -131,6 +131,10 @@ function classifyDirection(
     [/\bshipped by our partner\b/, 'parcel_shipped_by_partner_to_recipient'],
     [/\bcsomagod\b[\s\S]{0,140}\bpartnerunk atadta reszunkre\b/, 'merchant_handed_parcel_to_carrier'],
     [/\bcsomagod\b[\s\S]{0,120}\braktarunkban van\b/, 'parcel_in_carrier_warehouse_for_recipient'],
+    [/\bcsomagkuldemenyt adtak fel onnek\b/, 'mpl_parcel_posted_to_recipient'],
+    [/\bnemzetkozi csomagja megerkezett magyarorszagra\b[\s\S]{0,180}\bkezbesitunk onnek\b/, 'mpl_parcel_arrived_in_country_for_recipient'],
+    [/\bcsomagjat kezbesitonk atvette\b[\s\S]{0,180}\bmai napon megkisereljuk\b[\s\S]{0,120}\bkezbesiteni\b/, 'mpl_out_for_delivery_to_recipient'],
+    [/\bkuldemenye atveheto az alabbi postan\b/, 'mpl_ready_for_pickup_by_recipient'],
   ];
   for (const [pattern, reason] of buyerInboundPatterns) {
     if (pattern.test(combined)) {
