@@ -8,229 +8,149 @@
 **TechnicalEvidence branch:** `codex/technical-evidence-shadow-v1`  
 **Development PR:** #256 -> `codex/mailgun-inbound-shadow-v3`
 
-## CURRENT TECHNICALEVIDENCE STATE
+## CURRENT STATE
 
-TechnicalEvidence remains a separate observational lane.
+TechnicalEvidence is still shadow/read-only:
+- 0 production writes
+- 0 AI/LLM calls
+- no DB mutation
+- no automatic Purchase/Shipment create/link
+- no Purchase Identity Graph decision authority
+- ambiguity/conflict -> REVIEW/PENDING
+- hard identifiers remain namespace-scoped
 
-It is NOT wired into production extraction authority, Purchase Identity Graph decision authority, DB mutation, Purchase/Shipment creation, or automatic linking.
-
-Hard invariants:
-
-- `mode=shadow`
-- production writes = 0
-- AI/LLM calls = 0
-- namespace-scoped hard identity
-- contradictions / ambiguity -> REVIEW/PENDING
-- raw private Gmail values never committed to repo-safe reports
-- lifecycle-only carrier evidence cannot create a Purchase
-
-## EXECUTABLE STACK
-
-Primary collector:
-
+Executable collector:
 `apps/api/src/extraction-v2/technical-evidence-v1-5.ts`
 
-Purchase-authority safety layer:
-
+Purchase-direction safety gate:
 `apps/api/src/extraction-v2/technical-evidence-direction-gate-v1.ts`
 
-Main provider/carrier layer:
+Current evidence families include:
+- base v1.2 layers
+- DPD / FOXPOST / Packeta / MPL
+- native Shopify
+- REGIO / SiteEngine R1
+- deterministic PDF invoice
+- GLS COD PDF evidence
 
-`apps/api/src/extraction-v2/technical-evidence-carrier-v1.ts`
-
-Current carrier semantics include authenticated/provider-qualified DPD, FOXPOST, Packeta and MPL evidence.
-
-Required conceptual path:
-
-```text
-EmailDocument / deterministic attachment text
-  -> collectTechnicalEvidenceV15
-  -> applyTechnicalEvidenceDirectionGateV1
-  -> downstream hard identity + conflict gates
-  -> shadow decision only
-```
-
-Never:
-
-```text
-technical cue -> automatic Purchase write/link
-```
-
-## RETRO-200 — CURRENT REGRESSION BASELINE
+## RETRO-200 CURRENT BASELINE
 
 Frozen historical set:
+- total 200
+- commerce 33
+- noise 167
 
-- total: **200**
-- commerce ground truth: **33**
-- noise ground truth: **167**
+Historical regression only, NOT fresh blind accuracy.
 
-This is historical regression evidence, NOT fresh blind accuracy.
+Progress:
+- before Direction Gate: actionable TP 5 / FP 10
+- after Direction Gate: actionable TP 5 / FP 0
+- after Packeta R1: actionable TP 6 / FP 0
+- after MPL R1: actionable TP 14 / FP 0
+- after REGIO R1: actionable **TP 17 / FP 0 / FN 16 / TN 167**
 
-### Before Direction Gate v1
+Current actionable precision on this frozen historical set: **100.00%**  
+Current actionable recall: **51.52%**  
+Current actionable F1: **68.00%**
 
-Actionable TechnicalEvidence:
-
-- TP 5 / FP 10 / FN 28 / TN 157
-- precision 33.33%
-- recall 15.15%
-
-### Direction Gate v1
-
-Known actionable false positives: **10 -> 0**.
-
-After Direction Gate v1:
-
-- Event: TP 2 / FP 0 / FN 31 / TN 167
-- Actionable: TP 5 / FP 0 / FN 28 / TN 167
-
-### After Packeta R1
-
-- Event: TP 3 / FP 0 / FN 30 / TN 167
-- Actionable: TP 6 / FP 0 / FN 27 / TN 167
-
-### After MPL R1 — CURRENT
-
-- Event: **TP 11 / FP 0 / FN 22 / TN 167**
-- Event precision **100.00%**, recall **33.33%**, F1 **50.00%**
-- Actionable: **TP 14 / FP 0 / FN 19 / TN 167**
-- Actionable precision **100.00%**, recall **42.42%**, F1 **59.57%**
-
-Known event/actionable FP gate remains **0** on this historical benchmark.
+Current event result after REGIO R1:
+- TP **14**
+- FP **0**
+- FN **19**
+- TN **167**
+- recall **42.42%**
 
 Report:
+`protocols/TECHNICAL-EVIDENCE-RETRO-HOLDOUT-V1-V15-DIRECTION-GATE-V1-PACKETA-R1-MPL-R1-REGIO-R1-2026-08-24.md`
 
-`protocols/TECHNICAL-EVIDENCE-RETRO-HOLDOUT-V1-V15-DIRECTION-GATE-V1-PACKETA-R1-MPL-R1-2026-08-24.md`
+## REGIO / SITEENGINE R1 — COMPLETED
 
-## MPL R1 — COMPLETED
+Implementation:
+- `apps/api/src/extraction-v2/technical-evidence-regio-v1.ts`
+- wired into `technical-evidence-v1-5.ts`
+- tests: `technical-evidence-regio-v1.test.ts`
 
-Implementation commits:
+Strict authority contract:
+- exact `regiojatek.hu` direct sender
+- matching DKIM pass
+- SiteEngine(c)GreyMatter MIME boundary
+- one unique `WS .../...` order identity
+- subject/body order identity must agree
+- event needs one reviewed current REGIO lifecycle template
 
-- MPL carrier semantics: `0695b6f4ff820f47d1bb0bed6fa0691653854c02`
-- MPL buyer direction: `5317370c74751f534c2899e71849d809ef5a83dc`
-- MPL regression suite: `58f234c63aa873794767eaaed58892a78b309298`
+Supported R1 lifecycle:
+- order received/recorded -> order_created
+- fulfillment processing started -> order_processing
+- explicit carrier handoff -> shipment
 
-Regression test file:
+Important negative:
+a real REGIO survey from the same authenticated sender/platform and with the same order number remains non-actionable because it has no supported current lifecycle event.
 
-`apps/api/src/extraction-v2/technical-evidence-mpl-r1.test.ts`
+Frozen retro cardinality:
+- Mixed: 3 REGIO transactional messages
+- NoiseEnriched: 0 REGIO messages
+- all 3 were previous false negatives and are now recognized
+- 197/200 cases are outside the REGIO sender scope
 
-### MPL authority contract
+## CI — REGIO R1 GREEN
 
-- exact direct `posta.hu` sender domain only;
-- hard tracking namespace `MPL`;
-- hard tracking requires explicit `Küldeményazonosító:` / `Nemzetközi Küldeményazonosító:` plus matching official Posta `ids=` tracking URL;
-- supported official endpoints:
-  - `/ugyfelszolgalat/nyomkovetes?ids=...`
-  - `/nyomkovetes/nyitooldal?ids=...`
-- one primitive alone -> no hard tracking;
-- conflicting label/URL identity -> no hard tracking;
-- event additionally requires hard MPL identity plus one reviewed buyer-inbound lifecycle template;
-- supported R1 event families:
-  - parcel posted to recipient / pre-advice;
-  - parcel arrived in country;
-  - courier-today / out-for-delivery;
-  - ready for pickup at post office;
-- courier-today and pickup-ready are never DELIVERED;
-- satisfaction survey/feedback gets no R1 event authority.
-
-### Retro impact cardinality
-
-Frozen retro labels contained:
-
-- Mixed 100: 10 direct `posta.hu`
-- NoiseEnriched 100: 0 direct `posta.hu`
-
-Of the 10 direct Posta messages:
-
-- 8 are supported reviewed buyer lifecycle templates;
-- 2 are satisfaction surveys and remain non-actionable in the observed samples because they lack the explicit labelled ID required for hard tracking and have no R1 event rule.
-
-190/200 cases are excluded from the MPL adapter by sender gate.
-
-## CI — MPL R1 GREEN
-
-CI-only draft PR #262 was reopened only to execute the repository workflow and then closed **without merge**.
-
-GitHub Actions run **#958** validated exact head:
-
-`58f234c63aa873794767eaaed58892a78b309298`
+GitHub Actions run **#960** validated exact code/test head:
+`e13ef747f8f622cf88d5c9f647c324a197569522`
 
 PASS:
-
 - API typecheck
-- API tests **1108/1108**
+- API tests **1114/1114 PASS**
 - API build
 - mobile typecheck
 - mobile web build
 
-Dependency-hygiene note remains: `npm install` reports **3 high-severity audit findings**. Separate release-hardening item.
+CI-only draft PR #262 was closed **without merge**.
 
-## ACTIVE FUTURE BLIND FREEZE — V4
+Dependency-hygiene note remains: npm install reports 3 high-severity audit findings; separate release-hardening task.
+
+## ACTIVE FUTURE BLIND FREEZE — V5
 
 Protocol:
+`protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V5-2026-08-24.md`
 
-`protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V4-2026-08-24.md`
-
-Exact evidence/code-test snapshot:
-
-`58f234c63aa873794767eaaed58892a78b309298`
+Exact freeze snapshot:
+`e13ef747f8f622cf88d5c9f647c324a197569522`
 
 Cutoff:
+`2026-08-24T18:23:26Z`  
+`2026-08-24 20:23:26 Europe/Budapest`
 
-`2026-08-24T18:09:49Z`  
-`2026-08-24 20:09:49 Europe/Budapest`
+First Gmail ID-only preflight strictly after cutoff: **0 messages**.
+No post-cutoff content or predictions were inspected. v5 is untouched.
 
-First post-cutoff Gmail **ID-only** preflight returned:
+Any evidence/authority logic change before first v5 prediction requires another blind version.
 
-**0 messages**
+## IMPORTANT SAFETY RULES
 
-No post-v4 candidate content or predictions have been inspected. v4 remains untouched.
-
-Any future evidence-producing or authority-affecting change before the first v4 prediction requires a new blind freeze version.
-
-## IMPORTANT SAFETY FINDINGS RETAINED
-
-- DPD opaque myDPD `code=` is not tracking identity.
-- FOXPOST pre-advice may establish parcel identity but does not prove physical shipment.
-- FOXPOST/Packeta identifiers remain separate namespaces.
-- QR payload from reviewed FOXPOST mail was pickup/opening code, not tracking identity.
-- PDF filename alone is not proof.
-- platform/provider identity alone cannot establish merchant identity.
-- Shopify assets alone cannot grant lifecycle authority.
-- future/conditional fulfillment wording cannot prove current lifecycle state.
-- OUT_FOR_DELIVERY / READY_FOR_PICKUP are not DELIVERED.
-- payment-only evidence cannot create Purchase authority.
-- generic `id`, `ids`, `code`, `ref` are non-authoritative without typed provider context.
-- direct-carrier seller-outbound/return-to-seller evidence is blocked from buyer-Purchase authority.
+- seller-outbound / return-to-seller evidence cannot influence buyer Purchase authority
+- future shipment wording is not current physical shipment
+- pre-advice is not physical progress
+- READY_FOR_PICKUP is not DELIVERED
+- survey/review mail is not lifecycle proof by itself
+- provider/platform identity alone is insufficient
+- generic id/ids/code/ref is not hard identity without typed context
+- conflicting hard identifiers never auto-merge
+- payment-only evidence cannot create Purchase authority
+- QR pickup/action code is not generic tracking
 
 ## NEXT HIGH-VALUE TASK
 
-If continuing historical recall tuning, next candidates from the frozen manual replay include:
+Next historical recall target if continuing tuning:
+1. authenticated Shoprenter families
+2. Temu
+3. Vinted
+4. AWGifts
+5. Frogpack/PPL
 
-1. REGIO / `SiteEngine(c)GreyMatter` lifecycle;
-2. authenticated Shoprenter transport families;
-3. Temu provider identifiers + carrier lifecycle;
-4. Vinted buyer logistics;
-5. AWGifts custom order/shipment semantics;
-6. Frogpack/PPL shipment + invoice families.
-
-Required sequence remains:
-
-```text
-provider-qualified evidence
--> negative/adversarial tests
--> executable v1.5 coverage
--> retro-200 impact
--> FP must remain 0
--> full CI
--> new blind freeze version
-```
-
-If preserving v4 for true unseen evaluation, do not tune evidence logic further; collect only genuinely new post-cutoff messages and annotate human GT before exposing predictions.
+Required sequence:
+provider-qualified evidence -> negative tests -> retro-200 impact -> FP must remain 0 -> full CI -> new blind freeze.
 
 ## RESUME CONTRACT
 
 Minimal resume phrase:
-
 **Folytasd a BuyFlowot a GitHubból.**
-
-Do not ask the user to retell project history when GitHub state can recover it.
