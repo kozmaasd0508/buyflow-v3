@@ -51,7 +51,10 @@ export function decideCorrelation(
   const hasSafeNewPurchaseAnchor =
     event.eventType === 'order_created' &&
     Boolean(event.orderIdNormalized ?? event.orderIdRaw) &&
-    Boolean(event.merchantId);
+    (
+      Boolean(event.merchantId) ||
+      (event.sourceRole === 'merchant' && Boolean(event.merchantNamespace))
+    );
 
   if (hasSafeNewPurchaseAnchor && candidates.length === 0) {
     return { kind: 'NEW_PURCHASE', reasons: [] };
