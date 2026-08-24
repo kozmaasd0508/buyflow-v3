@@ -12,13 +12,17 @@ import {
   normalizedEmailToDeterministicInput,
   parseNormalizedDeterministicEmail,
 } from '../ingestion/normalized-email-deterministic.js';
+import { runShoppingEmailIdentityShadow } from '../purchase-identity-v2/shopping-email-shadow-runtime.js';
 import { isShadowOnlyParserVersion } from './automatic-write-gate.js';
+import { evaluateShoppingEmailPurpose } from './shopping-email-purpose-gate.js';
+import { runUniversalCommerceGrammarShadow } from './universal-commerce-grammar-shadow.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
 export type NormalizedInboundStatus =
   | 'unknown_recipient'
   | 'security_rejected'
   | 'quarantined'
+  | 'non_commerce_ignored'
   | 'review'
   | 'recognized';
 
@@ -72,6 +76,7 @@ function baseDiagnostic(input: {
     schema_version: 1,
     ingestion_source: 'normalized-inbound',
     provider: input.email.provider,
+    shopping_email_purpose: 'shopping_only',
     ...(input.security ? { gateway_security: securitySnapshot(input.security) } : {}),
   };
 }
@@ -112,6 +117,24 @@ export function planNormalizedInboundEmail(input: {
     };
   }
 
+  const purpose = evaluateShoppingEmailPurpose(input.email);
+  if (purpose.action === 'ignore') {
+    return {
+      status: 'non_commerce_ignored',
+      processingStatus: 'ignored',
+      classification: 'non_commerce',
+      parserVersion: null,
+      structuredResult: {
+        ...diagnostic,
+        reason: purpose.reason,
+        stored: false,
+      },
+      validatedResult: null,
+      validationStatus: null,
+    };
+  }
+
+  const universalGrammarShadow = runUniversalCommerceGrammarShadow(input.email);
   const deterministicInput = normalizedEmailToDeterministicInput(input.email);
   const parsed = parseNormalizedDeterministicEmail(input.email);
   if (!parsed) {
@@ -123,6 +146,7 @@ export function planNormalizedInboundEmail(input: {
       structuredResult: {
         ...diagnostic,
         reason: 'no_deterministic_match',
+        universal_commerce_grammar_shadow: universalGrammarShadow,
       },
       validatedResult: null,
       validationStatus: 'review',
@@ -156,6 +180,8 @@ export function planNormalizedInboundEmail(input: {
     parser_version: parsed.parserVersion,
     parser_reasons: parsed.reasons,
     ingestion_source: 'normalized-inbound',
+    shopping_email_purpose: 'shopping_only',
+    universal_commerce_grammar_shadow: universalGrammarShadow,
     ...(input.security ? { gateway_security: securitySnapshot(input.security) } : {}),
     ...(shadowOnly ? { shadow_only: true, would_write: false } : {}),
   };
@@ -165,6 +191,7 @@ export function planNormalizedInboundEmail(input: {
   validatedResult.parser_version = parsed.parserVersion;
   validatedResult.parser_reasons = parsed.reasons;
   validatedResult.ingestion_source = 'normalized-inbound';
+  validatedResult.shopping_email_purpose = 'shopping_only';
   if (input.security) validatedResult.gateway_security = securitySnapshot(input.security);
   if (parsed.shipmentPhase) validatedResult.shipment_phase = parsed.shipmentPhase;
   if (shadowOnly) {
@@ -232,6 +259,28 @@ export async function persistNormalizedInboundEmail(input: {
     };
   }
 
+  const plan = planNormalizedInboundEmail({
+    email: input.email,
+    security: input.security,
+  });
+
+  // Strongly proven non-shopping mail is deliberately not persisted. The
+  // BuyFlow address is a shopping inbox, not a general-purpose mailbox.
+  // Unknown mail is NOT handled here: it remains REVIEW and is persisted.
+  if (plan.status === 'non_commerce_ignored') {
+    return {
+      status: plan.status,
+      recipient,
+      classification: plan.classification,
+      parserVersion: null,
+      deduped: false,
+      purchaseWrites: 0,
+      shipmentWrites: 0,
+      documentWrites: 0,
+      aiCalls: 0,
+    };
+  }
+
   const { data: existing, error: existingError } = await db
     .from('source_emails')
     .select('id,classification,processing_status,validated_result')
@@ -259,10 +308,18 @@ export async function persistNormalizedInboundEmail(input: {
     };
   }
 
-  const plan = planNormalizedInboundEmail({
-    email: input.email,
-    security: input.security,
-  });
+  // The new Purchase Identity Graph runs only as a diagnostic observer here.
+  // It may read this user's existing purchase snapshot, but it cannot write to
+  // purchases, shipments, documents, or any graph table. Shadow failures are
+  // contained inside the diagnostic and never block normal inbound ingestion.
+  if (plan.status === 'review' || plan.status === 'recognized') {
+    plan.structuredResult.purchase_identity_shadow_v2 = await runShoppingEmailIdentityShadow({
+      db,
+      userId: recipient.userId,
+      email: input.email,
+    });
+  }
+
   const payload = sourceInsertPayload({
     email: input.email,
     recipient,

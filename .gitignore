@@ -6,3 +6,8 @@ dist/
 .DS_Store
 coverage/
 *.log
+
+# Real Gmail ground truth stays private and must never be committed.
+private-ground-truth/
+*.real-gmail-private.json
+*.real-gmail-private.eml
