@@ -65,13 +65,13 @@ const ORDER_CANCELLED_PATTERNS = [
 ];
 
 const DELIVERED_PATTERNS = [
-  /\b(?:csomag|kuldemeny|rendeles)\b.{0,70}\b(?:kezbesitve|atadasra kerult|atvette a cimzett)\b/i,
+  /\b(?:csomag(?:ja|jat|od|odat)?|kuldemeny(?:e|et|ed|edet)?|rendeles(?:ed|e|et)?)\b.{0,70}\b(?:kezbesitve|atadasra kerult|atvette a cimzett)\b/i,
   /\b(?:sikeresen kezbesitettuk|kezbesites megtortent|atvetel megtortent)\b/i,
   /\b(?:parcel|shipment|order)\b.{0,70}\b(?:delivered|delivery completed)\b/i,
 ];
 
 const OUT_FOR_DELIVERY_PATTERNS = [
-  /\b(?:csomag|kuldemeny)\b.{0,80}\b(?:kezbesitonel van|ma kezbesitjuk|mai napon kezbesit|kezbesites alatt)\b/i,
+  /\b(?:csomag(?:ja|jat|od|odat)?|kuldemeny(?:e|et|ed|edet)?)\b.{0,100}\b(?:kezbesitonel van|ma kezbesitjuk|mai napon kezbesit|kezbesites alatt|kezbesitonknel van)\b/i,
   /\b(?:out for delivery|with the courier for delivery)\b/i,
 ];
 
