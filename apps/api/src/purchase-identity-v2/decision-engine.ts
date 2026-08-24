@@ -7,6 +7,12 @@ function hardEdges(edges: EvidenceEdge[]) {
   return edges.filter((edge) => edge.strength === 'hard');
 }
 
+function onlyUnscopedOrderDiscovery(edges: EvidenceEdge[]): boolean {
+  return edges.length > 0 && edges.every((edge) =>
+    edge.strength === 'soft' && edge.evidenceType === 'ORDER_ID_EXACT'
+  );
+}
+
 export function decideCorrelation(
   event: CanonicalEvent,
   snapshot: PurchaseIdentitySnapshot,
@@ -56,7 +62,11 @@ export function decideCorrelation(
       (event.sourceRole === 'merchant' && Boolean(event.merchantNamespace))
     );
 
-  if (hasSafeNewPurchaseAnchor && candidates.length === 0) {
+  const onlySameNumberOtherNamespaces =
+    candidates.length > 0 &&
+    candidates.every((purchaseId) => onlyUnscopedOrderDiscovery(evidenceByPurchase.get(purchaseId) ?? []));
+
+  if (hasSafeNewPurchaseAnchor && (candidates.length === 0 || onlySameNumberOtherNamespaces)) {
     return { kind: 'NEW_PURCHASE', reasons: [] };
   }
 
