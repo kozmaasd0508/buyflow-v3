@@ -25,6 +25,11 @@ interface RelationPattern {
   childGroup: number;
 }
 
+interface ChildLabelPattern {
+  relation: OrderRelationKind;
+  pattern: RegExp;
+}
+
 export interface ExplicitOrderRelationExtractionResult {
   relation: ExplicitOrderRelation | null;
   conflicts: EvidenceConflict[];
@@ -38,6 +43,34 @@ const MARKER = '\\s*[:#-]?\\s*';
 function expression(parts: string, flags = 'gis'): RegExp {
   return new RegExp(parts, flags);
 }
+
+const PARENT_LABEL_PATTERNS: RegExp[] = [
+  expression(`\\b(?:original|parent)\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+  expression(`\\b(?:eredeti|szulo)\\s+${ORDER_LABEL}${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+];
+
+const CHILD_LABEL_PATTERNS: ChildLabelPattern[] = [
+  {
+    relation: 'replacement',
+    pattern: expression(`\\breplacement\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+  },
+  {
+    relation: 'replacement',
+    pattern: expression(`\\b(?:csere\\s*${ORDER_LABEL}|csererendeles)${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+  },
+  {
+    relation: 'split_child',
+    pattern: expression(`\\bsplit(?:\\s+child)?\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+  },
+  {
+    relation: 'split_child',
+    pattern: expression(`\\b(?:resz\\s*${ORDER_LABEL}|reszrendeles)${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+  },
+  {
+    relation: 'child',
+    pattern: expression(`\\bchild\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b`, 'i'),
+  },
+];
 
 const RELATION_PATTERNS: RelationPattern[] = [
   {
@@ -119,9 +152,60 @@ function cleanIdentifier(value: string): string {
   return value.trim().replace(/^#+/, '').replace(/[.,;:)}\]]+$/, '');
 }
 
+/**
+ * Explicit parent/child labels often arrive on separate lines. Pairing those
+ * labels independently prevents a broad global regex from hiding a second,
+ * conflicting parent for the same child order.
+ *
+ * The window is intentionally narrow and parent-first only. Child-first prose
+ * is handled by the explicit sentence patterns below, while this pass exists
+ * only for strongly labelled transactional layouts.
+ */
+function collectLabelledLinePairs(
+  normalizedText: string,
+  source: RelationCandidate['source'],
+): RelationCandidate[] {
+  const candidates: RelationCandidate[] = [];
+  const lines = normalizedText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  let lastParent: { raw: string; lineIndex: number } | null = null;
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex]!;
+
+    for (const pattern of PARENT_LABEL_PATTERNS) {
+      const match = pattern.exec(line);
+      if (!match) continue;
+      const parentRaw = cleanIdentifier(match[1] ?? '');
+      if (normalizeStableIdentifier(parentRaw)) {
+        lastParent = { raw: parentRaw, lineIndex };
+      }
+      break;
+    }
+
+    for (const definition of CHILD_LABEL_PATTERNS) {
+      const match = definition.pattern.exec(line);
+      if (!match || !lastParent) continue;
+      if (lineIndex - lastParent.lineIndex > 2) continue;
+
+      const childRaw = cleanIdentifier(match[1] ?? '');
+      if (!normalizeStableIdentifier(childRaw)) continue;
+      candidates.push({
+        relation: definition.relation,
+        parentRaw: lastParent.raw,
+        childRaw,
+        source,
+      });
+    }
+  }
+
+  return candidates;
+}
+
 function collectFromText(text: string, source: RelationCandidate['source']): RelationCandidate[] {
   const normalized = normalizeText(text);
-  const candidates: RelationCandidate[] = [];
+  const candidates: RelationCandidate[] = [
+    ...collectLabelledLinePairs(normalized, source),
+  ];
 
   for (const definition of RELATION_PATTERNS) {
     definition.pattern.lastIndex = 0;
