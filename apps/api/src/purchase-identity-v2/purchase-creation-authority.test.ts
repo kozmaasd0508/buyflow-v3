@@ -41,6 +41,38 @@ test('rich unknown merchant confirmation receives creation authority when no con
   assert.equal(result.authority, 'authorized');
 });
 
+test('generic Hungarian order details heading plus money is independent commerce structure', () => {
+  for (const heading of ['Rendelés részlete', 'Rendelés részletei', 'Megrendelés részletei']) {
+    const doc = document(`
+      <p>${heading}</p>
+      <p>Rendelés #AB-778812</p>
+      <p>Végösszeg: 12 990 Ft</p>
+    `);
+    const result = evaluatePurchaseCreationAuthority({
+      document: doc,
+      eventType: 'order_created',
+      sourceRole: 'merchant',
+      orderId: 'AB-778812',
+    });
+    assert.equal(result.authority, 'authorized', heading);
+  }
+});
+
+test('generic Hungarian order details heading alone is still insufficient structure', () => {
+  const doc = document(`
+    <p>Rendelés részletei</p>
+    <p>Rendelés #AB-778812</p>
+  `);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+  assert.ok(result.reasons.includes('insufficient_independent_commerce_structure'));
+});
+
 test('Hungarian automatic acknowledgement that denies contract formation is REVIEW', () => {
   const doc = document(`${richStructure}<p>Ez egy automata visszaigazolás a megrendelés leadásáról, nem jelenti a szerződés létrejöttét.</p>`);
   assert.equal(hasExplicitPurchaseNonAcceptance(doc), true);
