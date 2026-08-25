@@ -101,14 +101,11 @@ async function main() {
     throw new Error(`phase_e_100_frozen_selection_mismatch:${JSON.stringify({ rawCounts, uniqueCounts, uniqueTotal: selected.length })}`);
   }
 
-  // Fetch each message with headers so direct-provider authentication evidence is available.
   const hydrated: SelectedCase[] = [];
   for (const item of selected) {
     hydrated.push({ bucket: item.bucket, email: await provider.getMessage(item.email.providerMessageId) });
   }
 
-  // Replay oldest -> newest. Only promotion-eligible simulated mutations are carried forward,
-  // approximating the future controlled-write path while keeping this runner entirely in memory.
   hydrated.sort((a, b) => a.email.receivedAt.localeCompare(b.email.receivedAt));
 
   let snapshot = emptySnapshot();
@@ -122,9 +119,10 @@ async function main() {
   let promotionBucketViolations = 0;
 
   for (const item of hydrated) {
+    const document = buildEmailDocumentV1(item.email);
     const shadow = runPurchaseIdentityShadow({
       userId: 'phase-e-100-private-audit-user',
-      document: buildEmailDocumentV1(item.email),
+      document,
       snapshot,
       merchantResolver,
     });
@@ -145,7 +143,6 @@ async function main() {
     if (eligible && action === 'LINK_EVENT') eligibleLinks += 1;
     if (eligible && item.bucket === 'promotions') promotionBucketViolations += 1;
 
-    // Carry forward only decisions that Phase E itself says could be promoted.
     if (eligible && shadow.simulatedGraphMutated) snapshot = shadow.simulatedSnapshot;
 
     if (eligible || event || decisionKind === 'REVIEW' || decisionKind === 'PENDING') {
@@ -157,6 +154,23 @@ async function main() {
         eventType: event?.eventType ?? null,
         sourceRole: event?.sourceRole ?? null,
         decisionKind,
+        creationAuthority: event?.purchaseCreationAuthority ?? null,
+        creationReasons: event?.purchaseCreationReasons ?? [],
+        structure: {
+          hasHtml: Boolean(item.email.bodyHtml),
+          bodyLengthBand: document.text.length < 1000 ? 'lt1k' : document.text.length < 5000 ? '1k-5k' : document.text.length < 20000 ? '5k-20k' : 'gte20k',
+          orderSummarySections: document.sections.filter((section) => section.type === 'order_summary').length,
+          shippingSections: document.sections.filter((section) => section.type === 'shipping').length,
+          paymentSections: document.sections.filter((section) => section.type === 'payment').length,
+          invoiceSections: document.sections.filter((section) => section.type === 'invoice').length,
+          products: document.signals.products.length,
+          amounts: document.signals.amounts.length,
+          paymentMethods: document.signals.paymentMethods.length,
+          shippingMethods: document.signals.shippingMethods.length,
+          couriers: document.signals.couriers.length,
+        },
+        extractionStatus: shadow.extraction.status,
+        extractionConflictCount: shadow.extraction.conflicts.length,
         promotionEligible: eligible,
         promotionAction: action,
         promotionReasons: shadow.promotionReadiness.reasons,
@@ -172,7 +186,7 @@ async function main() {
   }
 
   const report = {
-    version: 'phase-e-100-real-gmail-blind-v1',
+    version: 'phase-e-100-real-gmail-blind-v1-diagnostic',
     mode: 'private-read-only-shadow',
     productionWrites: 0,
     aiCalls: 0,
@@ -195,7 +209,7 @@ async function main() {
     rows,
   };
 
-  console.log(`PHASE_E_100_REAL_GMAIL_BLIND_SCORE ${JSON.stringify(report)}`);
+  console.log(`PHASE_E_100_REAL_GMAIL_DIAGNOSTIC ${JSON.stringify(report)}`);
 
   if (promotionBucketViolations !== 0) {
     throw new Error(`phase_e_100_promotional_noise_unsafe:${promotionBucketViolations}`);
