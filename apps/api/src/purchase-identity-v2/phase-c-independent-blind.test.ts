@@ -7,7 +7,7 @@ import { PHASE_C_INDEPENDENT_BLIND_FIXTURES } from './phase-c-independent-blind-
 function document(subject: string, text: string): EmailDocumentV1 {
   return {
     schemaVersion: 1,
-    provider: 'blind-fixture',
+    provider: 'nylas',
     providerMessageId: 'blind-message',
     receivedAt: '2026-08-25T20:30:00.000Z',
     sender: {
