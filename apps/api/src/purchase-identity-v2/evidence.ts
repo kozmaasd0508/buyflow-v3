@@ -5,7 +5,7 @@ import {
   paymentIdentityKey,
   shipmentIdentityKey,
 } from './identity-keys.js';
-import { merchantNamespaceOrderKey } from './candidate-index.js';
+import { decoratedOrderReviewBase, merchantNamespaceOrderKey } from './candidate-index.js';
 import { normalizeStableIdentifier } from './identifier-normalizer.js';
 
 export function buildEvidenceForCandidate(
@@ -62,6 +62,31 @@ export function buildEvidenceForCandidate(
         explanation: `merchant sender namespace ${event.merchantNamespace}`,
       });
     }
+  }
+
+  const reviewIdentity = decoratedOrderReviewBase(orderId) ?? orderId;
+  const reviewNamespaceKey = event.sourceRole === 'merchant'
+    ? merchantNamespaceOrderKey(event.userId, event.merchantNamespace, reviewIdentity)
+    : null;
+  const decoratedReviewMatch = reviewNamespaceKey && orderId
+    ? orders.find((item) => {
+        const storedOrderId = normalizeStableIdentifier(item.orderId);
+        if (!storedOrderId || storedOrderId === orderId) return false;
+        const storedReviewIdentity = decoratedOrderReviewBase(storedOrderId) ?? storedOrderId;
+        return merchantNamespaceOrderKey(event.userId, item.merchantNamespace, storedReviewIdentity) === reviewNamespaceKey;
+      })
+    : undefined;
+
+  if (decoratedReviewMatch) {
+    const storedOrderId = normalizeStableIdentifier(decoratedReviewMatch.orderId);
+    edges.push({
+      sourceEventId: event.eventId,
+      candidatePurchaseId: purchaseId,
+      evidenceType: 'ORDER_ID_DECORATED_REVIEW_ALIAS',
+      strength: 'soft',
+      score: 15,
+      explanation: `review-only decorated order-id relation ${orderId} ~ ${storedOrderId} inside merchant sender namespace ${event.merchantNamespace}`,
+    });
   }
 
   const matchingShipments = trackingId
