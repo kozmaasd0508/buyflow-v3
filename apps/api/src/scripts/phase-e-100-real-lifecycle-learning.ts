@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { NylasEmailProvider } from '../email/nylas-provider.js';
 import type { NormalizedEmail } from '../email/types.js';
+import { isCarrierSenderDomain, isPublicMailboxSenderDomain } from '../email/sender-role.js';
 import { buildEmailDocumentV1, type EmailDocumentV1 } from '../ingestion/email-document.js';
+import { isSharedPlatformSenderDomain } from '../ingestion/generic-order-confirmation-adapter.js';
 import { buildTestProtocolMerchantIdentityRegistry } from '../purchase-identity-v2/test-protocol-merchant-registry.js';
 import { runPurchaseIdentityShadow } from '../purchase-identity-v2/shadow-orchestrator.js';
 import type { PurchaseIdentitySnapshot } from '../purchase-identity-v2/types.js';
@@ -93,22 +95,28 @@ function opaque(prefix: string, value: string): string {
 function rootLikePhysicalOrder(email: NormalizedEmail, document: EmailDocumentV1, orderIds: AuditId[]): boolean {
   const subject = ascii(email.subject ?? '').trim();
   if (/^(?:RE|FW|FWD):/.test(subject) || orderIds.length === 0) return false;
+
+  const domain = senderDomain(email);
+  if (!domain) return false;
+  if (isCarrierSenderDomain(domain) || isPublicMailboxSenderDomain(domain) || isSharedPlatformSenderDomain(domain)) {
+    return false;
+  }
+
   const text = ascii(`${email.subject ?? ''}\n${document.text}`);
+  const digitalOnly = /AUTOMATIKUSAN\s+MEGUJULO\s+ELOFIZETES|ELOFIZETESED|DIGITALIS\s+(?:LICENC|TARTALOM)|SOFTWARE\s+LICENSE|DOWNLOAD\s+ONLY|SUBSCRIPTION\s+RENEWAL|MEMBERSHIP\s+RENEWAL/.test(text);
+  if (digitalOnly) return false;
 
-  const newOrder = [
-    /SIKERES\s+(?:MEG)?RENDELES/,
-    /(?:MEG)?RENDELES(?:ED|EDET|ET|UNK|T|ESE)?\s+(?:MEGEROSIT|VISSZAIGAZOL|ROGZIT|MEGKAPT|FOGADT|LETREJOTT|ERKEZETT)/,
-    /MEGKAPTUK\s+(?:A\s+)?(?:MEG)?RENDELES/,
-    /KOSZONJUK.{0,120}(?:RENDELTEL|VASARLAST|RENDELEST)/,
-    /ORDER\s+(?:CONFIRMATION|RECEIVED|CONFIRMED|PLACED)/,
-  ].some((pattern) => pattern.test(text));
-  if (!newOrder) return false;
+  const hasSubstantiveOrderStructure =
+    document.sections.some((section) => section.type === 'order_summary')
+    || document.signals.products.length > 0
+    || document.signals.amounts.length > 0;
 
-  const physical = /SZALLITASI\s+(?:MOD|ADAT|CIM)|HAZHOZSZALLITAS|CSOMAG(?:PONT|AUTOMATA)|FUTAR(?:SZOLGALAT)?|UTANVET|FOXPOST|GLS|DPD|MPL|PACKETA|DELIVERY\s+(?:METHOD|ADDRESS)|SHIPPING\s+(?:METHOD|ADDRESS)/.test(text);
-  if (!physical) return false;
+  const hasPhysicalStructure =
+    document.sections.some((section) => section.type === 'shipping')
+    || document.signals.shippingMethods.length > 0
+    || /SZALLITASI\s+(?:MOD|ADAT|CIM)|HAZHOZSZALLITAS|CSOMAG(?:PONT|AUTOMATA)|FUTAR(?:SZOLGALAT)?|UTANVET|FOXPOST|GLS|DPD|MPL|PACKETA|DELIVERY\s+(?:METHOD|ADDRESS)|SHIPPING\s+(?:METHOD|ADDRESS)|PARCEL\s+(?:LOCKER|DELIVERY)/.test(text);
 
-  const digitalOnly = /AUTOMATIKUSAN\s+MEGUJULO\s+ELOFIZETES|ELOFIZETESED|DIGITALIS\s+(?:LICENC|TARTALOM)|SOFTWARE\s+LICENSE|DOWNLOAD\s+ONLY|SUBSCRIPTION\s+RENEWAL/.test(text);
-  return !digitalOnly;
+  return hasSubstantiveOrderStructure && hasPhysicalStructure;
 }
 
 function explicitRelation(email: NormalizedEmail, document: EmailDocumentV1): boolean {
@@ -190,6 +198,7 @@ async function main(): Promise<void> {
     });
   }
 
+  console.log(`PHASE_E_100_SELECTION_V2 ${JSON.stringify({ candidatesScanned: candidateRefs.length, qualifyingRoots: roots.length })}`);
   if (roots.length !== ROOT_COUNT) throw new Error(`root_selection_count_mismatch:${roots.length}`);
 
   for (const chain of roots) {
