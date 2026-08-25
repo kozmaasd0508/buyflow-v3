@@ -35,26 +35,23 @@ const ORDER_LABEL = '(?:order|rendeles|megrendeles)';
 const ORDER_SUFFIX = '(?:\\s*(?:number|no\\.?|id|szama|azonositoja))?';
 const MARKER = '\\s*[:#-]?\\s*';
 
-function expression(parts: string, flags = 'gi'): RegExp {
+function expression(parts: string, flags = 'gis'): RegExp {
   return new RegExp(parts, flags);
 }
 
 const RELATION_PATTERNS: RelationPattern[] = [
-  // English: Replacement order CHILD for/replaces original order PARENT.
   {
     relation: 'replacement',
     pattern: expression(`\\breplacement\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b.{0,180}\\b(?:for|replaces)\\s+(?:the\\s+)?(?:original\\s+)?order${ORDER_SUFFIX}${MARKER}${ID}\\b`),
     childGroup: 1,
     parentGroup: 2,
   },
-  // English: Original order PARENT ... replacement order CHILD.
   {
     relation: 'replacement',
     pattern: expression(`\\b(?:original|parent)\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b.{0,180}\\breplacement\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b`),
     parentGroup: 1,
     childGroup: 2,
   },
-  // English split/child forms.
   {
     relation: 'split_child',
     pattern: expression(`\\bsplit(?:\\s+child)?\\s+order${ORDER_SUFFIX}${MARKER}${ID}\\b.{0,180}\\b(?:from|of|for)\\s+(?:the\\s+)?(?:original|parent)?\\s*order${ORDER_SUFFIX}${MARKER}${ID}\\b`),
@@ -73,22 +70,18 @@ const RELATION_PATTERNS: RelationPattern[] = [
     parentGroup: 1,
     childGroup: 2,
   },
-
-  // Hungarian: Eredeti rendelés PARENT ... csere rendelés CHILD.
   {
     relation: 'replacement',
     pattern: expression(`\\b(?:eredeti|szulo)\\s+${ORDER_LABEL}${ORDER_SUFFIX}${MARKER}${ID}\\b.{0,180}\\b(?:csere\\s*${ORDER_LABEL}|csererendeles)${ORDER_SUFFIX}${MARKER}${ID}\\b`),
     parentGroup: 1,
     childGroup: 2,
   },
-  // Hungarian: Csere rendelés CHILD ... eredeti rendelés PARENT.
   {
     relation: 'replacement',
     pattern: expression(`\\b(?:csere\\s*${ORDER_LABEL}|csererendeles)${ORDER_SUFFIX}${MARKER}${ID}\\b.{0,180}\\b(?:az?\\s+)?(?:eredeti|szulo)\\s+${ORDER_LABEL}${ORDER_SUFFIX}${MARKER}${ID}\\b`),
     childGroup: 1,
     parentGroup: 2,
   },
-  // Hungarian split-child labels.
   {
     relation: 'split_child',
     pattern: expression(`\\b(?:eredeti|szulo)\\s+${ORDER_LABEL}${ORDER_SUFFIX}${MARKER}${ID}\\b.{0,180}\\b(?:resz\\s*${ORDER_LABEL}|reszrendeles)${ORDER_SUFFIX}${MARKER}${ID}\\b`),
@@ -101,7 +94,6 @@ const RELATION_PATTERNS: RelationPattern[] = [
     childGroup: 1,
     parentGroup: 2,
   },
-  // Hungarian explicit sentence: CHILD számú rész-/csererendelés ... PARENT számú (eredeti) rendelés.
   {
     relation: 'split_child',
     pattern: expression(`\\b${ID}\\s+szamu\\s+(?:resz\\s*${ORDER_LABEL}|reszrendeles)\\b.{0,180}\\b${ID}\\s+szamu\\s+(?:eredeti\\s+)?${ORDER_LABEL}\\b`),
