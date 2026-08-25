@@ -22,6 +22,7 @@ export type SourceRole =
   | 'unknown';
 
 export type PurchaseCreationAuthority = 'authorized' | 'review' | 'none';
+export type OrderRelationKind = 'child' | 'split_child' | 'replacement';
 
 export interface EvidenceProvenance {
   field: string;
@@ -38,6 +39,15 @@ export interface EvidenceProvenance {
   extractorVersion?: string | null;
   confidence?: number | null;
   qualifiers?: string[];
+}
+
+export interface ExplicitOrderRelation {
+  relation: OrderRelationKind;
+  parentOrderIdRaw: string;
+  parentOrderIdNormalized: string | null;
+  childOrderIdRaw: string;
+  childOrderIdNormalized: string | null;
+  provenance: EvidenceProvenance[];
 }
 
 export interface EvidenceReference {
@@ -82,6 +92,13 @@ export interface CanonicalEvent {
    */
   purchaseCreationAuthority?: PurchaseCreationAuthority;
   purchaseCreationReasons?: string[];
+  /**
+   * Explicit, upstream-extracted relationship between the current child order
+   * and an already-known parent order. This is never inferred from similar ids,
+   * time proximity or products. If the parent cannot be resolved uniquely, the
+   * relation must fail closed instead of creating a second Purchase.
+   */
+  orderRelation?: ExplicitOrderRelation | null;
   orderIdRaw: string | null;
   orderIdNormalized: string | null;
   trackingIdRaw: string | null;
@@ -119,7 +136,7 @@ export interface OrderIdentity {
   /** Exact sender-domain namespace captured when the merchant was not yet canonicalized. */
   merchantNamespace?: string | null;
   orderId: string;
-  relation: 'primary' | 'child' | 'split_child' | 'replacement';
+  relation: 'primary' | OrderRelationKind;
   parentOrderIdentityId: string | null;
 }
 
