@@ -136,3 +136,87 @@ test('lifecycle event never receives new Purchase creation authority', () => {
     orderId: 'AB-778812',
   }).authority, 'none');
 });
+
+test('amount plus visible payment section is independent commerce structure', () => {
+  const doc = document(`
+    <p>Rendelés #AB-778812</p>
+    <p>Végösszeg: 12 990 Ft</p>
+    <p>Fizetési mód</p>
+  `);
+  assert.equal(doc.signals.paymentMethods.length, 0);
+  assert.equal(doc.sections.some((section) => section.type === 'payment'), true);
+  assert.equal(evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  }).authority, 'authorized');
+});
+
+test('amount plus visible shipping section is independent commerce structure', () => {
+  const doc = document(`
+    <p>Rendelés #AB-778812</p>
+    <p>Végösszeg: 12 990 Ft</p>
+    <p>Szállítási mód</p>
+  `);
+  assert.equal(doc.signals.shippingMethods.length, 0);
+  assert.equal(doc.sections.some((section) => section.type === 'shipping'), true);
+  assert.equal(evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  }).authority, 'authorized');
+});
+
+test('empty payment and shipping headings alone are not substantive commerce structure', () => {
+  const doc = document(`
+    <p>Rendelés #AB-778812</p>
+    <p>Fizetési mód</p>
+    <p>Szállítási mód</p>
+  `);
+  assert.equal(doc.signals.amounts.length, 0);
+  assert.equal(doc.signals.paymentMethods.length, 0);
+  assert.equal(doc.signals.shippingMethods.length, 0);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+  assert.deepEqual(result.reasons, ['insufficient_independent_commerce_structure']);
+});
+
+test('one amount without another independent structure signal remains REVIEW', () => {
+  const doc = document(`
+    <p>Rendelés #AB-778812</p>
+    <p>Végösszeg: 12 990 Ft</p>
+  `);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+  assert.deepEqual(result.reasons, ['insufficient_independent_commerce_structure']);
+});
+
+test('explicit non-acceptance still blocks section-based structure corroboration', () => {
+  const doc = document(`
+    <p>Rendelés #AB-778812</p>
+    <p>Végösszeg: 12 990 Ft</p>
+    <p>Fizetési mód</p>
+    <p>Szállítási mód</p>
+    <p>Ez az automatikus visszaigazolás nem jelenti a szerződés létrejöttét.</p>
+  `);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+  assert.deepEqual(result.reasons, ['explicit_order_non_acceptance_or_contract_disclaimer']);
+});
