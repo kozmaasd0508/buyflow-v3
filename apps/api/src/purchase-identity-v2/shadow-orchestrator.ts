@@ -7,6 +7,7 @@ import {
 } from './extraction-v2-adapter.js';
 import { PurchaseIdentityGraph } from './graph.js';
 import { deriveMerchantSenderNamespace } from './merchant-sender-namespace.js';
+import { evaluatePromotionReadiness, type PromotionReadinessDecision } from './promotion-readiness.js';
 import { evaluatePurchaseCreationAuthority } from './purchase-creation-authority.js';
 import type { CanonicalEvent, CorrelationDecision, PurchaseIdentitySnapshot } from './types.js';
 
@@ -26,6 +27,7 @@ export interface PurchaseIdentityShadowResult {
   extraction: ExtractionEngineV2Result;
   canonicalEvent: CanonicalEvent | null;
   decision: CorrelationDecision | null;
+  promotionReadiness: PromotionReadinessDecision;
   simulatedGraphMutated: boolean;
   simulatedSnapshot: PurchaseIdentitySnapshot;
 }
@@ -33,11 +35,13 @@ export interface PurchaseIdentityShadowResult {
 /**
  * End-to-end read-only shadow orchestration:
  * EmailDocumentV1 -> frozen Extraction Engine v2 -> direct canonical adapter ->
- * Purchase creation authority -> Purchase Identity Graph v2 decision/simulation.
+ * Purchase creation authority -> Purchase Identity Graph v2 decision/simulation ->
+ * Phase E promotion-readiness audit.
  *
  * The graph may mutate its private in-memory clone to show the predicted result,
  * but this function performs no database writes and does not alter the caller's
- * snapshot. Legacy parser output is not an input.
+ * snapshot. Promotion readiness is audit-only and never performs or enables a
+ * production write. Legacy parser output is not an input.
  */
 export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): PurchaseIdentityShadowResult {
   const extraction = (input.runExtraction ?? runExtractionEngineV2)(input.document);
@@ -62,6 +66,7 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
       extraction,
       canonicalEvent: null,
       decision: null,
+      promotionReadiness: evaluatePromotionReadiness({ event: null, decision: null }),
       simulatedGraphMutated: false,
       simulatedSnapshot: graph.snapshot(),
     };
@@ -85,6 +90,10 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
     extraction,
     canonicalEvent,
     decision: applied.decision,
+    promotionReadiness: evaluatePromotionReadiness({
+      event: canonicalEvent,
+      decision: applied.decision,
+    }),
     simulatedGraphMutated: applied.mutated,
     simulatedSnapshot: applied.snapshot,
   };
