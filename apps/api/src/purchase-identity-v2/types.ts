@@ -182,6 +182,7 @@ export interface MerchantIdentityDefinition {
 
 export type EvidenceType =
   | 'ORDER_ID_EXACT'
+  | 'ORDER_ID_DECORATED_REVIEW_ALIAS'
   | 'TRACKING_ID_EXACT'
   | 'PAYMENT_REFERENCE_EXACT'
   | 'INVOICE_ORDER_ID_EXACT'
