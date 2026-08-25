@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { deriveCorroboratedEventEvidence } from './corroborated-event-evidence.js';
 import { universalMerchantExtractor } from './merchant-extractor.js';
+import { universalTrackingNumberExtractor } from './tracking-number-extractor.js';
 import type { EvidenceBundle } from './types.js';
 
 function document(overrides: Partial<EmailDocumentV1> = {}): EmailDocumentV1 {
@@ -72,6 +73,45 @@ test('plain invoice word alone does not create corroborated invoice event', () =
     text: 'Az invoice beállításokról szóló tájékoztató.',
   }), { claims: [] });
   assert.equal(claims.length, 0);
+});
+
+test('translated completed shipment wording requires explicit tracking corroboration', () => {
+  const doc = document({
+    subject: 'Megrendelését 2125001853 szállították',
+    text: 'Megrendelését 2125001853 szállították. Szállítási szám: 3752564629. A csomag úton van.',
+  });
+  const trackingClaims = universalTrackingNumberExtractor.extract(doc);
+  assert.ok(trackingClaims.some((claim) => (
+    claim.field === 'tracking_number'
+    && claim.value === '3752564629'
+    && claim.confidence >= 0.95
+    && claim.qualifiers?.includes('explicit_tracking_label')
+  )));
+
+  const claims = deriveCorroboratedEventEvidence(doc, { claims: trackingClaims });
+  const shipment = claims.find((claim) => claim.field === 'event_type' && claim.value === 'shipment');
+  assert.ok(shipment);
+  assert.ok(shipment?.qualifiers?.includes('tracking_corroborated_translated_shipment'));
+});
+
+test('translated completed shipment wording alone does not create a shipment event', () => {
+  const doc = document({
+    subject: 'Megrendelését 2125001853 szállították',
+    text: 'Megrendelését 2125001853 szállították. Köszönjük a vásárlást.',
+  });
+  const claims = deriveCorroboratedEventEvidence(doc, { claims: [] });
+  assert.equal(claims.some((claim) => claim.field === 'event_type' && claim.value === 'shipment'), false);
+});
+
+test('future shipment wording stays non-shipment even with a shipping number', () => {
+  const doc = document({
+    subject: 'Rendelés frissítés',
+    text: 'Megrendelését holnap szállítják. Szállítási szám: 3752564629.',
+  });
+  const trackingClaims = universalTrackingNumberExtractor.extract(doc);
+  assert.ok(trackingClaims.some((claim) => claim.field === 'tracking_number' && claim.value === '3752564629'));
+  const claims = deriveCorroboratedEventEvidence(doc, { claims: trackingClaims });
+  assert.equal(claims.some((claim) => claim.field === 'event_type' && claim.value === 'shipment'), false);
 });
 
 test('personal sender name remains weak even when order structure exists', () => {
