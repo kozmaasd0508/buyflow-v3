@@ -24,6 +24,8 @@ const NON_ACCEPTANCE_PATTERNS = [
   /\b(?:rendeles|megrendeles).{0,120}(?:rogzitese|beerkezese).{0,120}nem jelenti.{0,120}(?:a )?(?:rendeles|megrendeles) elfogadasat\b/i,
   /\b(?:rendelesed|megrendelesed|rendeles|megrendeles) (?:meg|be)?erkezett.{0,120}(?:de|azonban).{0,120}(?:meg )?nem (?:fogadtuk el|kerult elfogadasra)\b/i,
   /\b(?:csak|csupan).{0,100}(?:rendeles|megrendeles|ajanlat).{0,100}(?:beerkezeset|atvetelet).{0,100}(?:igazolja|erositi meg)\b/i,
+  /\b(?:e-?mail|email|uzenet|ertesites)\b.{0,120}\bnem minosul\b.{0,120}\b(?:rendeles|megrendeles)\w*\s+visszaigazolas\w*\b/i,
+  /\b(?:csak|csupan)\b.{0,100}\b(?:veteli\s+)?ajanlat\b.{0,100}\b(?:megerkezes(?:erol|et)|beerkezes(?:erol|et)|atvetel(?:erol|et))\b.{0,100}\b(?:ertesit|igazol|erosit)\w*\b/i,
   /\bthis (?:e-?mail|email|message|acknowledg(?:e)?ment).{0,160}(?:does not mean|does not constitute).{0,160}(?:a )?contract\b/i,
   /\bthis (?:e-?mail|email|message).{0,120}(?:does not constitute|is not).{0,120}(?:acceptance of (?:your )?(?:order|offer)|order confirmation)\b/i,
   /\byour order has not yet been accepted\b/i,
