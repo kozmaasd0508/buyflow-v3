@@ -9,7 +9,7 @@ import type {
   OrderRelationKind,
 } from './types.js';
 
-export const EXPLICIT_ORDER_RELATION_VERSION = 'explicit-order-relation-v1';
+export const EXPLICIT_ORDER_RELATION_VERSION = 'explicit-order-relation-v2';
 
 interface RelationCandidate {
   relation: OrderRelationKind;
@@ -38,7 +38,9 @@ export interface ExplicitOrderRelationExtractionResult {
 const ID = '([A-Z0-9][A-Z0-9\\-_/]{3,39})';
 const ORDER_LABEL = '(?:order|rendeles|megrendeles)';
 const ORDER_SUFFIX = '(?:\\s*(?:number|no\\.?|id|szama|azonositoja))?';
-const MARKER = '\\s*[:#-]?\\s*';
+// Transactional templates commonly render labels as `Order: #1234`.
+// Accept at most one label separator plus an optional hash marker.
+const MARKER = '\\s*[:#-]?\\s*#?\\s*';
 
 function expression(parts: string, flags = 'gis'): RegExp {
   return new RegExp(parts, flags);
@@ -152,14 +154,33 @@ function cleanIdentifier(value: string): string {
   return value.trim().replace(/^#+/, '').replace(/[.,;:)}\]]+$/, '');
 }
 
+function firstParentLabel(line: string): string | null {
+  for (const pattern of PARENT_LABEL_PATTERNS) {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(line);
+    if (!match) continue;
+    const raw = cleanIdentifier(match[1] ?? '');
+    if (normalizeStableIdentifier(raw)) return raw;
+  }
+  return null;
+}
+
+function firstChildLabel(line: string): { relation: OrderRelationKind; raw: string } | null {
+  for (const definition of CHILD_LABEL_PATTERNS) {
+    definition.pattern.lastIndex = 0;
+    const match = definition.pattern.exec(line);
+    if (!match) continue;
+    const raw = cleanIdentifier(match[1] ?? '');
+    if (normalizeStableIdentifier(raw)) return { relation: definition.relation, raw };
+  }
+  return null;
+}
+
 /**
- * Explicit parent/child labels often arrive on separate lines. Pairing those
- * labels independently prevents a broad global regex from hiding a second,
- * conflicting parent for the same child order.
- *
- * The window is intentionally narrow and parent-first only. Child-first prose
- * is handled by the explicit sentence patterns below, while this pass exists
- * only for strongly labelled transactional layouts.
+ * Explicit parent/child labels often arrive on adjacent lines and either label
+ * may come first. Pair only strongly labelled values within a narrow two-line
+ * window. A child already paired with a preceding parent is not carried forward
+ * as a pending child, which avoids cross-pairing neighboring independent orders.
  */
 function collectLabelledLinePairs(
   normalizedText: string,
@@ -167,34 +188,54 @@ function collectLabelledLinePairs(
 ): RelationCandidate[] {
   const candidates: RelationCandidate[] = [];
   const lines = normalizedText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  let lastParent: { raw: string; lineIndex: number } | null = null;
+  let pendingParent: { raw: string; lineIndex: number } | null = null;
+  let pendingChild: { relation: OrderRelationKind; raw: string; lineIndex: number } | null = null;
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex]!;
+    const parentRaw = firstParentLabel(line);
+    const child = firstChildLabel(line);
 
-    for (const pattern of PARENT_LABEL_PATTERNS) {
-      const match = pattern.exec(line);
-      if (!match) continue;
-      const parentRaw = cleanIdentifier(match[1] ?? '');
-      if (normalizeStableIdentifier(parentRaw)) {
-        lastParent = { raw: parentRaw, lineIndex };
-      }
-      break;
-    }
+    if (pendingParent && lineIndex - pendingParent.lineIndex > 2) pendingParent = null;
+    if (pendingChild && lineIndex - pendingChild.lineIndex > 2) pendingChild = null;
 
-    for (const definition of CHILD_LABEL_PATTERNS) {
-      const match = definition.pattern.exec(line);
-      if (!match || !lastParent) continue;
-      if (lineIndex - lastParent.lineIndex > 2) continue;
-
-      const childRaw = cleanIdentifier(match[1] ?? '');
-      if (!normalizeStableIdentifier(childRaw)) continue;
+    if (parentRaw && child) {
       candidates.push({
-        relation: definition.relation,
-        parentRaw: lastParent.raw,
-        childRaw,
+        relation: child.relation,
+        parentRaw,
+        childRaw: child.raw,
         source,
       });
+      pendingParent = { raw: parentRaw, lineIndex };
+      pendingChild = null;
+      continue;
+    }
+
+    if (parentRaw) {
+      if (pendingChild) {
+        candidates.push({
+          relation: pendingChild.relation,
+          parentRaw,
+          childRaw: pendingChild.raw,
+          source,
+        });
+        pendingChild = null;
+      }
+      pendingParent = { raw: parentRaw, lineIndex };
+      continue;
+    }
+
+    if (child) {
+      if (pendingParent) {
+        candidates.push({
+          relation: child.relation,
+          parentRaw: pendingParent.raw,
+          childRaw: child.raw,
+          source,
+        });
+      } else {
+        pendingChild = { relation: child.relation, raw: child.raw, lineIndex };
+      }
     }
   }
 
