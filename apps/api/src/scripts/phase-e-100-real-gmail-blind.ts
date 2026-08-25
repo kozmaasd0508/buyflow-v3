@@ -169,8 +169,6 @@ async function main() {
           shippingMethods: document.signals.shippingMethods.length,
           couriers: document.signals.couriers.length,
         },
-        extractionStatus: shadow.extraction.status,
-        extractionConflictCount: shadow.extraction.conflicts.length,
         promotionEligible: eligible,
         promotionAction: action,
         promotionReasons: shadow.promotionReadiness.reasons,
