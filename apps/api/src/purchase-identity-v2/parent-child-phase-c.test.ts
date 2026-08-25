@@ -86,7 +86,7 @@ test('explicit split child shipment links to parent purchase and records machine
   assert.equal(snapshot.purchases.length, 1);
   assert.equal(snapshot.orders.length, 2);
   assert.equal(snapshot.shipments.length, 1);
-  const child = snapshot.orders.find((item) => item.orderId === 'CHILD2');
+  const child = snapshot.orders.find((item) => item.orderId === 'CHILD-2');
   assert.equal(child?.relation, 'split_child');
   assert.equal(child?.parentOrderIdentityId, snapshot.purchases[0]?.primaryOrderIdentityId);
 });
