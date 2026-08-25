@@ -224,6 +224,57 @@ test('does not infer payment provider or invoice issuer from identifiers alone',
   assert.equal(adapted.paymentProviderId, null);
 });
 
+test('bridges explicit current-message replacement relation into CanonicalEvent provenance', () => {
+  const eventType = claim('event_type', 'shipment', 'explicit_shipment_event');
+  const order = claim('order_number', 'NEW-200', 'explicit_order_label');
+  const doc = document();
+  doc.text = 'Original order: OLD-100\nReplacement order: NEW-200';
+
+  const adapted = canonicalEventFromExtractionV2({
+    userId: 'user-1',
+    document: doc,
+    extraction: extraction(commerceEvent({
+      eventType: resolved('shipment', [eventType]),
+      orderNumber: resolved('NEW-200', [order]),
+    }), [eventType, order]),
+  });
+
+  assert.ok(adapted);
+  assert.equal(adapted.orderRelation?.relation, 'replacement');
+  assert.equal(adapted.orderRelation?.parentOrderIdNormalized, 'OLD100');
+  assert.equal(adapted.orderRelation?.childOrderIdNormalized, 'NEW200');
+  assert.ok(adapted.provenance.some((item) => item.field === 'order_relation' && item.extractorId === 'explicit-order-relation'));
+});
+
+test('bridges conflicting explicit relation evidence into hard correlation PENDING', () => {
+  const eventType = claim('event_type', 'shipment', 'explicit_shipment_event');
+  const order = claim('order_number', 'NEW-200', 'explicit_order_label');
+  const doc = document();
+  doc.text = [
+    'Original order: OLD-100',
+    'Replacement order: NEW-200',
+    'Original order: OLD-999',
+    'Replacement order: NEW-200',
+  ].join('\n');
+
+  const adapted = canonicalEventFromExtractionV2({
+    userId: 'user-1',
+    document: doc,
+    extraction: extraction(commerceEvent({
+      eventType: resolved('shipment', [eventType]),
+      orderNumber: resolved('NEW-200', [order]),
+    }), [eventType, order]),
+  });
+
+  assert.ok(adapted);
+  assert.equal(adapted.orderRelation, null);
+  assert.ok(adapted.conflicts?.some((item) => item.field === 'order_relation' && item.severity === 'hard'));
+
+  const snapshot: PurchaseIdentitySnapshot = { purchases: [], orders: [], shipments: [], payments: [], invoices: [] };
+  const decision = decideCorrelation(adapted, snapshot);
+  assert.equal(decision.kind, 'PENDING');
+});
+
 test('returns null for non-commerce extraction with no resolved or conflicting event type', () => {
   const adapted = canonicalEventFromExtractionV2({
     userId: 'user-1',

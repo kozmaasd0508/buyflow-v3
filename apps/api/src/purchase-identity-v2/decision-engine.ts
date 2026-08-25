@@ -37,6 +37,21 @@ export function decideCorrelation(
 
   const hardCandidateIds = candidates.filter((purchaseId) => hardEdges(evidenceByPurchase.get(purchaseId) ?? []).length > 0);
 
+  // An explicit parent/child relation must never override another candidate for
+  // the same event. If the child id, tracking id or another hard/soft identifier
+  // points elsewhere, keep the event in REVIEW instead of mutating the graph.
+  if (event.orderRelation && hardCandidateIds.length === 1) {
+    const hardPurchaseId = hardCandidateIds[0]!;
+    const otherCandidates = candidates.filter((purchaseId) => purchaseId !== hardPurchaseId);
+    if (otherCandidates.length > 0) {
+      return {
+        kind: 'REVIEW',
+        candidatePurchaseIds: candidates.sort(),
+        reasons: candidates.flatMap((purchaseId) => evidenceByPurchase.get(purchaseId) ?? []),
+      };
+    }
+  }
+
   if (hardCandidateIds.length === 1) {
     const purchaseId = hardCandidateIds[0]!;
     return {
@@ -61,6 +76,7 @@ export function decideCorrelation(
     event.purchaseCreationAuthority === 'authorized';
 
   const hasSafeNewPurchaseAnchor =
+    !event.orderRelation &&
     event.eventType === 'order_created' &&
     Boolean(event.orderIdNormalized ?? event.orderIdRaw) &&
     (knownMerchantCreationAuthorized || unknownMerchantCreationAuthorized);

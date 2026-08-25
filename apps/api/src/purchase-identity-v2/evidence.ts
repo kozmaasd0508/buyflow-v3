@@ -64,6 +64,45 @@ export function buildEvidenceForCandidate(
     }
   }
 
+  const relation = event.orderRelation;
+  const relationParent = normalizeStableIdentifier(relation?.parentOrderIdNormalized ?? relation?.parentOrderIdRaw);
+  const relationChild = normalizeStableIdentifier(relation?.childOrderIdNormalized ?? relation?.childOrderIdRaw);
+  const validRelationShape = Boolean(
+    relation
+    && relationParent
+    && relationChild
+    && orderId
+    && relationParent !== relationChild
+    && relationChild === orderId,
+  );
+  const matchingParentOrders = validRelationShape
+    ? orders.filter((item) => normalizeStableIdentifier(item.orderId) === relationParent)
+    : [];
+
+  if (relation && matchingParentOrders.length > 0) {
+    const canonicalParentKey = orderIdentityKey(event.userId, event.merchantId, relationParent);
+    const canonicalNamespaceMatch = Boolean(canonicalParentKey && matchingParentOrders.some(
+      (item) => orderIdentityKey(event.userId, item.merchantId, item.orderId) === canonicalParentKey,
+    ));
+    const senderParentKey = merchantNamespaceOrderKey(event.userId, event.merchantNamespace, relationParent);
+    const senderNamespaceMatch = event.sourceRole === 'merchant' && Boolean(senderParentKey && matchingParentOrders.some(
+      (item) => merchantNamespaceOrderKey(event.userId, item.merchantNamespace, item.orderId) === senderParentKey,
+    ));
+    const hasExplicitProvenance = relation.provenance.length > 0;
+    const hardRelation = hasExplicitProvenance && (canonicalNamespaceMatch || senderNamespaceMatch);
+
+    edges.push({
+      sourceEventId: event.eventId,
+      candidatePurchaseId: purchaseId,
+      evidenceType: 'PARENT_CHILD_ORDER',
+      strength: hardRelation ? 'hard' : 'soft',
+      score: hardRelation ? 100 : 35,
+      explanation: hardRelation
+        ? `explicit ${relation.relation} order relation ${relationChild} -> parent ${relationParent} inside compatible merchant identity`
+        : `explicit order relation ${relationChild} -> parent ${relationParent} found without sufficient merchant/provenance agreement`,
+    });
+  }
+
   const reviewIdentity = decoratedOrderReviewBase(orderId) ?? orderId;
   const reviewNamespaceKey = event.sourceRole === 'merchant'
     ? merchantNamespaceOrderKey(event.userId, event.merchantNamespace, reviewIdentity)

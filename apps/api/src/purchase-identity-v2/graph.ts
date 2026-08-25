@@ -28,6 +28,7 @@ export interface ParentChildOrderHint {
   parentOrderId: string;
   childOrderId: string;
   merchantId: string | null;
+  merchantNamespace?: string | null;
   relation: 'child' | 'split_child' | 'replacement';
 }
 
@@ -75,6 +76,32 @@ export class PurchaseIdentityGraph {
       return this.result(decision, true);
     }
 
+    const hardParentChildRelation = Boolean(
+      event.orderRelation
+      && decision.reasons.some((edge) => edge.evidenceType === 'PARENT_CHILD_ORDER' && edge.strength === 'hard'),
+    );
+
+    if (hardParentChildRelation && event.orderRelation) {
+      const relationAttached = this.addParentChildOrder(event.userId, {
+        parentOrderId: event.orderRelation.parentOrderIdNormalized ?? event.orderRelation.parentOrderIdRaw,
+        childOrderId: event.orderRelation.childOrderIdNormalized ?? event.orderRelation.childOrderIdRaw,
+        merchantId: event.merchantId,
+        merchantNamespace: event.merchantNamespace ?? null,
+        relation: event.orderRelation.relation,
+      });
+
+      // Fail closed before attaching shipment/payment/invoice entities. A hard
+      // relation decision must be reproducible in graph state; otherwise the
+      // event remains review-only and the snapshot is not mutated further.
+      if (!relationAttached) {
+        return this.result({
+          kind: 'REVIEW',
+          candidatePurchaseIds: [decision.purchaseId],
+          reasons: decision.reasons,
+        }, false);
+      }
+    }
+
     this.attachEventEntities(event, decision.purchaseId);
     const purchase = this.snapshotState.purchases.find((item) => item.purchaseId === decision.purchaseId);
     if (purchase) purchase.state = mergeState(purchase.state, stateFromEvent(event));
@@ -86,10 +113,21 @@ export class PurchaseIdentityGraph {
     const childId = normalizeStableIdentifier(hint.childOrderId);
     if (!parentId || !childId || parentId === childId) return false;
 
+    const normalizedHintNamespace = hint.merchantNamespace?.trim().toLowerCase() || null;
     const parentCandidates = this.snapshotState.orders.filter((order) => {
       if (normalizeStableIdentifier(order.orderId) !== parentId) return false;
       const purchase = this.snapshotState.purchases.find((item) => item.purchaseId === order.purchaseId);
-      return purchase?.userId === userId && (!hint.merchantId || order.merchantId === hint.merchantId);
+      if (purchase?.userId !== userId) return false;
+
+      const hasScopedMerchantHint = Boolean(hint.merchantId || normalizedHintNamespace);
+      if (!hasScopedMerchantHint) return true;
+
+      const canonicalMatch = Boolean(hint.merchantId && order.merchantId === hint.merchantId);
+      const namespaceMatch = Boolean(
+        normalizedHintNamespace
+        && order.merchantNamespace?.trim().toLowerCase() === normalizedHintNamespace,
+      );
+      return canonicalMatch || namespaceMatch;
     });
     if (parentCandidates.length !== 1) return false;
 
@@ -101,17 +139,21 @@ export class PurchaseIdentityGraph {
     });
     if (conflictingChild.some((order) => order.purchaseId !== parent.purchaseId)) return false;
 
-    if (!conflictingChild.some((order) => order.purchaseId === parent.purchaseId)) {
-      this.snapshotState.orders.push({
-        orderIdentityId: `order:${parent.purchaseId}:${childId}`,
-        purchaseId: parent.purchaseId,
-        merchantId: hint.merchantId ?? parent.merchantId,
-        merchantNamespace: parent.merchantNamespace ?? null,
-        orderId: hint.childOrderId,
-        relation: hint.relation,
-        parentOrderIdentityId: parent.orderIdentityId,
-      });
+    const existingChild = conflictingChild.find((order) => order.purchaseId === parent.purchaseId);
+    if (existingChild) {
+      return existingChild.parentOrderIdentityId === parent.orderIdentityId
+        && existingChild.relation === hint.relation;
     }
+
+    this.snapshotState.orders.push({
+      orderIdentityId: `order:${parent.purchaseId}:${childId}`,
+      purchaseId: parent.purchaseId,
+      merchantId: hint.merchantId ?? parent.merchantId,
+      merchantNamespace: hint.merchantNamespace ?? parent.merchantNamespace ?? null,
+      orderId: hint.childOrderId,
+      relation: hint.relation,
+      parentOrderIdentityId: parent.orderIdentityId,
+    });
     return true;
   }
 
