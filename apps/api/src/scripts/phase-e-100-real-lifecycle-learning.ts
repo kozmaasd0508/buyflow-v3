@@ -106,17 +106,16 @@ function rootLikePhysicalOrder(email: NormalizedEmail, document: EmailDocumentV1
   const digitalOnly = /AUTOMATIKUSAN\s+MEGUJULO\s+ELOFIZETES|ELOFIZETESED|DIGITALIS\s+(?:LICENC|TARTALOM)|SOFTWARE\s+LICENSE|DOWNLOAD\s+ONLY|SUBSCRIPTION\s+RENEWAL|MEMBERSHIP\s+RENEWAL/.test(text);
   if (digitalOnly) return false;
 
-  const hasSubstantiveOrderStructure =
+  const hasSubstantiveCommerceStructure =
     document.sections.some((section) => section.type === 'order_summary')
+    || document.sections.some((section) => section.type === 'payment')
+    || document.sections.some((section) => section.type === 'shipping')
     || document.signals.products.length > 0
-    || document.signals.amounts.length > 0;
-
-  const hasPhysicalStructure =
-    document.sections.some((section) => section.type === 'shipping')
+    || document.signals.paymentMethods.length > 0
     || document.signals.shippingMethods.length > 0
-    || /SZALLITASI\s+(?:MOD|ADAT|CIM)|HAZHOZSZALLITAS|CSOMAG(?:PONT|AUTOMATA)|FUTAR(?:SZOLGALAT)?|UTANVET|FOXPOST|GLS|DPD|MPL|PACKETA|DELIVERY\s+(?:METHOD|ADDRESS)|SHIPPING\s+(?:METHOD|ADDRESS)|PARCEL\s+(?:LOCKER|DELIVERY)/.test(text);
+    || document.signals.amounts.length >= 2;
 
-  return hasSubstantiveOrderStructure && hasPhysicalStructure;
+  return hasSubstantiveCommerceStructure;
 }
 
 function explicitRelation(email: NormalizedEmail, document: EmailDocumentV1): boolean {
@@ -198,7 +197,7 @@ async function main(): Promise<void> {
     });
   }
 
-  console.log(`PHASE_E_100_SELECTION_V2 ${JSON.stringify({ candidatesScanned: candidateRefs.length, qualifyingRoots: roots.length })}`);
+  console.log(`PHASE_E_100_SELECTION_V3 ${JSON.stringify({ candidatesScanned: candidateRefs.length, qualifyingRoots: roots.length })}`);
   if (roots.length !== ROOT_COUNT) throw new Error(`root_selection_count_mismatch:${roots.length}`);
 
   for (const chain of roots) {
