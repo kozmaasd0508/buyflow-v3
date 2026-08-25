@@ -165,8 +165,6 @@ async function main() {
       eligible += 1;
       if (promotion.action === 'CREATE_PURCHASE') eligibleCreates += 1;
       if (promotion.action === 'LINK_EVENT') eligibleLinks += 1;
-      // Production-readiness replay: only decisions that passed Phase E are
-      // allowed to become anchors for later messages in this in-memory audit.
       snapshot = shadow.simulatedSnapshot;
     }
 
@@ -179,9 +177,9 @@ async function main() {
       promotionEligible: promotion.eligible,
       promotionAction: promotion.action,
       promotionReasons: promotion.reasons,
-      hardEvidenceTypes: decision?.evidence
-        .filter((edge) => edge.hard)
-        .map((edge) => edge.type) ?? [],
+      hardEvidenceTypes: decision?.reasons
+        .filter((edge) => edge.strength === 'hard')
+        .map((edge) => edge.evidenceType) ?? [],
       identityPresence: event ? {
         merchant: Boolean(event.merchantId || event.merchantNamespace),
         order: Boolean(event.orderIdNormalized || event.orderIdRaw),
