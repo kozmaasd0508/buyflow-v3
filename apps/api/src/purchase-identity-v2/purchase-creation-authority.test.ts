@@ -54,6 +54,52 @@ test('Hungarian automatic acknowledgement that denies contract formation is REVI
   assert.ok(result.reasons.includes('explicit_order_non_acceptance_or_contract_disclaimer'));
 });
 
+test('Hungarian message explicitly saying it is not the order confirmation is REVIEW', () => {
+  const doc = document(`
+    ${richStructure}
+    <p>Ez az e-mail nem minősül a megrendelés visszaigazolásának.</p>
+    <p>Megrendelésed tényleges visszaigazolása egy későbbi e-mailben fog érkezni.</p>
+  `, 'Rendelés beérkezett #AB-778812');
+  assert.equal(hasExplicitPurchaseNonAcceptance(doc), true);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+});
+
+test('Hungarian purchase-offer receipt acknowledgement is REVIEW', () => {
+  const doc = document(`
+    ${richStructure}
+    <p>Ez az üzenet csupán a vételi ajánlat megérkezéséről értesítünk.</p>
+  `, 'Rendelési értesítés #AB-778812');
+  assert.equal(hasExplicitPurchaseNonAcceptance(doc), true);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+});
+
+test('later explicit merchant acceptance remains authorized', () => {
+  const doc = document(`
+    ${richStructure}
+    <p>Örömmel értesítünk, hogy megrendelésedet elfogadtuk és megkezdtük az összekészítését.</p>
+  `, 'Megrendelésedet elfogadtuk #AB-778812');
+  assert.equal(hasExplicitPurchaseNonAcceptance(doc), false);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_created',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'authorized');
+});
+
 test('English order acknowledgement without acceptance is REVIEW', () => {
   const doc = document(`${richStructure}<p>This acknowledgement does not constitute a contract and your order has not yet been accepted.</p>`, 'Order received #AB-778812');
   const result = evaluatePurchaseCreationAuthority({
