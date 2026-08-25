@@ -118,6 +118,9 @@ export function candidatePurchaseIds(event: CanonicalEvent, index: CandidateInde
   const result = new Set<string>();
   const order = normalizeStableIdentifier(event.orderIdNormalized ?? event.orderIdRaw);
   const orderReviewBase = decoratedOrderReviewBase(order);
+  const relationParent = normalizeStableIdentifier(
+    event.orderRelation?.parentOrderIdNormalized ?? event.orderRelation?.parentOrderIdRaw,
+  );
   const tracking = normalizeStableIdentifier(event.trackingIdNormalized ?? event.trackingIdRaw);
   const payment = normalizeStableIdentifier(event.paymentReference);
   const invoice = normalizeStableIdentifier(event.invoiceIdNormalized ?? event.invoiceIdRaw);
@@ -127,6 +130,13 @@ export function candidatePurchaseIds(event: CanonicalEvent, index: CandidateInde
     [index.orderMerchantNamespaceExact, merchantNamespaceOrderKey(event.userId, event.merchantNamespace, order)],
     [index.orderMerchantNamespaceReviewAlias, merchantNamespaceOrderKey(event.userId, event.merchantNamespace, orderReviewBase ?? order)],
     [index.orderDiscovery, discoveryKey(event.userId, order)],
+    // Explicit parent/child relations may discover the existing Purchase through
+    // the parent order. Discovery alone is not hard evidence; evidence.ts still
+    // requires canonical merchant or exact merchant namespace agreement before
+    // PARENT_CHILD_ORDER can auto-link.
+    [index.orderExact, orderIdentityKey(event.userId, event.merchantId, relationParent)],
+    [index.orderMerchantNamespaceExact, merchantNamespaceOrderKey(event.userId, event.merchantNamespace, relationParent)],
+    [index.orderDiscovery, discoveryKey(event.userId, relationParent)],
     [index.trackingExact, shipmentIdentityKey(event.userId, event.carrierId, tracking)],
     [index.trackingDiscovery, discoveryKey(event.userId, tracking)],
     [index.paymentExact, paymentIdentityKey(event.userId, event.paymentProviderId, payment)],
