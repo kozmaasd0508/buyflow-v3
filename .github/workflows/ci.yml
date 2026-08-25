@@ -35,3 +35,10 @@ jobs:
 
       - name: Mobile web build
         run: npm run build --workspace @buyflow/mobile
+
+      - name: Phase E2 read-only 100-message blind
+        run: npm run phase-e2:live-blind --workspace @buyflow/api
+        env:
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
