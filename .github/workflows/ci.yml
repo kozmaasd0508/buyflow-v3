@@ -27,6 +27,13 @@ jobs:
       - name: API tests
         run: npm test --workspace @buyflow/api
 
+      - name: Phase E 15 real lifecycle post-fix audit
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-15-real-lifecycle-blind.ts
+        env:
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+
       - name: API build
         run: npm run build --workspace @buyflow/api
 
