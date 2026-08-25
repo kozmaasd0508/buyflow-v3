@@ -223,7 +223,7 @@ function detectSections(text: string): EmailDocumentSection[] {
   const sections: EmailDocumentSection[] = [];
   for (const line of lines) {
     const normalized = normalizeText(line).toLowerCase();
-    const type: EmailDocumentSection['type'] = /rendelesi osszesito|order summary|order details/.test(normalized)
+    const type: EmailDocumentSection['type'] = /rendelesi osszesito|rendeles(?:i)? reszlet(?:e|ei)?|vasarlas(?:i)? reszlet(?:e|ei)?|order summary|order details/.test(normalized)
       ? 'order_summary'
       : /szallitasi mod|shipping method|delivery method/.test(normalized)
         ? 'shipping'
