@@ -39,12 +39,31 @@ export function hasExplicitPurchaseNonAcceptance(document: EmailDocumentV1): boo
 }
 
 function structureSignalCount(document: EmailDocumentV1): number {
+  const hasOrderSummary = document.sections.some((section) => section.type === 'order_summary');
+  const hasProducts = document.signals.products.length > 0;
+  const hasAmounts = document.signals.amounts.length > 0;
+  const hasPaymentMethod = document.signals.paymentMethods.length > 0;
+  const hasShippingMethod = document.signals.shippingMethods.length > 0;
+  const hasPaymentSection = document.sections.some((section) => section.type === 'payment');
+  const hasShippingSection = document.sections.some((section) => section.type === 'shipping');
+
+  // Payment/shipping headings are useful structural corroboration, but they are
+  // not independently substantive enough to authorize a Purchase together.
+  // A document must still contain at least one concrete commerce signal such
+  // as a summary, product, amount, or parsed method value.
+  const hasSubstantiveCommerceSignal = hasOrderSummary
+    || hasProducts
+    || hasAmounts
+    || hasPaymentMethod
+    || hasShippingMethod;
+  if (!hasSubstantiveCommerceSignal) return 0;
+
   return [
-    document.sections.some((section) => section.type === 'order_summary'),
-    document.signals.products.length > 0,
-    document.signals.amounts.length > 0,
-    document.signals.paymentMethods.length > 0,
-    document.signals.shippingMethods.length > 0,
+    hasOrderSummary,
+    hasProducts,
+    hasAmounts,
+    hasPaymentMethod || hasPaymentSection,
+    hasShippingMethod || hasShippingSection,
   ].filter(Boolean).length;
 }
 
