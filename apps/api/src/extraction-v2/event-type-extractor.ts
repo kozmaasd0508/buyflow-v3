@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v6';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v7';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -68,6 +68,7 @@ const EVENT_PATTERNS: EventPattern[] = [
       /\b(?:csomag(?:od|ja)?|kuldemeny(?:ed|e)?|rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:feladasra\s+kerult|feladva|uton\s+van)\b/i,
       /\b(?:rendeles(?:ed|edet|e)?|megrendeles(?:ed|edet|e)?)\s+atadtuk\s+(?:a\s+)?futar(?:nak)?\b/i,
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?|csomag(?:od|ja)?)\w*.*\b(?:atadtuk|atadasra\s+kerult)\b.*\b(?:futar|futarszolgalat)\b/i,
+      /\b(?:rendeles|megrendeles)\w*.{0,220}\b(?:futar|futarszolgalat)(?:nak)?\s+(?:atadva|atadasra\s+kerult)\b/i,
       /\b(?:csomag|kuldemeny)\w*.{0,100}\bkezbesitesre\s+(?:atvette|atvettuk|atadva)\b/i,
       /\b(?:csomag|kuldemeny)\w*\s+feladasarol\b/i,
       /\b(?:megkisereljuk|megprobaljuk)\s+(?:a\s+)?(?:csomag\w*\s+)?kezbesiteni\b/i,
@@ -104,6 +105,7 @@ const EVENT_PATTERNS: EventPattern[] = [
     confidence: 0.99,
     patterns: [
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:torolve|lemondva|torlesre\s+kerult)\b/i,
+      /\b(?:rendeles|megrendeles)(?:ed|edet|et|e)?\b.{0,120}\b(?:allapot\w*|statusz)\b.{0,60}\btorolve\b/i,
       /\b(?:order|purchase)\s+(?:has\s+been\s+)?cancelled\b/i,
     ],
   },
@@ -139,6 +141,7 @@ const EVENT_PATTERNS: EventPattern[] = [
       /\b(?:sikeres\s+)?(?:rendeles|megrendeles)\s+megerositese\b/i,
       /\b(?:webaruhazunkban|webshopunkban)?\s*.{0,48}\brendelest\s+(?:adott|adtal)\s+le\b/i,
       /\b(?:rendeles(?:ed|e)?|megrendeles(?:ed|e)?)\s+(?:beerkezett|rogzitettuk|fogadtuk|visszaigazolva)\b/i,
+      /\b(?:rendeles|megrendeles)(?:ed|edet|et|e)?\s+(?:sikeresen\s+)?(?:felvettuk|rogzitettuk)\b/i,
       /\b(?:rendeles|megrendeles)\s+visszaigazolas(?:a)?\b/i,
       /\b(?:order|purchase)\s+(?:confirmed|confirmation|received)\b/i,
       /\bwe(?:'ve|\s+have)?\s+received\s+your\s+order\b/i,

@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { currentMessageLines } from './event-type-extractor.js';
 import type { EvidenceBundle, EvidenceClaim } from './types.js';
 
-export const CORROBORATED_EVENT_EVIDENCE_VERSION = 'corroborated-event-evidence-v2';
+export const CORROBORATED_EVENT_EVIDENCE_VERSION = 'corroborated-event-evidence-v3';
 
 function normalizeText(value: string): string {
   return value
@@ -59,6 +59,11 @@ function isInvoiceReminderContext(document: EmailDocumentV1): boolean {
   return reminder && !hasInvoiceCreationLanguage(document);
 }
 
+function hasCompletedTranslatedShipmentLanguage(document: EmailDocumentV1): boolean {
+  const text = currentMessageText(document);
+  return /\b(?:rendeles|megrendeles)\w*.{0,120}\bszallitottak\b/i.test(text);
+}
+
 export function deriveCorroboratedEventEvidence(
   document: EmailDocumentV1,
   bundle: EvidenceBundle,
@@ -80,6 +85,24 @@ export function deriveCorroboratedEventEvidence(
       extractorId: 'corroborated-event-evidence',
       extractorVersion: CORROBORATED_EVENT_EVIDENCE_VERSION,
       qualifiers: ['corroborated_refund_status'],
+    });
+  }
+
+  const explicitTracking = hasStrongClaim(
+    bundle,
+    'tracking_number',
+    (value) => typeof value === 'string' && value.trim().length >= 8,
+    0.95,
+  );
+  if (explicitTracking && hasCompletedTranslatedShipmentLanguage(document)) {
+    claims.push({
+      field: 'event_type',
+      value: 'shipment',
+      confidence: 0.975,
+      source: 'document_structure',
+      extractorId: 'corroborated-event-evidence',
+      extractorVersion: CORROBORATED_EVENT_EVIDENCE_VERSION,
+      qualifiers: ['explicit_shipment_event', 'tracking_corroborated_translated_shipment'],
     });
   }
 

@@ -5,6 +5,7 @@ import {
   paymentIdentityKey,
   shipmentIdentityKey,
 } from './identity-keys.js';
+import { decoratedOrderReviewBase, merchantNamespaceOrderKey } from './candidate-index.js';
 import { normalizeStableIdentifier } from './identifier-normalizer.js';
 
 export function buildEvidenceForCandidate(
@@ -31,18 +32,60 @@ export function buildEvidenceForCandidate(
     : [];
   if (matchingOrders.length > 0) {
     const eventKey = orderIdentityKey(event.userId, event.merchantId, orderId);
-    const namespaceMatch = Boolean(eventKey && matchingOrders.some(
+    const canonicalNamespaceMatch = Boolean(eventKey && matchingOrders.some(
       (item) => orderIdentityKey(event.userId, item.merchantId, item.orderId) === eventKey,
     ));
+    const senderNamespaceKey = merchantNamespaceOrderKey(event.userId, event.merchantNamespace, orderId);
+    const senderNamespaceMatch = event.sourceRole === 'merchant' && Boolean(senderNamespaceKey && matchingOrders.some(
+      (item) => merchantNamespaceOrderKey(event.userId, item.merchantNamespace, item.orderId) === senderNamespaceKey,
+    ));
+    const hardNamespaceMatch = canonicalNamespaceMatch || senderNamespaceMatch;
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: event.eventType === 'invoice_created' ? 'INVOICE_ORDER_ID_EXACT' : 'ORDER_ID_EXACT',
-      strength: namespaceMatch ? 'hard' : 'soft',
-      score: namespaceMatch ? 100 : 35,
-      explanation: namespaceMatch
-        ? `exact order identity ${eventKey}`
-        : `order id ${orderId} matched without canonical merchant namespace agreement`,
+      strength: hardNamespaceMatch ? 'hard' : 'soft',
+      score: hardNamespaceMatch ? 100 : 35,
+      explanation: canonicalNamespaceMatch
+        ? `exact canonical order identity ${eventKey}`
+        : senderNamespaceMatch
+          ? `exact order identity inside merchant sender namespace ${senderNamespaceKey}`
+          : `order id ${orderId} matched without merchant namespace agreement`,
+    });
+    if (senderNamespaceMatch) {
+      edges.push({
+        sourceEventId: event.eventId,
+        candidatePurchaseId: purchaseId,
+        evidenceType: 'MERCHANT_NAMESPACE_MATCH',
+        strength: 'soft',
+        score: 25,
+        explanation: `merchant sender namespace ${event.merchantNamespace}`,
+      });
+    }
+  }
+
+  const reviewIdentity = decoratedOrderReviewBase(orderId) ?? orderId;
+  const reviewNamespaceKey = event.sourceRole === 'merchant'
+    ? merchantNamespaceOrderKey(event.userId, event.merchantNamespace, reviewIdentity)
+    : null;
+  const decoratedReviewMatch = reviewNamespaceKey && orderId
+    ? orders.find((item) => {
+        const storedOrderId = normalizeStableIdentifier(item.orderId);
+        if (!storedOrderId || storedOrderId === orderId) return false;
+        const storedReviewIdentity = decoratedOrderReviewBase(storedOrderId) ?? storedOrderId;
+        return merchantNamespaceOrderKey(event.userId, item.merchantNamespace, storedReviewIdentity) === reviewNamespaceKey;
+      })
+    : undefined;
+
+  if (decoratedReviewMatch) {
+    const storedOrderId = normalizeStableIdentifier(decoratedReviewMatch.orderId);
+    edges.push({
+      sourceEventId: event.eventId,
+      candidatePurchaseId: purchaseId,
+      evidenceType: 'ORDER_ID_DECORATED_REVIEW_ALIAS',
+      strength: 'soft',
+      score: 15,
+      explanation: `review-only decorated order-id relation ${orderId} ~ ${storedOrderId} inside merchant sender namespace ${event.merchantNamespace}`,
     });
   }
 

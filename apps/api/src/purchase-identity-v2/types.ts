@@ -21,6 +21,8 @@ export type SourceRole =
   | 'customer'
   | 'unknown';
 
+export type PurchaseCreationAuthority = 'authorized' | 'review' | 'none';
+
 export interface EvidenceProvenance {
   field: string;
   source:
@@ -67,6 +69,19 @@ export interface CanonicalEvent {
   occurredAt: string | null;
   merchantRaw: string | null;
   merchantId: string | null;
+  /**
+   * Exact merchant-owned sender namespace for unknown merchants. This is not a
+   * canonical merchant id and must never be populated for public/shared/carrier
+   * infrastructure. It exists so same-order lifecycle events can correlate
+   * before a Merchant Identity Registry entry exists.
+   */
+  merchantNamespace?: string | null;
+  /**
+   * Upstream semantic permission for creating a new Purchase. The graph may
+   * use this for unknown merchants but must never infer it from order id alone.
+   */
+  purchaseCreationAuthority?: PurchaseCreationAuthority;
+  purchaseCreationReasons?: string[];
   orderIdRaw: string | null;
   orderIdNormalized: string | null;
   trackingIdRaw: string | null;
@@ -101,6 +116,8 @@ export interface OrderIdentity {
   orderIdentityId: string;
   purchaseId: string;
   merchantId: string | null;
+  /** Exact sender-domain namespace captured when the merchant was not yet canonicalized. */
+  merchantNamespace?: string | null;
   orderId: string;
   relation: 'primary' | 'child' | 'split_child' | 'replacement';
   parentOrderIdentityId: string | null;
@@ -165,11 +182,13 @@ export interface MerchantIdentityDefinition {
 
 export type EvidenceType =
   | 'ORDER_ID_EXACT'
+  | 'ORDER_ID_DECORATED_REVIEW_ALIAS'
   | 'TRACKING_ID_EXACT'
   | 'PAYMENT_REFERENCE_EXACT'
   | 'INVOICE_ORDER_ID_EXACT'
   | 'ORDER_URL_EXACT'
   | 'MERCHANT_ID_MATCH'
+  | 'MERCHANT_NAMESPACE_MATCH'
   | 'AMOUNT_CURRENCY_MATCH'
   | 'TIME_PROXIMITY'
   | 'PRODUCT_OVERLAP'

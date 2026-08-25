@@ -6,6 +6,8 @@ import {
   type ExtractionV2MerchantIdentityResolver,
 } from './extraction-v2-adapter.js';
 import { PurchaseIdentityGraph } from './graph.js';
+import { deriveMerchantSenderNamespace } from './merchant-sender-namespace.js';
+import { evaluatePurchaseCreationAuthority } from './purchase-creation-authority.js';
 import type { CanonicalEvent, CorrelationDecision, PurchaseIdentitySnapshot } from './types.js';
 
 export interface PurchaseIdentityShadowInput {
@@ -31,7 +33,7 @@ export interface PurchaseIdentityShadowResult {
 /**
  * End-to-end read-only shadow orchestration:
  * EmailDocumentV1 -> frozen Extraction Engine v2 -> direct canonical adapter ->
- * Purchase Identity Graph v2 decision/simulation.
+ * Purchase creation authority -> Purchase Identity Graph v2 decision/simulation.
  *
  * The graph may mutate its private in-memory clone to show the predicted result,
  * but this function performs no database writes and does not alter the caller's
@@ -64,6 +66,16 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
       simulatedSnapshot: graph.snapshot(),
     };
   }
+
+  canonicalEvent.merchantNamespace = deriveMerchantSenderNamespace(canonicalEvent);
+  const creationAuthority = evaluatePurchaseCreationAuthority({
+    document: input.document,
+    eventType: canonicalEvent.eventType,
+    sourceRole: canonicalEvent.sourceRole ?? 'unknown',
+    orderId: canonicalEvent.orderIdNormalized ?? canonicalEvent.orderIdRaw,
+  });
+  canonicalEvent.purchaseCreationAuthority = creationAuthority.authority;
+  canonicalEvent.purchaseCreationReasons = creationAuthority.reasons;
 
   const applied = graph.applyEvent(canonicalEvent);
   return {
