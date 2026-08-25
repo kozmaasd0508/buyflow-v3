@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
 import type { NormalizedEmail } from '../email/types.js';
+import { normalizeStableIdentifier } from './identifier-normalizer.js';
 import { PHASE_D_FRESH_BLIND_FIXTURES, type PhaseDBlindFixture } from './phase-d-fresh-blind-fixtures.js';
 import { runPurchaseIdentityShadow } from './shadow-orchestrator.js';
 import type { PurchaseIdentitySnapshot } from './types.js';
@@ -144,7 +145,10 @@ test('Phase D fresh blind lifecycle audit preserves automatic-link precision', (
 
     if (expectation.kind === 'positive_new_purchase') {
       if (decision === 'NEW_PURCHASE') {
-        const createdOrder = result.simulatedSnapshot.orders.find((order) => order.orderId === expectation.expectedOrderId);
+        const expectedOrderNormalized = normalizeStableIdentifier(expectation.expectedOrderId);
+        const createdOrder = result.simulatedSnapshot.orders.find((order) =>
+          normalizeStableIdentifier(order.orderId) === expectedOrderNormalized
+        );
         if (!createdOrder) unsafe.push(`${fixture.id}: NEW_PURCHASE created without expected order identity`);
         else correctAutomatic += 1;
       } else if (decision === 'LINKED') {
