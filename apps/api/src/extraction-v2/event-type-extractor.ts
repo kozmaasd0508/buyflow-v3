@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 
-export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v7';
+export const UNIVERSAL_EVENT_TYPE_EXTRACTOR_VERSION = 'universal-event-type-v8';
 
 export type UniversalCommerceEventType =
   | 'order_created'
@@ -39,6 +39,36 @@ export function currentMessageLines(text: string): string[] {
     if (line) result.push(line);
   }
   return result;
+}
+
+/**
+ * Removes only explicit negated/disclaimed refund-completion clauses before
+ * refund matching. Other event types still see the original text, and a later
+ * independent positive refund sentence remains eligible.
+ */
+function stripNegatedRefundCompletion(value: string): string {
+  return value
+    .replace(
+      /\b(?:does|did)\s+not\s+(?:state|say|confirm|mean|indicate|show|report|claim)\b[^.!?\n]{0,120}\b(?:refund|reimbursement)\b[^.!?\n]{0,80}\b(?:issued|processed|completed|successful)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\bno\s+(?:refund|reimbursement)\s+(?:(?:has|have)\s+been\s+|was\s+|is\s+)?(?:issued|processed|completed|successful)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\b(?:refund|reimbursement)\s+(?:(?:has|have)\s+not\s+been|was\s+not|is\s+not)\s+(?:issued|processed|completed|successful)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\b(?:refund|reimbursement)\s+(?:has|have)\s+not\s+(?:completed|processed)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\bnem\s+(?:allitja|jelenti|igazolja|erositi|mutatja)\b[^.!?\n]{0,120}\bvisszaterites\b[^.!?\n]{0,80}\b(?:megtortent|teljesitve|elinditva|sikeres)\b/gi,
+      ' ',
+    )
+    .replace(/\b(?:nem\s+tortent\s+visszaterites|visszaterites\s+nem\s+tortent)\b/gi, ' ');
 }
 
 type EventPattern = {
@@ -174,7 +204,10 @@ function scan(text: string, source: 'subject' | 'body'): EvidenceClaim<string>[]
       claims.push(eventClaim('refund', 'subject'));
     }
     for (const item of EVENT_PATTERNS) {
-      if (!item.patterns.some((pattern) => pattern.test(line))) continue;
+      const evidenceText = item.eventType === 'refund'
+        ? stripNegatedRefundCompletion(line)
+        : line;
+      if (!item.patterns.some((pattern) => pattern.test(evidenceText))) continue;
       claims.push({
         field: 'event_type',
         value: item.eventType,
