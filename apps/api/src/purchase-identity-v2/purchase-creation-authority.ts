@@ -38,9 +38,17 @@ export function hasExplicitPurchaseNonAcceptance(document: EmailDocumentV1): boo
   return NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
 }
 
+function hasGenericOrderSummaryHeading(document: EmailDocumentV1): boolean {
+  return normalizeText(document.text)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .some((line) => /\b(?:meg)?rendeles(?:i)?\s+(?:osszesito|reszletei?)\b/.test(line));
+}
+
 function structureSignalCount(document: EmailDocumentV1): number {
   return [
-    document.sections.some((section) => section.type === 'order_summary'),
+    document.sections.some((section) => section.type === 'order_summary') || hasGenericOrderSummaryHeading(document),
     document.signals.products.length > 0,
     document.signals.amounts.length > 0,
     document.signals.paymentMethods.length > 0,
