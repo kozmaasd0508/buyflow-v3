@@ -3,7 +3,7 @@ import type { EvidenceClaim } from './types.js';
 import type { EvidenceExtractor } from './collector.js';
 import { currentMessageLines } from './event-type-extractor.js';
 
-export const UNIVERSAL_PAYMENT_STATUS_EXTRACTOR_VERSION = 'universal-payment-status-v5';
+export const UNIVERSAL_PAYMENT_STATUS_EXTRACTOR_VERSION = 'universal-payment-status-v6';
 
 type PaymentStatusEvidence = 'paid' | 'cash_on_delivery' | 'failed' | 'refunded';
 
@@ -13,6 +13,31 @@ function normalizeText(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\u00a0/g, ' ')
     .toLowerCase();
+}
+
+function stripNegatedRefundCompletion(value: string): string {
+  return value
+    .replace(
+      /\b(?:does|did)\s+not\s+(?:state|say|confirm|mean|indicate|show|report|claim)\b[^.!?\n]{0,120}\b(?:refund|reimbursement)\b[^.!?\n]{0,80}\b(?:issued|processed|completed|successful)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\bno\s+(?:refund|reimbursement)\s+(?:(?:has|have)\s+been\s+|was\s+|is\s+)?(?:issued|processed|completed|successful)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\b(?:refund|reimbursement)\s+(?:(?:has|have)\s+not\s+been|was\s+not|is\s+not)\s+(?:issued|processed|completed|successful)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\b(?:refund|reimbursement)\s+(?:has|have)\s+not\s+(?:completed|processed)\b/gi,
+      ' ',
+    )
+    .replace(
+      /\bnem\s+(?:allitja|jelenti|igazolja|erositi|mutatja)\b[^.!?\n]{0,120}\bvisszaterites\b[^.!?\n]{0,80}\b(?:megtortent|teljesitve|elinditva|sikeres)\b/gi,
+      ' ',
+    )
+    .replace(/\b(?:nem\s+tortent\s+visszaterites|visszaterites\s+nem\s+tortent)\b/gi, ' ');
 }
 
 const FAILED = /\b(?:sikertelen\s+(?:bankkartyas\s+)?fizetes|fizetes\s+sikertelen|tranzakcio\s+sikertelen|sikertelen\s+tranzakcio|payment\s+(?:failed|unsuccessful|declined)|transaction\s+(?:failed|declined))\b/i;
@@ -25,7 +50,9 @@ const PAID = /\b(?:sikeres\s+(?:bankkartyas\s+)?fizetes|fizetes\s+sikeres|fizete
 function statusForLine(line: string): { status: PaymentStatusEvidence; qualifier: string; confidence: number } | null {
   const normalized = normalizeText(line);
   if (FAILED.test(normalized)) return { status: 'failed', qualifier: 'explicit_payment_failure', confidence: 0.995 };
-  if (REFUNDED.test(normalized)) return { status: 'refunded', qualifier: 'explicit_refund_completion', confidence: 0.995 };
+  if (REFUNDED.test(stripNegatedRefundCompletion(normalized))) {
+    return { status: 'refunded', qualifier: 'explicit_refund_completion', confidence: 0.995 };
+  }
   if (COD.test(normalized)) return { status: 'cash_on_delivery', qualifier: 'explicit_cod_evidence', confidence: 0.99 };
   if (PAID.test(normalized) && !/\b(?:nem|not)\s+(?:volt\s+)?sikeres\b/i.test(normalized)) {
     return { status: 'paid', qualifier: 'explicit_paid_evidence', confidence: 0.99 };
