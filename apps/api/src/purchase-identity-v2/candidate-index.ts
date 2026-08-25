@@ -10,6 +10,7 @@ import { normalizeStableIdentifier } from './identifier-normalizer.js';
 export interface CandidateIndex {
   orderExact: Map<string, Set<string>>;
   orderMerchantNamespaceExact: Map<string, Set<string>>;
+  orderMerchantNamespaceReviewAlias: Map<string, Set<string>>;
   orderDiscovery: Map<string, Set<string>>;
   trackingExact: Map<string, Set<string>>;
   trackingDiscovery: Map<string, Set<string>>;
@@ -30,6 +31,20 @@ function discoveryKey(userId: string, id: string | null): string | null {
   return id ? `${encodeURIComponent(userId.trim().toLowerCase())}:${id}` : null;
 }
 
+/**
+ * Returns a conservative review-only base for order identifiers decorated with
+ * a short alphabetic merchant prefix, e.g. KB9160675123 -> 9160675123.
+ *
+ * This is deliberately NOT canonical normalization. The relation is used only
+ * to discover a REVIEW candidate inside the same exact merchant namespace.
+ */
+export function decoratedOrderReviewBase(value: string | null | undefined): string | null {
+  const normalized = normalizeStableIdentifier(value);
+  if (!normalized) return null;
+  const match = normalized.match(/^[A-Z]{1,4}([0-9][A-Z0-9]{5,})$/);
+  return match?.[1] ?? null;
+}
+
 export function merchantNamespaceOrderKey(
   userId: string,
   merchantNamespace: string | null | undefined,
@@ -45,6 +60,7 @@ export function buildCandidateIndex(snapshot: PurchaseIdentitySnapshot): Candida
   const index: CandidateIndex = {
     orderExact: new Map(),
     orderMerchantNamespaceExact: new Map(),
+    orderMerchantNamespaceReviewAlias: new Map(),
     orderDiscovery: new Map(),
     trackingExact: new Map(),
     trackingDiscovery: new Map(),
@@ -60,8 +76,14 @@ export function buildCandidateIndex(snapshot: PurchaseIdentitySnapshot): Candida
     const purchase = purchaseById.get(order.purchaseId);
     if (!purchase) continue;
     const normalizedOrder = normalizeStableIdentifier(order.orderId);
+    const reviewBase = decoratedOrderReviewBase(order.orderId);
     add(index.orderExact, orderIdentityKey(purchase.userId, order.merchantId, order.orderId), order.purchaseId);
     add(index.orderMerchantNamespaceExact, merchantNamespaceOrderKey(purchase.userId, order.merchantNamespace, order.orderId), order.purchaseId);
+    // Exact forms are indexed here as possible bases so a later decorated form
+    // can find them. Decorated stored forms are additionally indexed by their
+    // stripped review-only base. Neither key grants hard-link authority.
+    add(index.orderMerchantNamespaceReviewAlias, merchantNamespaceOrderKey(purchase.userId, order.merchantNamespace, normalizedOrder), order.purchaseId);
+    add(index.orderMerchantNamespaceReviewAlias, merchantNamespaceOrderKey(purchase.userId, order.merchantNamespace, reviewBase), order.purchaseId);
     add(index.orderDiscovery, discoveryKey(purchase.userId, normalizedOrder), order.purchaseId);
   }
 
@@ -95,6 +117,7 @@ export function buildCandidateIndex(snapshot: PurchaseIdentitySnapshot): Candida
 export function candidatePurchaseIds(event: CanonicalEvent, index: CandidateIndex): Set<string> {
   const result = new Set<string>();
   const order = normalizeStableIdentifier(event.orderIdNormalized ?? event.orderIdRaw);
+  const orderReviewBase = decoratedOrderReviewBase(order);
   const tracking = normalizeStableIdentifier(event.trackingIdNormalized ?? event.trackingIdRaw);
   const payment = normalizeStableIdentifier(event.paymentReference);
   const invoice = normalizeStableIdentifier(event.invoiceIdNormalized ?? event.invoiceIdRaw);
@@ -102,6 +125,7 @@ export function candidatePurchaseIds(event: CanonicalEvent, index: CandidateInde
   const keys: Array<[Map<string, Set<string>>, string | null]> = [
     [index.orderExact, orderIdentityKey(event.userId, event.merchantId, order)],
     [index.orderMerchantNamespaceExact, merchantNamespaceOrderKey(event.userId, event.merchantNamespace, order)],
+    [index.orderMerchantNamespaceReviewAlias, merchantNamespaceOrderKey(event.userId, event.merchantNamespace, orderReviewBase ?? order)],
     [index.orderDiscovery, discoveryKey(event.userId, order)],
     [index.trackingExact, shipmentIdentityKey(event.userId, event.carrierId, tracking)],
     [index.trackingDiscovery, discoveryKey(event.userId, tracking)],
