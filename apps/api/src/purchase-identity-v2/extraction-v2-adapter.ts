@@ -1,6 +1,7 @@
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { ExtractionEngineV2Result } from '../extraction-v2/engine-v2.js';
 import type { EvidenceClaim, EvidenceField, ResolvedCommerceEvent, ResolvedField } from '../extraction-v2/types.js';
+import { extractExplicitOrderRelation } from './explicit-order-relation.js';
 import { normalizeMerchantToken, normalizeStableIdentifier } from './identifier-normalizer.js';
 import type {
   CanonicalEvent,
@@ -199,7 +200,12 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
   const eventTypeConflict = extraction.resolved.eventType.status === 'conflict';
   if (!resolvedEventType && !eventTypeConflict) return null;
 
-  const provenance = resolvedProvenance(extraction.resolved);
+  const orderIdRaw = resolvedValue(extraction.resolved.orderNumber);
+  const relationExtraction = extractExplicitOrderRelation(document, orderIdRaw);
+  const provenance = [
+    ...resolvedProvenance(extraction.resolved),
+    ...(relationExtraction.relation?.provenance ?? []),
+  ];
   const merchantRaw = resolvedValue(extraction.resolved.merchant);
   const carrierRaw = resolvedValue(extraction.resolved.carrier);
   const senderDomain = document.sender.primaryDomain;
@@ -215,7 +221,6 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
     ? input.carrierResolver?.resolve({ carrierRaw, senderDomain, provenance }) ?? normalizeMerchantToken(carrierRaw)
     : null;
 
-  const orderIdRaw = resolvedValue(extraction.resolved.orderNumber);
   const trackingIdRaw = resolvedValue(extraction.resolved.trackingNumber);
   const invoiceIdRaw = resolvedValue(extraction.resolved.invoiceNumber);
   const paymentReferenceRaw = resolvedValue(extraction.resolved.paymentReference);
@@ -231,6 +236,7 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
     occurredAt: null,
     merchantRaw,
     merchantId,
+    orderRelation: relationExtraction.relation,
     orderIdRaw,
     orderIdNormalized: normalizeStableIdentifier(orderIdRaw),
     trackingIdRaw,
@@ -250,6 +256,6 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
     invoiceIssuerId: null,
     platformMerchantId: null,
     sellerMerchantId: null,
-    conflicts: conflictsFromExtraction(extraction),
+    conflicts: [...conflictsFromExtraction(extraction), ...relationExtraction.conflicts],
   };
 }
