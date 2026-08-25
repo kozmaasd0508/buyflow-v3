@@ -114,9 +114,10 @@ test('Phase E structure-fidelity post-fix replay exercises both safe positive pa
   let blockedControlsPassed = 0;
 
   for (const fixture of STRUCTURE_FIDELITY_FIXTURES) {
+    const document = buildEmailDocumentV1(emailFor(fixture));
     const result = runPurchaseIdentityShadow({
       userId: USER_ID,
-      document: buildEmailDocumentV1(emailFor(fixture)),
+      document,
       snapshot: snapshotFor(fixture.snapshotKey),
       merchantResolver,
       carrierResolver,
@@ -151,8 +152,17 @@ test('Phase E structure-fidelity post-fix replay exercises both safe positive pa
     observations.push({
       id: fixture.id,
       eventType: result.canonicalEvent?.eventType ?? null,
+      sourceRole: result.canonicalEvent?.sourceRole ?? null,
       decision,
       creationAuthority: result.canonicalEvent?.purchaseCreationAuthority ?? null,
+      creationReasons: result.canonicalEvent?.purchaseCreationReasons ?? [],
+      structureSignals: {
+        orderSummarySections: document.sections.filter((section) => section.type === 'order_summary').length,
+        products: document.signals.products.length,
+        amounts: document.signals.amounts.length,
+        paymentMethods: document.signals.paymentMethods.length,
+        shippingMethods: document.signals.shippingMethods.length,
+      },
       promotionEligible: promotion.eligible,
       promotionAction: promotion.action,
       promotionReasons: promotion.reasons,
