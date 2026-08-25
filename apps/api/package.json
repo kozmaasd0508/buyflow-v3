@@ -12,6 +12,7 @@
     "nylas:audit": "tsx src/scripts/nylas-audit.ts",
     "nylas:protocol-shadow-audit": "tsx src/scripts/nylas-protocol-shadow-audit.ts",
     "nylas:markup-audit": "tsx src/scripts/nylas-markup-audit.ts",
+    "phase-e2:live-blind": "tsx src/scripts/phase-e2-100-gmail-blind.ts",
     "openai:nano-smoke": "tsx src/scripts/openai-nano-smoke.ts",
     "pipeline:nano-extract-pending": "tsx src/scripts/nano-extract-pending.ts",
     "pipeline:validate-extractions": "tsx src/scripts/validate-nano-extractions.ts",
