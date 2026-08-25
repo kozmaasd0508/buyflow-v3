@@ -139,9 +139,10 @@ async function main() {
     if (!email.bodyHtml && !email.snippet) bodyMissing += 1;
     if ((email.headers?.length ?? 0) === 0) headersMissing += 1;
 
+    const document = buildEmailDocumentV1(email);
     const shadow = runPurchaseIdentityShadow({
       userId: USER_ID,
-      document: buildEmailDocumentV1(email),
+      document,
       snapshot,
       merchantResolver,
     });
@@ -173,6 +174,19 @@ async function main() {
       group: item.group,
       eventType: event?.eventType ?? null,
       sourceRole: event?.sourceRole ?? null,
+      creationAuthority: event?.purchaseCreationAuthority ?? null,
+      creationReasons: event?.purchaseCreationReasons ?? [],
+      documentStructure: {
+        orderSummarySections: document.sections.filter((section) => section.type === 'order_summary').length,
+        shippingSections: document.sections.filter((section) => section.type === 'shipping').length,
+        paymentSections: document.sections.filter((section) => section.type === 'payment').length,
+        products: document.signals.products.length,
+        amounts: document.signals.amounts.length,
+        paymentMethods: document.signals.paymentMethods.length,
+        shippingMethods: document.signals.shippingMethods.length,
+        orderNumbers: document.signals.orderNumbers.length,
+        trackingNumbers: document.signals.trackingNumbers.length,
+      },
       decision: decision?.kind ?? null,
       promotionEligible: promotion.eligible,
       promotionAction: promotion.action,
@@ -191,7 +205,7 @@ async function main() {
   }
 
   const result = {
-    mode: 'phase_e2_100_message_live_blind_shadow',
+    mode: 'phase_e2_100_message_live_blind_shadow_diagnostic',
     safety: {
       productionWrites: 0,
       aiCalls: 0,
@@ -232,7 +246,7 @@ async function main() {
     observations,
   };
 
-  console.log('PHASE_E2_100_GMAIL_LIVE_BLIND_SHADOW', JSON.stringify(result));
+  console.log('PHASE_E2_100_GMAIL_LIVE_BLIND_DIAGNOSTIC', JSON.stringify(result));
 }
 
 main().catch((error) => {
