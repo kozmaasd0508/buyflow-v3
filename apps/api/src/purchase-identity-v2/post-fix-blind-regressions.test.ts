@@ -107,7 +107,7 @@ function commerceEvent(input: {
   return event;
 }
 
-test('merchant-prefixed order id becomes REVIEW candidate, never automatic link', () => {
+test('merchant-prefixed order id becomes explained REVIEW candidate, never automatic link', () => {
   const graph = new PurchaseIdentityGraph(EMPTY);
   const created = graph.applyEvent(commerceEvent({
     id: 'order',
@@ -126,6 +126,40 @@ test('merchant-prefixed order id becomes REVIEW candidate, never automatic link'
   }));
   assert.equal(later.decision.kind, 'REVIEW');
   assert.equal(later.mutated, false);
+  if (later.decision.kind === 'REVIEW') {
+    const aliasReasons = later.decision.reasons.filter(
+      (reason) => reason.evidenceType === 'ORDER_ID_DECORATED_REVIEW_ALIAS',
+    );
+    assert.equal(aliasReasons.length, 1);
+    assert.equal(aliasReasons[0]?.strength, 'soft');
+    assert.match(aliasReasons[0]?.explanation ?? '', /review-only decorated order-id relation/i);
+  }
+});
+
+test('decorated stored order id also yields explained REVIEW for later plain form', () => {
+  const graph = new PurchaseIdentityGraph(EMPTY);
+  const created = graph.applyEvent(commerceEvent({
+    id: 'order-decorated',
+    type: 'order_created',
+    senderDomain: 'orders.unknown-shop.example',
+    orderId: 'KB9160-675123',
+    creationAuthority: 'authorized',
+  }));
+  assert.equal(created.decision.kind, 'NEW_PURCHASE');
+
+  const later = graph.applyEvent(commerceEvent({
+    id: 'processing-plain',
+    type: 'order_updated',
+    senderDomain: 'orders.unknown-shop.example',
+    orderId: '9160-675123',
+  }));
+  assert.equal(later.decision.kind, 'REVIEW');
+  assert.equal(later.mutated, false);
+  if (later.decision.kind === 'REVIEW') {
+    assert.ok(later.decision.reasons.some(
+      (reason) => reason.evidenceType === 'ORDER_ID_DECORATED_REVIEW_ALIAS' && reason.strength === 'soft',
+    ));
+  }
 });
 
 test('decorated id discovery never crosses merchant sender namespaces', () => {
@@ -146,4 +180,5 @@ test('decorated id discovery never crosses merchant sender namespaces', () => {
   }));
   assert.equal(wrongShop.decision.kind, 'UNLINKED');
   assert.equal(wrongShop.mutated, false);
+  assert.deepEqual(wrongShop.decision.reasons, []);
 });
