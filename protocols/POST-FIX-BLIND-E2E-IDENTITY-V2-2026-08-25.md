@@ -104,7 +104,7 @@ Query:
 
 `{subject:megrendelés subject:rendelés subject:order} -from:temu -from:expressone -from:posta -from:foxpost -from:gls -from:dpd -from:me -in:spam -in:trash`
 
-Candidate count: **100** (first page only; no pagination used for the frozen headline sample)
+Candidate count: **100** (first page)
 
 SHA-256 prefixes:
 
@@ -209,6 +209,119 @@ fa975e1a3a733076
 388bdb07d21e3683
 bb53c3561982f97f
 1feae8b2e7c3922e
+```
+
+## Candidate selection C — second page of the same subject query
+
+No recognition/correlation code changed after inspecting selection B. The second page was fetched ID-only and frozen before opening any message from it.
+
+Pagination token used: `04703933897912975387`
+Candidate count: **100**
+Next token was available but is outside this frozen selection.
+
+SHA-256 prefixes:
+
+```text
+4d8bc92cd8f0c39e
+05555dd6fe2f9f0d
+87bf90b4f551a559
+1b340fd8ab9ae4f2
+cc752cd3802c1376
+58493d6e26b79e22
+b4aab143382c566b
+1f54312341b1da6f
+7e639887e2d31da7
+def859e9556ef06f
+e6b384767cf838d7
+85bfcabe154bdc93
+4a7b1b70a73bf30c
+3696e2cb8ba2ea7e
+e9a7c730b16bba9e
+cb59bbc69f1bf7ff
+eae0cd316b5e90be
+5a7df5f8cbcba394
+441948423a6e2560
+ce9394ceb305f336
+7d93a1bebddb89d1
+81acf80c4faa7dbe
+543f4b9b145ba384
+34b532dbd86a69a1
+822cbebd1295e38b
+0dcaa4b7a9186476
+b5d25dab4b764404
+64aea163fdf3fba3
+d0a080db1ff7c891
+277a122d27076489
+5abd14f21befc7f7
+8c3e4d7a0f53dbea
+9a365bdae96ce899
+1142cbbf212cd3ca
+6248dec1bc845a29
+5470d3b60c69a8a7
+254b51d6405602c4
+06ca143f38e62e3d
+93e07e702d48055b
+3beb421d102d119a
+ef8ee9c775ea1d56
+1b1a8169e2212e3d
+87d0636613f33657
+1e7476f02da96325
+0d704bab2414bbdb
+cc92a23589a92917
+9726f43cf44706da
+91453637e0f321d4
+58dc55c5205ea6e8
+caa5122334d2ae88
+825c1165d57e2673
+44d2c12bf65883d9
+bf3bb9b3fe3905cd
+9e11bd44da9d9c01
+120ffcfb91dbaed2
+14421fc4b08aff4a
+5c9dc73321426e58
+35863d7e24bd8aef
+0890ea6e1cb317e3
+1e51c79350ba78ba
+2ef955a1d4a5ea00
+0e59af8a3673173d
+35c12b4d26c93e5c
+b988842916ab93db
+39af2cae8fee7852
+0d5cc6f9e5b5ff3c
+a2034e79e5ac52b0
+03b5778e86b10188
+74b0424e9bd862a1
+dfce386b2c6a26d1
+ace47b7782122fea
+61eb5a3a44c345d5
+15dce25de008f8ce
+c2d1b97060d7894f
+760018e5568a146e
+51acd5c733dcec4d
+31eaf1e52a36c3d7
+66fe1c43637b9fff
+7a28edc6ce71f07f
+3d78f49e318ed92a
+cf48ff98a00ee744
+225a8e0c5f844e7b
+73dbe452c2fa3e05
+a1f81805fb151de6
+d8f7b92a776b6ab2
+f3603823ecedd8e0
+9faf110cc9d6928e
+5ede8173a7e29e95
+c416b751f550ac86
+f19a193e813c5b2a
+f557a43e0ebcb2d5
+5a710d1a4397b749
+223900f13e701a6b
+eed5c2bbff350b12
+9ee40c75eb1979eb
+d080d2e52881c25e
+3c1d81f1c54a0da7
+67324ecb28a32281
+33fb35df0779587d
+16e6d1a9a14b3912
 ```
 
 ## Evaluation rule
