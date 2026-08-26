@@ -1,11 +1,11 @@
-name: V7 Luna V2 Unlinked Audit 300
+name: V7 Luna V2 Blocked Order Created Audit 300
 
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
 
 jobs:
-  v7-luna-v2-unlinked-audit-300:
+  v7-luna-v2-blocked-order-created-audit-300:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -23,8 +23,8 @@ jobs:
       - name: API typecheck
         run: npm run typecheck --workspace @buyflow/api
 
-      - name: Prepare anonymized UNLINKED audit
-        run: python .github/scripts/v7_unlinked_audit_patch.py
+      - name: Prepare anonymized blocked order-created audit
+        run: python .github/scripts/v7_order_created_audit_patch.py
 
       - name: Expand audit population from 100 to 300 emails
         shell: bash
@@ -35,22 +35,22 @@ jobs:
           source = v5.read_text()
           old = '.slice(0, 100);'
           if old not in source:
-              raise SystemExit('audit_300_v5_anchor_missing')
+              raise SystemExit('order_audit_300_v5_anchor_missing')
           v5.write_text(source.replace(old, '.slice(0, 300);', 1))
 
           v7 = Path('apps/api/src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid.ts')
           source = v7.read_text()
           old = '    || baseline.discoveredMessages !== 100'
           if old not in source:
-              raise SystemExit('audit_300_v7_anchor_missing')
+              raise SystemExit('order_audit_300_v7_anchor_missing')
           v7.write_text(source.replace(old, '    || baseline.discoveredMessages !== 300', 1))
           PY
 
-      - name: Run 50-case anonymized UNLINKED audit over 300 emails
+      - name: Run blocked order-created audit over 300 emails
         run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
           NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
           NYLAS_API_URI: https://api.eu.nylas.com
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          V7_UNLINKED_AUDIT_LIMIT: '50'
+          V7_ORDER_CREATED_AUDIT_LIMIT: '100'
