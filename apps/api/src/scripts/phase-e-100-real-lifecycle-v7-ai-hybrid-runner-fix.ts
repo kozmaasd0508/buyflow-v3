@@ -1,3 +1,4 @@
+// CI retrigger marker: V7 AI diagnostics
 import { spawn } from 'node:child_process';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
