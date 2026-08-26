@@ -1,6 +1,6 @@
 name: V7 Luna V2 Purchase Journey Context 300
 
-# benchmark: structured-html + read-only journey context + trusted lifecycle event memory; conservative safety gate restored
+# benchmark: structured-html + read-only journey context + trusted lifecycle event memory v1; conservative safety gate restored
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
