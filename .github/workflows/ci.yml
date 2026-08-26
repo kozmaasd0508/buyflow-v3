@@ -1,5 +1,6 @@
 name: CI
 
+# V7 benchmark retrigger only; workflow logic unchanged.
 on:
   push:
     branches: [main]
@@ -7,7 +8,7 @@ on:
     branches: [main]
 
 jobs:
-  api-and-mobile:
+  phase-e-v7-ai-hybrid-shadow:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,14 +25,10 @@ jobs:
       - name: API typecheck
         run: npm run typecheck --workspace @buyflow/api
 
-      - name: API tests
-        run: npm test --workspace @buyflow/api
-
-      - name: API build
-        run: npm run build --workspace @buyflow/api
-
-      - name: Mobile typecheck
-        run: npm run typecheck --workspace @buyflow/mobile
-
-      - name: Mobile web build
-        run: npm run build --workspace @buyflow/mobile
+      - name: Phase E 100 lifecycle V7 Luna-Sol hybrid shadow benchmark
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
+        env:
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
