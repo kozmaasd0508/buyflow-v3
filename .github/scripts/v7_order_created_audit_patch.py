@@ -23,6 +23,102 @@ for old, new in replacements.items():
         raise SystemExit('v7_patch_anchor_missing:' + old)
     source = source.replace(old, new, 1)
 
+# Luna V3 input: current-email structured evidence plus a compact read-only
+# journey snapshot built only from previously promotion-eligible graph state.
+import_anchor = "import { evidenceEligibleForResolution } from '../extraction-v2/source-role-eligibility.js';\n"
+import_insert = import_anchor + "import { buildPurchaseJourneyContext, buildStructuredEmailEvidence } from '../ai/purchase-journey-context.js';\n"
+if import_anchor not in source:
+    raise SystemExit('journey_context_import_anchor_missing')
+source = source.replace(import_anchor, import_insert, 1)
+
+call_signature = "async function callModel(apiKey: string, model: 'gpt-5.6-luna' | 'gpt-5.6-sol', document: EmailDocumentV1): Promise<AiCandidate> {"
+call_signature_new = "async function callModel(apiKey: string, model: 'gpt-5.6-luna' | 'gpt-5.6-sol', document: EmailDocumentV1, journeyContext: string | null = null): Promise<AiCandidate> {"
+if call_signature not in source:
+    raise SystemExit('journey_context_call_signature_anchor_missing')
+source = source.replace(call_signature, call_signature_new, 1)
+
+body_anchor = "      bodyText: document.text,\n      fetchImpl: retryingFetch as typeof fetch,"
+body_insert = """      bodyText: document.text,
+      bodyHtml: document.html,
+      structuredEvidence: buildStructuredEmailEvidence(document),
+      journeyContext,
+      fetchImpl: retryingFetch as typeof fetch,"""
+if body_anchor not in source:
+    raise SystemExit('journey_context_model_body_anchor_missing')
+source = source.replace(body_anchor, body_insert, 1)
+
+loop_setup_anchor = """  let processed = 0;
+
+  for (const email of ordered) {
+    const document = buildEmailDocumentV1(email);
+    const base = baseExtractions.get(email.providerMessageId)!;
+    const luna = await callModel(apiKey, 'gpt-5.6-luna', document);"""
+loop_setup_insert = """  let processed = 0;
+  let lunaJourneySnapshot = emptySnapshot();
+  const journeyMerchantResolver = buildTestProtocolMerchantIdentityRegistry();
+  let messagesWithJourneyContext = 0;
+
+  for (const email of ordered) {
+    const document = buildEmailDocumentV1(email);
+    const base = baseExtractions.get(email.providerMessageId)!;
+    const journeyContext = buildPurchaseJourneyContext(document, lunaJourneySnapshot);
+    if (journeyContext) messagesWithJourneyContext += 1;
+    const luna = await callModel(apiKey, 'gpt-5.6-luna', document, journeyContext);"""
+if loop_setup_anchor not in source:
+    raise SystemExit('journey_context_loop_setup_anchor_missing')
+source = source.replace(loop_setup_anchor, loop_setup_insert, 1)
+
+luna_set_anchor = "    lunaExtractions.set(email.providerMessageId, augmentExtraction(base, luna.claims, 'gpt-5.6-luna'));\n\n    const reasons: string[] = [];"
+luna_set_insert = """    const lunaAugmented = augmentExtraction(base, luna.claims, 'gpt-5.6-luna');
+    lunaExtractions.set(email.providerMessageId, lunaAugmented);
+
+    const journeyShadow = runGraphFromExtraction({
+      userId: 'phase-e-100-v7-private-user',
+      document,
+      snapshot: lunaJourneySnapshot,
+      extraction: lunaAugmented,
+      merchantResolver: journeyMerchantResolver,
+    });
+    if (journeyShadow.promotionReadiness.eligible && journeyShadow.simulatedGraphMutated) {
+      lunaJourneySnapshot = journeyShadow.simulatedSnapshot;
+    }
+
+    const reasons: string[] = [];"""
+if luna_set_anchor not in source:
+    raise SystemExit('journey_context_luna_snapshot_anchor_missing')
+source = source.replace(luna_set_anchor, luna_set_insert, 1)
+
+sol_call_anchor = "      const sol = await callModel(apiKey, 'gpt-5.6-sol', document);"
+sol_call_insert = "      const sol = await callModel(apiKey, 'gpt-5.6-sol', document, journeyContext);"
+if sol_call_anchor not in source:
+    raise SystemExit('journey_context_sol_call_anchor_missing')
+source = source.replace(sol_call_anchor, sol_call_insert, 1)
+
+report_anchor = """    rejectedIdentifiers: {
+      lunaOrder: rejectedLunaOrderIds,
+      lunaTracking: rejectedLunaTrackingIds,
+      solOrder: rejectedSolOrderIds,
+      solTracking: rejectedSolTrackingIds,
+    },
+    productionWrites: 0,"""
+report_insert = """    rejectedIdentifiers: {
+      lunaOrder: rejectedLunaOrderIds,
+      lunaTracking: rejectedLunaTrackingIds,
+      solOrder: rejectedSolOrderIds,
+      solTracking: rejectedSolTrackingIds,
+    },
+    journeyContext: {
+      messagesWithContext: messagesWithJourneyContext,
+      finalPurchases: lunaJourneySnapshot.purchases.length,
+      finalShipments: lunaJourneySnapshot.shipments.length,
+      finalInvoices: lunaJourneySnapshot.invoices.length,
+      finalPayments: lunaJourneySnapshot.payments.length,
+    },
+    productionWrites: 0,"""
+if report_anchor not in source:
+    raise SystemExit('journey_context_report_anchor_missing')
+source = source.replace(report_anchor, report_insert, 1)
+
 setup_anchor = "  let unsafeCount = 0;\n"
 setup_insert = """  let unsafeCount = 0;
   const orderCreatedAuditLimit = input.lane === 'luna'
