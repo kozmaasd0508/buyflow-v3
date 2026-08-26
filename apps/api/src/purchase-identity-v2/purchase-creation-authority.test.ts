@@ -192,7 +192,7 @@ test('one amount without another independent structure signal remains REVIEW', (
   const doc = document(`
     <p>Rendelés #AB-778812</p>
     <p>Végösszeg: 12 990 Ft</p>
-  `);
+  `, 'Rendelési értesítés #AB-778812');
   const result = evaluatePurchaseCreationAuthority({
     document: doc,
     eventType: 'order_created',
