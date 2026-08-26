@@ -1,5 +1,6 @@
 name: V7 Luna V2 Purchase Journey Context 300
 
+# benchmark: structured-html + read-only journey context + evidence graph
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
