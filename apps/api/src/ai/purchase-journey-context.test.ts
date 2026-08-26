@@ -7,6 +7,7 @@ import {
   buildPurchaseJourneyContext,
   buildStructuredEmailEvidence,
   summarizePurchaseJourneyContext,
+  type PurchaseJourneyMemoryEvent,
 } from './purchase-journey-context.js';
 
 function document(
@@ -48,6 +49,24 @@ function snapshot(): PurchaseIdentitySnapshot {
   };
 }
 
+function priorEvent(overrides: Partial<PurchaseJourneyMemoryEvent> = {}): PurchaseJourneyMemoryEvent {
+  return {
+    purchaseId: 'p1',
+    eventType: 'shipment_created',
+    receivedAt: '2026-08-26T19:00:00.000Z',
+    sourceRole: 'merchant',
+    merchantNamespace: 'sender-domain:example-shop.hu',
+    orderId: 'ORD-12345',
+    trackingId: 'TRACK-MEMORY-777',
+    carrierId: null,
+    invoiceId: null,
+    paymentReference: null,
+    amount: null,
+    currency: null,
+    ...overrides,
+  };
+}
+
 test('structured evidence exposes parsed sections and hard signal candidates', () => {
   const doc = document('<p>Rendelés #ORD-12345</p><p>Végösszeg: 12 990 Ft</p><p>1x Teszt termék</p>');
   const value = JSON.parse(buildStructuredEmailEvidence(doc)) as any;
@@ -82,4 +101,33 @@ test('carrier sender never receives merchant namespace candidates without an exa
     'Kézbesítés folyamatban',
   );
   assert.equal(buildPurchaseJourneyContext(doc, snapshot()), null);
+});
+
+test('trusted prior lifecycle event remains visible even without a child identity record', () => {
+  const base = snapshot();
+  base.shipments = [];
+  const doc = document(
+    '<p>Rendelés #ORD-12345 állapota frissült.</p>',
+    'orders@example-shop.hu',
+    'Rendelés #ORD-12345 állapota frissült',
+  );
+  const summary = summarizePurchaseJourneyContext(doc, base, 5, [
+    priorEvent({ eventType: 'payment_completed', trackingId: null, amount: 12990, currency: 'HUF' }),
+  ]);
+  assert.equal(summary.candidates[0]?.purchaseId, 'p1');
+  assert.equal(summary.candidates[0]?.recentEvents[0]?.eventType, 'payment_completed');
+  assert.equal(summary.candidates[0]?.recentEvents[0]?.amount, 12990);
+});
+
+test('carrier can recover read-only journey context from exact tracking kept only in trusted event memory', () => {
+  const base = snapshot();
+  base.shipments = [];
+  const doc = document(
+    '<p>Tracking number: TRACK-MEMORY-777</p><p>Kézbesítés folyamatban.</p>',
+    'info@expressone.hu',
+    'TRACK-MEMORY-777 kézbesítés alatt',
+  );
+  const summary = summarizePurchaseJourneyContext(doc, base, 5, [priorEvent()]);
+  assert.equal(summary.candidates[0]?.purchaseId, 'p1');
+  assert.ok(summary.candidates[0]?.matchReasons.includes('current_email_tracking_id_exact_prior_event'));
 });
