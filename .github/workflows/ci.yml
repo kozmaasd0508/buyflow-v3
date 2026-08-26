@@ -1,9 +1,8 @@
 name: CI
 
-# V7 benchmark diagnostic branch trigger only; do not merge this CI-only change.
 on:
   push:
-    branches: [main, codex/v7-ai-diagnostics-run]
+    branches: [main]
   pull_request:
     branches: [main]
 
