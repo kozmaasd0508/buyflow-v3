@@ -1,5 +1,6 @@
 name: CI
 
+# V7 benchmark retrigger only; workflow logic unchanged.
 on:
   push:
     branches: [main]
