@@ -34,7 +34,43 @@ const oldCallModel = String.raw`async function callModel(apiKey: string, model: 
   };
 }`;
 
-const newCallModel = String.raw`async function callModel(apiKey: string, model: 'gpt-5.6-luna' | 'gpt-5.6-sol', document: EmailDocumentV1): Promise<AiCandidate> {
+const newCallModel = String.raw`function safeAiFailureDiagnostics(error: unknown): {
+  errorName: string;
+  category: string;
+  httpStatus: number | null;
+  apiType: string | null;
+  apiCode: string | null;
+  apiParam: string | null;
+} {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const errorName = error instanceof Error
+    ? error.name.replace(/[^A-Z0-9_.-]/gi, '').slice(0, 40) || 'Error'
+    : 'Unknown';
+  const httpMatch = raw.match(/Responses API failed \((\d{3})\)/i);
+  const token = (field: string): string | null => {
+    const match = raw.match(new RegExp('"' + field + '"\\s*:\\s*"([A-Za-z0-9_.-]{1,80})"', 'i'));
+    return match?.[1] ?? null;
+  };
+  const httpStatus = httpMatch ? Number(httpMatch[1]) : null;
+  const apiType = token('type');
+  const apiCode = token('code');
+  const apiParam = token('param');
+  let category = 'UNKNOWN';
+  if (httpStatus === 429 || /rate.?limit/i.test(raw)) category = 'RATE_LIMIT';
+  else if (httpStatus !== null && httpStatus >= 500) category = 'UPSTREAM_5XX';
+  else if (httpStatus === 401 || httpStatus === 403) category = 'AUTH_OR_PERMISSION';
+  else if (httpStatus === 404 || /model.{0,40}(?:not found|does not exist|unknown)/i.test(raw)) category = 'MODEL_UNAVAILABLE';
+  else if (/unsupported|unknown parameter|invalid parameter/i.test(raw)) category = 'UNSUPPORTED_PARAMETER';
+  else if (/json.?schema|schema/i.test(raw)) category = 'SCHEMA_ERROR';
+  else if (/did not contain output text/i.test(raw)) category = 'NO_OUTPUT_TEXT';
+  else if (/structured extraction was incomplete/i.test(raw)) category = 'STRUCTURED_INCOMPLETE';
+  else if (error instanceof SyntaxError || /JSON\.parse|Unexpected token|Unexpected end of JSON/i.test(raw)) category = 'JSON_PARSE';
+  else if (/fetch failed|network|ECONNRESET|ETIMEDOUT|timeout|socket|UND_ERR/i.test(raw)) category = 'NETWORK_OR_TIMEOUT';
+  else if (httpStatus !== null && httpStatus >= 400) category = 'HTTP_' + String(httpStatus);
+  return { errorName, category, httpStatus, apiType, apiCode, apiParam };
+}
+
+async function callModel(apiKey: string, model: 'gpt-5.6-luna' | 'gpt-5.6-sol', document: EmailDocumentV1): Promise<AiCandidate> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const result = await extractEmailWithOpenAIResult({
@@ -53,19 +89,24 @@ const newCallModel = String.raw`async function callModel(apiKey: string, model: 
         rejectedOrderId,
         rejectedTrackingId,
       };
-    } catch {
-      if (attempt === 2) throw new Error('ai_model_call_failed:' + model);
-      const delayMs = 1000 * (2 ** attempt);
-      console.warn('PHASE_E_100_V7_AI_MODEL_RETRY ' + JSON.stringify({
+    } catch (error) {
+      const diagnostic = safeAiFailureDiagnostics(error);
+      const finalAttempt = attempt === 2;
+      const delayMs = finalAttempt ? 0 : 1000 * (2 ** attempt);
+      console.warn('PHASE_E_100_V7_AI_MODEL_FAILURE ' + JSON.stringify({
         model,
         attempt: attempt + 1,
-        nextAttempt: attempt + 2,
+        finalAttempt,
         delayMs,
+        ...diagnostic,
       }));
+      if (finalAttempt) {
+        throw new Error('ai_model_call_failed:' + model + ':' + diagnostic.category + (diagnostic.httpStatus ? ':' + String(diagnostic.httpStatus) : ''));
+      }
       await v7Sleep(delayMs);
     }
   }
-  throw new Error('ai_model_call_failed:' + model);
+  throw new Error('ai_model_call_failed:' + model + ':UNKNOWN');
 }`;
 
 async function runPatched(): Promise<number> {
