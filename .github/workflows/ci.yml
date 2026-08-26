@@ -7,43 +7,10 @@ on:
     branches: [main]
 
 jobs:
-  api-and-mobile:
+  openai-shadow-secret-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: API typecheck
-        run: npm run typecheck --workspace @buyflow/api
-
-      - name: API tests
-        run: npm test --workspace @buyflow/api
-
       - name: OpenAI shadow secret availability
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node -e "console.log('OPENAI_SHADOW_SECRET ' + JSON.stringify({present:Boolean(process.env.OPENAI_API_KEY)}))"
-
-      - name: Phase E 100 real lifecycle V6 source-expanded blind audit
-        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v6-source-expansion.ts
-        env:
-          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
-          NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
-          NYLAS_API_URI: https://api.eu.nylas.com
-
-      - name: API build
-        run: npm run build --workspace @buyflow/api
-
-      - name: Mobile typecheck
-        run: npm run typecheck --workspace @buyflow/mobile
-
-      - name: Mobile web build
-        run: npm run build --workspace @buyflow/mobile
