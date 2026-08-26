@@ -136,15 +136,35 @@ export function buildEvidenceForCandidate(
     const namespaceMatch = Boolean(eventKey && matchingShipments.some(
       (item) => shipmentIdentityKey(event.userId, item.carrierId, item.trackingId) === eventKey,
     ));
+
+    // Journey-memory bridge: a merchant shipment email may establish a tracking
+    // identity before the carrier is known. A later authenticated/known carrier
+    // event may safely fill that missing namespace only when this tracking id is
+    // unique for the user and the stored shipment has no conflicting carrier.
+    const sameUserTrackingShipments = snapshot.shipments.filter((item) => {
+      if (!trackingId || normalizeStableIdentifier(item.trackingId) !== trackingId) return false;
+      const owner = snapshot.purchases.find((candidate) => candidate.purchaseId === item.purchaseId);
+      return owner?.userId === event.userId;
+    });
+    const uniqueCarrierNamespaceUpgrade = Boolean(
+      event.sourceRole === 'carrier'
+      && event.carrierId
+      && sameUserTrackingShipments.length === 1
+      && !sameUserTrackingShipments[0]?.carrierId,
+    );
+    const hardTrackingMatch = namespaceMatch || uniqueCarrierNamespaceUpgrade;
+
     edges.push({
       sourceEventId: event.eventId,
       candidatePurchaseId: purchaseId,
       evidenceType: 'TRACKING_ID_EXACT',
-      strength: namespaceMatch ? 'hard' : 'soft',
-      score: namespaceMatch ? 100 : 35,
+      strength: hardTrackingMatch ? 'hard' : 'soft',
+      score: hardTrackingMatch ? 100 : 35,
       explanation: namespaceMatch
         ? `exact shipment identity ${eventKey}`
-        : `tracking id ${trackingId} matched without carrier namespace agreement`,
+        : uniqueCarrierNamespaceUpgrade
+          ? `unique tracking identity ${trackingId} upgraded from unknown carrier namespace to ${event.carrierId}`
+          : `tracking id ${trackingId} matched without carrier namespace agreement`,
     });
   }
 
