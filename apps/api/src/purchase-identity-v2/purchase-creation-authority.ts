@@ -33,9 +33,23 @@ const NON_ACCEPTANCE_PATTERNS = [
   /\b(?:only|merely) acknowledges? receipt of (?:your )?(?:purchase offer|order request|order)\b/i,
 ];
 
+const EXPLICIT_ACCEPTANCE_PATTERNS = [
+  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset).{0,80}(?:elfogadtuk|elfogadasra kerult)\b/i,
+  /\b(?:rendeles|megrendeles)\w*.{0,80}(?:sikeresen )?(?:visszaigazoltuk|visszaigazolva)\b/i,
+  /\b(?:rendeles|megrendeles)\w*\s+visszaigazolas(?:a|anak)?\b/i,
+  /\b(?:your )?order.{0,80}(?:has been|is|was) confirmed\b/i,
+  /\bwe(?:'ve| have)? accepted your order\b/i,
+  /\border confirmation\b/i,
+];
+
 export function hasExplicitPurchaseNonAcceptance(document: EmailDocumentV1): boolean {
   const fresh = normalizeText(`${document.subject ?? ''}\n${document.text}`);
   return NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
+}
+
+export function hasExplicitPurchaseAcceptance(document: EmailDocumentV1): boolean {
+  const fresh = normalizeText(`${document.subject ?? ''}\n${document.text}`);
+  return EXPLICIT_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
 }
 
 function structureSignalCount(document: EmailDocumentV1): number {
@@ -46,11 +60,12 @@ function structureSignalCount(document: EmailDocumentV1): number {
   const hasShippingMethod = document.signals.shippingMethods.length > 0;
   const hasPaymentSection = document.sections.some((section) => section.type === 'payment');
   const hasShippingSection = document.sections.some((section) => section.type === 'shipping');
+  const hasExplicitAcceptance = hasExplicitPurchaseAcceptance(document);
 
-  // Payment/shipping headings are useful structural corroboration, but they are
-  // not independently substantive enough to authorize a Purchase together.
-  // A document must still contain at least one concrete commerce signal such
-  // as a summary, product, amount, or parsed method value.
+  // Payment/shipping headings and explicit acceptance language are useful
+  // corroboration, but none is independently substantive enough to authorize
+  // a Purchase by itself. A document must still contain at least one concrete
+  // commerce signal such as a summary, product, amount, or parsed method value.
   const hasSubstantiveCommerceSignal = hasOrderSummary
     || hasProducts
     || hasAmounts
@@ -64,6 +79,7 @@ function structureSignalCount(document: EmailDocumentV1): number {
     hasAmounts,
     hasPaymentMethod || hasPaymentSection,
     hasShippingMethod || hasShippingSection,
+    hasExplicitAcceptance,
   ].filter(Boolean).length;
 }
 
