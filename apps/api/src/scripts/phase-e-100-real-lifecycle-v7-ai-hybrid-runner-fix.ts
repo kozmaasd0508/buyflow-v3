@@ -10,6 +10,64 @@ const patchedPath = join(here, '.phase-e-100-real-lifecycle-v7-ai-hybrid-patched
 const oldAnchor = `  const freshReplayStart = generated.indexOf(replayStartAnchor);\n  const freshReplayEnd = generated.indexOf(mainCatchAnchor, freshReplayStart);`;
 const newAnchor = `  const generatedMainStart = generated.indexOf(mainAnchor);\n  const freshReplayStart = generated.indexOf(replayStartAnchor, generatedMainStart);\n  const freshReplayEnd = generated.indexOf(mainCatchAnchor, freshReplayStart);`;
 
+const oldCallModel = String.raw`async function callModel(apiKey: string, model: 'gpt-5.6-luna' | 'gpt-5.6-sol', document: EmailDocumentV1): Promise<AiCandidate> {
+  let result: OpenAIEmailExtractionResult;
+  try {
+    result = await extractEmailWithOpenAIResult({
+      apiKey,
+      model,
+      subject: document.subject ?? undefined,
+      fromDomains: document.sender.domains,
+      bodyText: document.text,
+      fetchImpl: retryingFetch as typeof fetch,
+    });
+  } catch {
+    throw new Error('ai_model_call_failed:' + model);
+  }
+  const rejectedOrderId = Boolean(result.extraction.order_number && !signalContainsId(document.signals.orderNumbers, result.extraction.order_number));
+  const rejectedTrackingId = Boolean(result.extraction.tracking_number && !signalContainsId(document.signals.trackingNumbers, result.extraction.tracking_number));
+  return {
+    result,
+    claims: aiClaims(document, result.extraction, model),
+    rejectedOrderId,
+    rejectedTrackingId,
+  };
+}`;
+
+const newCallModel = String.raw`async function callModel(apiKey: string, model: 'gpt-5.6-luna' | 'gpt-5.6-sol', document: EmailDocumentV1): Promise<AiCandidate> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const result = await extractEmailWithOpenAIResult({
+        apiKey,
+        model,
+        subject: document.subject ?? undefined,
+        fromDomains: document.sender.domains,
+        bodyText: document.text,
+        fetchImpl: retryingFetch as typeof fetch,
+      });
+      const rejectedOrderId = Boolean(result.extraction.order_number && !signalContainsId(document.signals.orderNumbers, result.extraction.order_number));
+      const rejectedTrackingId = Boolean(result.extraction.tracking_number && !signalContainsId(document.signals.trackingNumbers, result.extraction.tracking_number));
+      return {
+        result,
+        claims: aiClaims(document, result.extraction, model),
+        rejectedOrderId,
+        rejectedTrackingId,
+      };
+    } catch {
+      if (attempt === 2) throw new Error('ai_model_call_failed:' + model);
+      const delayMs = 1000 * (2 ** attempt);
+      console.warn('PHASE_E_100_V7_AI_MODEL_RETRY ' + JSON.stringify({
+        model,
+        attempt: attempt + 1,
+        nextAttempt: attempt + 2,
+        delayMs,
+      }));
+      await v7Sleep(delayMs);
+    }
+  }
+  throw new Error('ai_model_call_failed:' + model);
+}`;
+
 async function runPatched(): Promise<number> {
   const child = spawn(process.execPath, ['--import', 'tsx', patchedPath], {
     cwd: process.cwd(),
@@ -25,7 +83,8 @@ async function runPatched(): Promise<number> {
 async function main(): Promise<void> {
   const source = await readFile(sourcePath, 'utf8');
   if (!source.includes(oldAnchor)) throw new Error('v7_runner_fix_anchor_missing');
-  const patched = source.replace(oldAnchor, newAnchor);
+  if (!source.includes(oldCallModel)) throw new Error('v7_runner_fix_call_model_missing');
+  const patched = source.replace(oldAnchor, newAnchor).replace(oldCallModel, newCallModel);
   await writeFile(patchedPath, patched, 'utf8');
   try {
     const code = await runPatched();
