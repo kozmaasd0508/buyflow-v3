@@ -1,11 +1,11 @@
-name: V7 Luna V2 Blocked Order Created Audit 300
+name: V7 Luna V2 Purchase Creation Corroboration 300
 
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
 
 jobs:
-  v7-luna-v2-blocked-order-created-audit-300:
+  v7-luna-v2-purchase-creation-corroboration-300:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -22,6 +22,9 @@ jobs:
 
       - name: API typecheck
         run: npm run typecheck --workspace @buyflow/api
+
+      - name: API regression suite
+        run: npm test --workspace @buyflow/api
 
       - name: Prepare anonymized blocked order-created audit
         run: python .github/scripts/v7_order_created_audit_patch.py
@@ -46,7 +49,7 @@ jobs:
           v7.write_text(source.replace(old, '    || baseline.discoveredMessages !== 300', 1))
           PY
 
-      - name: Run blocked order-created audit over 300 emails
+      - name: Run 300-email Luna benchmark and blocked order-created audit
         run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
