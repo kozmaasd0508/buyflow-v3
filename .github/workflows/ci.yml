@@ -1,9 +1,9 @@
 name: CI
 
-# V7 benchmark retrigger only; workflow logic unchanged.
+# V7 benchmark diagnostic branch trigger only; do not merge this CI-only change.
 on:
   push:
-    branches: [main]
+    branches: [main, codex/v7-ai-diagnostics-run]
   pull_request:
     branches: [main]
 
