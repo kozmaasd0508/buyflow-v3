@@ -2,6 +2,19 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { registerCuratedMailboxAuditV2Frozen } from './api/curated-mailbox-audit-v2-frozen.js';
+import { registerCuratedMailboxAuditV3 } from './api/curated-mailbox-audit-v3.js';
+import { registerCuratedMailboxAuditV4 } from './api/curated-mailbox-audit-v4.js';
+import { registerCuratedMailboxAuditV5 } from './api/curated-mailbox-audit-v5.js';
+import { registerCuratedMailboxAuditV6 } from './api/curated-mailbox-audit-v6.js';
+import { registerCuratedMailboxAuditV7 } from './api/curated-mailbox-audit-v7.js';
+import { registerFieldAccuracyAuditV1 } from './api/field-accuracy-audit-v1.js';
+import { registerFieldBlindAuditV1 } from './api/field-blind-audit-v1.js';
+import { registerFieldBlindDiagnosticV1 } from './api/field-blind-diagnostic-v1.js';
+import { registerFieldDiagnosticV1 } from './api/field-diagnostic-v1.js';
+import { registerLifecycleCorrelationAuditV1 } from './api/lifecycle-correlation-audit-v1.js';
+import { registerLifecycleCorrelationAuditV11 } from './api/lifecycle-correlation-audit-v1-1.js';
+import { registerRawEmailAuditRoutes } from './api/raw-email-audit-routes.js';
 
 const mobileDistDir = fileURLToPath(new URL('../../mobile/dist/', import.meta.url));
 
@@ -35,6 +48,20 @@ async function sendFile(reply: FastifyReply, filePath: string) {
 }
 
 export async function registerWebPreview(app: FastifyInstance) {
+  await registerRawEmailAuditRoutes(app);
+  await registerCuratedMailboxAuditV2Frozen(app);
+  await registerCuratedMailboxAuditV3(app);
+  await registerCuratedMailboxAuditV4(app);
+  await registerCuratedMailboxAuditV5(app);
+  await registerCuratedMailboxAuditV6(app);
+  await registerCuratedMailboxAuditV7(app);
+  await registerFieldAccuracyAuditV1(app);
+  await registerFieldBlindAuditV1(app);
+  await registerFieldBlindDiagnosticV1(app);
+  await registerFieldDiagnosticV1(app);
+  await registerLifecycleCorrelationAuditV1(app);
+  await registerLifecycleCorrelationAuditV11(app);
+
   app.get('/app', async (_request, reply) => reply.redirect('/app/'));
 
   app.get('/app/', async (_request, reply) => {
@@ -57,8 +84,6 @@ export async function registerWebPreview(app: FastifyInstance) {
     try {
       return await sendFile(reply, candidate);
     } catch {
-      // The mobile app currently uses in-memory navigation, so unknown browser
-      // paths can safely fall back to the app shell. Missing asset files do not.
       if (extname(safeRelativePath)) {
         return reply.code(404).send();
       }

@@ -1,0 +1,65 @@
+# Universal Order Identity v2 — blind holdout freeze — 2026-08-24
+
+## Code freeze
+
+- Branch: `codex/universal-order-identity-v2`
+- Frozen implementation SHA before selected message content was opened: `997d1eb87fdd9aba90b349a5474137b3855da578`
+- CI #983: GREEN
+- API tests: 1160/1160 PASS
+- API typecheck/build: PASS
+- Mobile typecheck/build: PASS
+- Runtime remains shadow-only / 0 AI / 0 production writes.
+
+## Candidate selection
+
+Gmail IDs were selected before message content was opened using only this generic query:
+
+`after:2025/01/01 before:2026/01/01 has:attachment {számla invoice document bizonylat} -in:spam -in:trash`
+
+The already-used first and second pages were skipped. The next 30-result page is the frozen Identity v2 holdout.
+
+Raw Gmail IDs are not stored in the repository. SHA-256 hashes of the fixed candidate IDs, in frozen order:
+
+```
+db7727a9b13c80d03e6ff39969b62d9564c427537e8deae0f8bd7ae0e60eb9a6
+9394c41a241f9214eb50d1b5e47eee90123e9047f63070e3c29d33c878579ccd
+167ad46485731a705e43d64b7938987545c682e2f4be003a923e07b40b745d88
+216c84129c57654de623530d3cc4067c2731435028616fa477190714c383051f
+2db30175a5ebbaebdc47ada8d63161372cf69d7ef36c7db190c66b3d9da56bb8
+255b84672d9298240575fcb0d6ff393f5f6ad4d32eadcd467ce76e1d7f22742f
+87e2619f46e66c90393b0a3d890639edfab68368dbb6287d7e7d40640d52f4ea
+558ce687393ce47d17d4c0e7a2778f421c48f0a542283aa2a6978d37602b66bd
+3b6079d34e1445cf7b149ca5a30e4488a79cff91b71dd04fe64e21bf11311370
+47480954062937b78def28f0d3ceec80730e9dd6debd07596ad6bc29759dc095
+626cde7686489d079ec972de829397471a37255e05cae0ba20c8c300eaf56ba0
+30f6ea4ea4022cd9e027173e59f5e44a49254019285506f9ee6c86ccf15bcf06
+9e477967a123142a73fba0f05a431105eb8ae5fe5d913d8bb0c8aa3b2e84c97d
+3bb2cf9e8a70b8793063b1c110b6d4ad780f5d86af1703169abc769382178d48
+0b70a85aaf8b7fd7f5045fd821237c5493a89406a0b8e6800ff440d73eaa1f5c
+42edae591955fbb97de5ccac3911f0c07e65b866e5514aaab73672ea6aef4f9b
+50f05d33b77589eadbb4e7fca4655b87f278445e644947717b1fb9c95f486b96
+d8488fcc60e618c37caa32e15a22dc7ef2f92008a250cd14e3d59dbfd21848d0
+fed64f7e9440da983928b4c0177ea2da1cda1e22b12900f3659535113060a9c0
+bfb5535019d3561770564a02c92f01ca850820c21b8e2d27ea636eb1dce198d1
+a773b5b6d53ac46b121215221e78e06b29b546c42394e6bf7586673412db4193
+be6becff7b7186654714deeb7d1dbb86327da96a0fec0df92c50dbb5a57aa718
+3a3da91f77d557914a68421058f89c5c5b0379f317ff33818564344bd78ab20c
+50ec33608261d174b7b51fe8f1750cecc7d3fbfd854c5a9102a7be681b344ea2
+03033807762744053107e57799af488300d44a4cbc1641868195774d75761612
+74858338f92112fc7e270d34c5bcc833170796e207812049c3896527680517ba
+b9ab59c7daf3df6e62d3105856230439aba0b8624fb06b5a6e6fbd52d3e107d7
+616836a63ffdbec2bd8f92de3de76093303c104b2be3476623df25af3f3b1e48
+0ad4f02f7dbc54299d92a55cd3f2eb3ec53bf78ac96066946f81b375aaebf95a
+be19390cff42b677bc4cb8ef62d2a69b7db7c2b72606dc32351234ccdfecdc24
+```
+
+## Measurement contract
+
+After this freeze, score separately:
+
+1. real retail purchase-related semantic event recognition;
+2. hard order identity extraction;
+3. safe Purchase attach eligibility;
+4. unsafe Purchase attach/create decisions on non-retail/service/personal cases.
+
+Do not tune Identity v2 until the first score for this frozen holdout is recorded.
