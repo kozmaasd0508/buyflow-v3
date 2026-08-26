@@ -1,11 +1,11 @@
-name: V7 Luna Prompt V2 100 Email Benchmark
+name: V7 Luna Prompt V2 300 Email Benchmark
 
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
 
 jobs:
-  v7-luna-prompt-v2-100:
+  v7-luna-prompt-v2-300:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -23,7 +23,7 @@ jobs:
       - name: API typecheck
         run: npm run typecheck --workspace @buyflow/api
 
-      - name: Patch benchmark to exactly 100 emails and Luna only
+      - name: Patch benchmark to exactly 300 emails and Luna only
         shell: bash
         run: |
           python - <<'PY'
@@ -34,16 +34,16 @@ jobs:
           old = """  const ordered = [...allMessages.values()].sort((a, b) =>
               a.receivedAt.localeCompare(b.receivedAt) || a.providerMessageId.localeCompare(b.providerMessageId));"""
           new = """  const ordered = [...allMessages.values()].sort((a, b) =>
-              a.receivedAt.localeCompare(b.receivedAt) || a.providerMessageId.localeCompare(b.providerMessageId)).slice(0, 100);"""
+              a.receivedAt.localeCompare(b.receivedAt) || a.providerMessageId.localeCompare(b.providerMessageId)).slice(0, 300);"""
           if old not in source:
-              raise SystemExit('ordered_100_patch_anchor_missing')
+              raise SystemExit('ordered_300_patch_anchor_missing')
           v5.write_text(source.replace(old, new, 1))
 
           v7 = Path('apps/api/src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid.ts')
           source = v7.read_text()
           replacements = {
               "    const reasons = needsSol(base, luna);": "    const reasons: string[] = [];",
-              "    || baseline.discoveredMessages !== 340": "    || baseline.discoveredMessages !== 100",
+              "    || baseline.discoveredMessages !== 340": "    || baseline.discoveredMessages !== 300",
               "    || baseline.automaticCreates !== 26": "    || baseline.automaticCreates < 0",
               "    || baseline.automaticLinks !== 13": "    || baseline.automaticLinks < 0",
           }
@@ -54,7 +54,7 @@ jobs:
           v7.write_text(source)
           PY
 
-      - name: Run exactly 100 emails with Luna Prompt V2
+      - name: Run exactly 300 emails with Luna Prompt V2
         run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
