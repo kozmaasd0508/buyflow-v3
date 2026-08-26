@@ -25,7 +25,7 @@ jobs:
         run: npm run typecheck --workspace @buyflow/api
 
       - name: Phase E 100 lifecycle V7 Luna-Sol hybrid shadow benchmark
-        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid.ts
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
           NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
