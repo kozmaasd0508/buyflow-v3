@@ -1,11 +1,15 @@
-name: V7 Luna V2 Purchase Creation Corroboration 300
+name: V7 Luna V2 Purchase Journey Context 300
 
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
 
+concurrency:
+  group: v7-luna-v2-purchase-journey-context-300
+  cancel-in-progress: true
+
 jobs:
-  v7-luna-v2-purchase-creation-corroboration-300:
+  v7-luna-v2-purchase-journey-context-300:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -27,9 +31,11 @@ jobs:
         run: npm test --workspace @buyflow/api
 
       - name: Prepare anonymized blocked order-created audit
+        if: contains(github.event.head_commit.message, '[benchmark]')
         run: python .github/scripts/v7_order_created_audit_patch.py
 
       - name: Expand audit population from 100 to 300 emails
+        if: contains(github.event.head_commit.message, '[benchmark]')
         shell: bash
         run: |
           python - <<'PY'
@@ -50,6 +56,7 @@ jobs:
           PY
 
       - name: Run 300-email Luna benchmark and blocked order-created audit
+        if: contains(github.event.head_commit.message, '[benchmark]')
         run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
