@@ -1,0 +1,32 @@
+name: V7 AI Diagnostics
+
+on:
+  push:
+    branches: [codex/v7-ai-diagnostics-run]
+
+jobs:
+  v7-ai-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: API typecheck
+        run: npm run typecheck --workspace @buyflow/api
+
+      - name: Run V7 Luna-Sol diagnostic benchmark
+        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
+        env:
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
