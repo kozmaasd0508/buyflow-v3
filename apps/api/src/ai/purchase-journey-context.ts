@@ -3,6 +3,21 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { normalizeStableIdentifier } from '../purchase-identity-v2/identifier-normalizer.js';
 import type { PurchaseIdentitySnapshot } from '../purchase-identity-v2/types.js';
 
+export interface PurchaseJourneyMemoryEvent {
+  purchaseId: string;
+  eventType: string;
+  receivedAt: string;
+  sourceRole: string | null;
+  merchantNamespace: string | null;
+  orderId: string | null;
+  trackingId: string | null;
+  carrierId: string | null;
+  invoiceId: string | null;
+  paymentReference: string | null;
+  amount: number | null;
+  currency: string | null;
+}
+
 export interface PurchaseJourneyContextSummary {
   candidateCount: number;
   candidates: Array<{
@@ -13,6 +28,19 @@ export interface PurchaseJourneyContextSummary {
     shipments: Array<{ trackingId: string | null; carrierId: string | null; status: string | null }>;
     invoiceIds: Array<string | null>;
     paymentReferences: Array<string | null>;
+    recentEvents: Array<{
+      eventType: string;
+      receivedAt: string;
+      sourceRole: string | null;
+      merchantNamespace: string | null;
+      orderId: string | null;
+      trackingId: string | null;
+      carrierId: string | null;
+      invoiceId: string | null;
+      paymentReference: string | null;
+      amount: number | null;
+      currency: string | null;
+    }>;
   }>;
 }
 
@@ -58,6 +86,7 @@ export function summarizePurchaseJourneyContext(
   document: EmailDocumentV1,
   snapshot: PurchaseIdentitySnapshot,
   maxCandidates = 5,
+  priorEvents: PurchaseJourneyMemoryEvent[] = [],
 ): PurchaseJourneyContextSummary {
   const orderIds = new Set(document.signals.orderNumbers.map(normalizeStableIdentifier).filter(Boolean));
   const trackingIds = new Set(document.signals.trackingNumbers.map(normalizeStableIdentifier).filter(Boolean));
@@ -85,6 +114,20 @@ export function summarizePurchaseJourneyContext(
     if (normalized && trackingIds.has(normalized)) addCandidate(shipment.purchaseId, 120, 'current_email_tracking_id_exact');
   }
 
+  for (const event of priorEvents) {
+    const normalizedOrder = normalizeStableIdentifier(event.orderId);
+    if (normalizedOrder && orderIds.has(normalizedOrder)) {
+      addCandidate(event.purchaseId, 110, 'current_email_order_id_exact_prior_event');
+    }
+    const normalizedTracking = normalizeStableIdentifier(event.trackingId);
+    if (normalizedTracking && trackingIds.has(normalizedTracking)) {
+      addCandidate(event.purchaseId, 130, 'current_email_tracking_id_exact_prior_event');
+    }
+    if (namespace && event.merchantNamespace?.trim().toLowerCase() === namespace) {
+      addCandidate(event.purchaseId, 35, 'same_merchant_sender_namespace_prior_event');
+    }
+  }
+
   const purchaseById = new Map(snapshot.purchases.map((purchase) => [purchase.purchaseId, purchase]));
   const ranked = [...scores.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -93,6 +136,23 @@ export function summarizePurchaseJourneyContext(
   const candidates = ranked.flatMap(([purchaseId]) => {
     const purchase = purchaseById.get(purchaseId);
     if (!purchase) return [];
+    const recentEvents = priorEvents
+      .filter((event) => event.purchaseId === purchaseId)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
+      .slice(0, 12)
+      .map((event) => ({
+        eventType: event.eventType,
+        receivedAt: event.receivedAt,
+        sourceRole: event.sourceRole,
+        merchantNamespace: event.merchantNamespace,
+        orderId: event.orderId,
+        trackingId: event.trackingId,
+        carrierId: event.carrierId,
+        invoiceId: event.invoiceId,
+        paymentReference: event.paymentReference,
+        amount: event.amount,
+        currency: event.currency,
+      }));
     return [{
       purchaseId,
       state: purchase.state,
@@ -105,6 +165,7 @@ export function summarizePurchaseJourneyContext(
       })),
       invoiceIds: unique(snapshot.invoices.filter((item) => item.purchaseId === purchaseId).map((item) => item.invoiceId)).slice(0, 10),
       paymentReferences: unique(snapshot.payments.filter((item) => item.purchaseId === purchaseId).map((item) => item.paymentReference)).slice(0, 10),
+      recentEvents,
     }];
   });
 
@@ -115,7 +176,8 @@ export function buildPurchaseJourneyContext(
   document: EmailDocumentV1,
   snapshot: PurchaseIdentitySnapshot,
   maxCandidates = 5,
+  priorEvents: PurchaseJourneyMemoryEvent[] = [],
 ): string | null {
-  const summary = summarizePurchaseJourneyContext(document, snapshot, maxCandidates);
+  const summary = summarizePurchaseJourneyContext(document, snapshot, maxCandidates, priorEvents);
   return summary.candidateCount > 0 ? JSON.stringify(summary) : null;
 }
