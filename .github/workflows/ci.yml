@@ -28,7 +28,10 @@ jobs:
         run: npm test --workspace @buyflow/api
 
       - name: Phase E 100 real lifecycle V4 diagnostics
-        run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v4-diagnostics.ts
+        run: |
+          sed -i 's/Math.min(200, cap - out.length)/Math.min(20, cap - out.length)/' apps/api/src/scripts/phase-e-100-real-lifecycle-v4-diagnostics.ts
+          sed -i 's/limit: take/limit: Math.min(20, take)/' apps/api/src/scripts/phase-e-100-real-lifecycle-v4-diagnostics.ts
+          npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v4-diagnostics.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
           NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
