@@ -9,11 +9,15 @@ import {
   summarizePurchaseJourneyContext,
 } from './purchase-journey-context.js';
 
-function document(bodyHtml: string, from = 'orders@example-shop.hu') {
+function document(
+  bodyHtml: string,
+  from = 'orders@example-shop.hu',
+  subject = 'Csomag feladva #ORD-12345',
+) {
   const email: NormalizedEmail = {
     provider: 'ses',
     providerMessageId: 'journey-context-test',
-    subject: 'Csomag feladva #ORD-12345',
+    subject,
     from: [{ email: from, name: 'Example Shop' }],
     to: [{ email: 'buyer@buyflow.hu' }],
     cc: [],
@@ -60,7 +64,11 @@ test('exact tracking is ranked above same merchant namespace', () => {
 });
 
 test('same merchant namespace may provide read-only context but does not invent a hard match', () => {
-  const doc = document('<p>Rendelésed állapota frissült.</p>');
+  const doc = document(
+    '<p>Rendelésed állapota frissült.</p>',
+    'orders@example-shop.hu',
+    'Rendelésed állapota frissült',
+  );
   const summary = summarizePurchaseJourneyContext(doc, snapshot());
   assert.equal(summary.candidateCount, 2);
   assert.ok(summary.candidates.every((item) => item.matchReasons.includes('same_merchant_sender_namespace')));
@@ -68,6 +76,10 @@ test('same merchant namespace may provide read-only context but does not invent 
 });
 
 test('carrier sender never receives merchant namespace candidates without an exact id', () => {
-  const doc = document('<p>Kézbesítés folyamatban.</p>', 'info@expressone.hu');
+  const doc = document(
+    '<p>Kézbesítés folyamatban.</p>',
+    'info@expressone.hu',
+    'Kézbesítés folyamatban',
+  );
   assert.equal(buildPurchaseJourneyContext(doc, snapshot()), null);
 });
