@@ -61,8 +61,11 @@ return_prefix = r'''  const finalEvidenceGraph = new EvidenceIdentityGraph(snaps
 
 '''
 
-return_fields_anchor = "    unresolvedRemaining: unresolvedSnapshot.records.filter((record) => record.status === 'unresolved').length,\n    unsafeCount,"
+return_fields_anchor = """    unresolvedRemaining: unresolvedSnapshot.records.filter((record) => record.status === 'unresolved').length,
+    recoveryOpportunityAudit: summarizeRecoveryOpportunityAudit(recoveryAuditProbes),
+    unsafeCount,"""
 return_fields_replacement = """    unresolvedRemaining: unresolvedSnapshot.records.filter((record) => record.status === 'unresolved').length,
+    recoveryOpportunityAudit: summarizeRecoveryOpportunityAudit(recoveryAuditProbes),
     verifiedIdentityObservations: verifiedObservationStore.snapshot().observations.length,
     evidenceUniqueOwnerCandidates,
     evidenceAmbiguousCandidates,
@@ -80,7 +83,7 @@ if '--check' in sys.argv:
         "recoveryOpportunityAudit: RecoveryOpportunityAudit;",
         "const recoveryAuditProbes = new Map<string, RecoveryAuditProbe>();",
         "canonicalEvent.purchaseCreationReasons = creationAuthority.reasons;",
-        "unresolvedRemaining: unresolvedSnapshot.records.filter",
+        "recoveryOpportunityAudit: summarizeRecoveryOpportunityAudit(recoveryAuditProbes)",
     ]
     for contract in required_contracts:
         if contract not in deferred_patch:
