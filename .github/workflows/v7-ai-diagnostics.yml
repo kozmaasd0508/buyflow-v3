@@ -8,6 +8,7 @@ name: V7 Luna V2 Purchase Journey Context 300
 # opportunity-audit: classify future hard-id and namespace wake-up potential without logging identifiers
 # opportunity-audit-replay: validate anonymous wake-up categories from encrypted cache
 # bridge-authority-audit: classify exact repeated IDs by source, identity kind, provenance and decision only
+# bridge-authority-audit-replay: measure only anonymous aggregate categories from encrypted cache
 # [benchmark] seeds/reuses encrypted private corpus + AI extraction cache.
 # [replay] requires those encrypted caches and performs 0 new AI/provider calls.
 on:
