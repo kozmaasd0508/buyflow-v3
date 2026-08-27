@@ -129,10 +129,18 @@ test('does not invent canonical merchant identity without a resolver', () => {
   const eventType = claim('event_type', 'order_created', 'explicit_order_created_event');
   const merchant = claim('merchant', 'Marketplace Seller Display', 'sender_commercial_identity', 'sender');
   const order = claim('order_number', 'ORDER-9', 'explicit_order_label');
+  const merchantDocument = document();
+  merchantDocument.sender = {
+    addresses: [{ email: 'orders@marketplace-seller.example', name: 'Marketplace Seller Display' }],
+    domains: ['marketplace-seller.example'],
+    primaryEmail: 'orders@marketplace-seller.example',
+    primaryDomain: 'marketplace-seller.example',
+    primaryName: 'Marketplace Seller Display',
+  };
 
   const result = canonicalEventFromExtractionV2({
     userId: 'user-1',
-    document: document(),
+    document: merchantDocument,
     extraction: extraction(commerceEvent({
       eventType: resolved('order_created', [eventType]),
       merchant: resolved('Marketplace Seller Display', [merchant]),
