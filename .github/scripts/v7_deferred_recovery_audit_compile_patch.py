@@ -13,8 +13,8 @@ contract_probe = "exactIdentityKeys, type UnresolvedEventPoolSnapshot"
 
 if '--check' in sys.argv:
     # The benchmark patch stores import_addition inside a Python string literal,
-    # so its line endings are escaped as \\n in the patch file. Validate the stable
-    # semantic import/probe tokens instead of comparing rendered source text.
+    # so line endings are escaped in the patch file. Validate stable semantic
+    # import/probe tokens instead of comparing rendered source text.
     if contract_probe not in benchmark_patch:
         raise SystemExit('v7_deferred_audit_deferred_import_contract_missing')
     if probe not in benchmark_patch:
