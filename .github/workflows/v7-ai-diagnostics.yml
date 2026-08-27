@@ -11,6 +11,7 @@ name: V7 Luna V2 Purchase Journey Context 300
 # bridge-authority-audit-replay: measure only anonymous aggregate categories from encrypted cache
 # evidence-identity-graph: read-only verified hard-ID components; never grants CREATE/LINK authority
 # evidence-owner-replay: measure unique/waiting/ambiguous owners from encrypted cached extractions
+# evidence-owner-replay-fixed: preserve opportunity audit fields while measuring read-only ownership
 # [benchmark] seeds/reuses encrypted private corpus + AI extraction cache.
 # [replay] requires those encrypted caches and performs 0 new AI/provider calls.
 on:
