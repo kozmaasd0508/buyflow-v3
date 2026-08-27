@@ -2,7 +2,9 @@ from pathlib import Path
 import sys
 
 v7 = Path('apps/api/src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid.ts')
+deferred_patch_path = Path('.github/scripts/v7_deferred_recovery_benchmark_patch.py')
 source = v7.read_text()
+deferred_patch = deferred_patch_path.read_text()
 
 import_anchor = "import { exactIdentityKeys, type UnresolvedEventPoolSnapshot } from '../purchase-identity-v2/unresolved-event-pool.js';\n"
 import_addition = (
@@ -69,6 +71,23 @@ return_fields_replacement = """    unresolvedRemaining: unresolvedSnapshot.recor
     evidenceWrongOwnerCandidates,
     unsafeCount,"""
 
+if '--check' in sys.argv:
+    # This patch runs after v7_deferred_recovery_benchmark_patch.py. Its normal
+    # anchors therefore do not exist in the committed V7 source yet. Validate
+    # the upstream patch contract instead of requiring generated runtime source.
+    required_contracts = [
+        "exactIdentityKeys, type UnresolvedEventPoolSnapshot",
+        "recoveryOpportunityAudit: RecoveryOpportunityAudit;",
+        "const recoveryAuditProbes = new Map<string, RecoveryAuditProbe>();",
+        "canonicalEvent.purchaseCreationReasons = creationAuthority.reasons;",
+        "unresolvedRemaining: unresolvedSnapshot.records.filter",
+    ]
+    for contract in required_contracts:
+        if contract not in deferred_patch:
+            raise SystemExit('v7_evidence_identity_graph_upstream_contract_missing')
+    print('v7_evidence_identity_graph_benchmark_patch_check_ok')
+    raise SystemExit(0)
+
 checks = [
     (import_anchor, 'import'),
     (type_anchor, 'type'),
@@ -81,10 +100,6 @@ checks = [
 for anchor, name in checks:
     if anchor not in source:
         raise SystemExit(f'v7_evidence_identity_graph_{name}_anchor_missing')
-
-if '--check' in sys.argv:
-    print('v7_evidence_identity_graph_benchmark_patch_check_ok')
-    raise SystemExit(0)
 
 source = source.replace(import_anchor, import_anchor + import_addition, 1)
 source = source.replace(type_anchor, type_replacement, 1)
