@@ -1,9 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 export const V7_PRIVATE_BENCHMARK_CACHE_VERSION = 'v7-private-benchmark-cache-v1';
 export const V7_AI_INPUT_POLICY_VERSION = 'v7-structured-journey-input-v1';
+
+const V7_BENCHMARK_ENCRYPTION_CONTEXT = 'buyflow:v7-private-benchmark-cache:aes-256-gcm:v1';
 
 type CacheEnvelope = {
   version: 1;
@@ -23,7 +25,9 @@ function cacheDirectory(explicit?: string): string {
 function encryptionKey(secret: string): Buffer | null {
   const normalized = secret.trim();
   if (normalized.length < 16) return null;
-  return createHash('sha256').update(normalized, 'utf8').digest();
+  return createHmac('sha256', normalized)
+    .update(V7_BENCHMARK_ENCRYPTION_CONTEXT, 'utf8')
+    .digest();
 }
 
 function safeScope(scope: string): string {
