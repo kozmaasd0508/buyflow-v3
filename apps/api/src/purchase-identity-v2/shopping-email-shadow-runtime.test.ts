@@ -19,15 +19,15 @@ function email(): NormalizedEmail {
   };
 }
 
-test('returns compact zero-write diagnostic on an empty user snapshot', async () => {
-  const db = {
+function emptyDb() {
+  return {
     from(table: string) {
-      assert.equal(table, 'purchases');
+      assert.ok(table === 'purchases' || table === 'source_emails');
       const query: any = {
         select() { return query; },
         eq(column: string, value: unknown) {
-          assert.equal(column, 'user_id');
-          assert.equal(value, 'user-1');
+          if (column === 'user_id') assert.equal(value, 'user-1');
+          if (column === 'processing_status') assert.equal(value, 'unlinked');
           return query;
         },
         order() { return query; },
@@ -36,14 +36,25 @@ test('returns compact zero-write diagnostic on an empty user snapshot', async ()
       return query;
     },
   };
+}
 
-  const result = await runShoppingEmailIdentityShadow({ db, userId: 'user-1', email: email() });
+test('returns privacy-safe zero-write diagnostic with durable unresolved telemetry', async () => {
+  const result = await runShoppingEmailIdentityShadow({ db: emptyDb(), userId: 'user-1', email: email() });
   assert.equal(result.status, 'completed');
   assert.equal(result.productionWrites, 0);
   assert.equal(result.aiCalls, 0);
   assert.equal(result.snapshotCounts?.purchases, 0);
   assert.equal(result.simulatedGraphMutated, false);
+  assert.deepEqual(result.durableUnresolved, {
+    sourceRowsRead: 0,
+    eventsAccepted: 0,
+    eventsRejected: 0,
+  });
+  assert.equal(result.deferredResolution?.initialUnresolvedCount, 0);
+  assert.equal(result.deferredResolution?.recoveredEventCount, 0);
+  assert.equal(result.evidencePacketSummary?.schemaVersion, 1);
   assert.equal(JSON.stringify(result).includes('shadow-msg-1'), false);
+  assert.equal(JSON.stringify(result).includes('hello@example.com'), false);
 });
 
 test('shadow runtime failure is contained and never throws into inbound ingestion', async () => {
@@ -57,5 +68,8 @@ test('shadow runtime failure is contained and never throws into inbound ingestio
   assert.equal(result.status, 'error');
   assert.equal(result.productionWrites, 0);
   assert.equal(result.aiCalls, 0);
+  assert.equal(result.durableUnresolved, null);
+  assert.equal(result.deferredResolution, null);
+  assert.equal(result.evidencePacketSummary, null);
   assert.deepEqual(result.limitations, ['shadow_runtime_error']);
 });
