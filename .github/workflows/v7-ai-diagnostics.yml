@@ -9,6 +9,7 @@ name: V7 Luna V2 Purchase Journey Context 300
 # opportunity-audit-replay: validate anonymous wake-up categories from encrypted cache
 # bridge-authority-audit: classify exact repeated IDs by source, identity kind, provenance and decision only
 # bridge-authority-audit-replay: measure only anonymous aggregate categories from encrypted cache
+# evidence-identity-graph: read-only verified hard-ID components; never grants CREATE/LINK authority
 # [benchmark] seeds/reuses encrypted private corpus + AI extraction cache.
 # [replay] requires those encrypted caches and performs 0 new AI/provider calls.
 on:
@@ -49,6 +50,9 @@ jobs:
 
       - name: Validate deferred bridge authority audit patch
         run: python .github/scripts/v7_deferred_bridge_authority_audit_patch.py --check
+
+      - name: Validate evidence identity graph benchmark patch
+        run: python .github/scripts/v7_evidence_identity_graph_benchmark_patch.py --check
 
       - name: Prepare encrypted benchmark cache directory
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
@@ -107,6 +111,10 @@ jobs:
       - name: Enable deferred bridge authority audit
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         run: python .github/scripts/v7_deferred_bridge_authority_audit_patch.py
+
+      - name: Enable evidence identity graph benchmark measurement
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
+        run: python .github/scripts/v7_evidence_identity_graph_benchmark_patch.py
 
       - name: Run 300-email Luna benchmark or cached replay
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
