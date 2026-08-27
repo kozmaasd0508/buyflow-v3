@@ -1,3 +1,8 @@
+import {
+  buildBuyFlowEvidencePacketV1,
+  summarizeEvidencePacketV1,
+  type EvidencePacketPrivacySummaryV1,
+} from '../ai/evidence-packet.js';
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import { runExtractionEngineV2, type ExtractionEngineV2Result } from '../extraction-v2/engine-v2.js';
 import {
@@ -5,16 +10,18 @@ import {
   type ExtractionV2CarrierIdentityResolver,
   type ExtractionV2MerchantIdentityResolver,
 } from './extraction-v2-adapter.js';
-import { PurchaseIdentityGraph } from './graph.js';
+import { DeferredResolutionGraph } from './deferred-resolution-graph.js';
 import { deriveMerchantSenderNamespace } from './merchant-sender-namespace.js';
 import { evaluatePromotionReadiness, type PromotionReadinessDecision } from './promotion-readiness.js';
 import { evaluatePurchaseCreationAuthority } from './purchase-creation-authority.js';
+import type { UnresolvedEventPoolSnapshot } from './unresolved-event-pool.js';
 import type { CanonicalEvent, CorrelationDecision, PurchaseIdentitySnapshot } from './types.js';
 
 export interface PurchaseIdentityShadowInput {
   userId: string;
   document: EmailDocumentV1;
   snapshot: PurchaseIdentitySnapshot;
+  unresolvedSnapshot?: UnresolvedEventPoolSnapshot;
   merchantResolver?: ExtractionV2MerchantIdentityResolver;
   carrierResolver?: ExtractionV2CarrierIdentityResolver;
   runExtraction?: (document: EmailDocumentV1) => ExtractionEngineV2Result;
@@ -30,18 +37,33 @@ export interface PurchaseIdentityShadowResult {
   promotionReadiness: PromotionReadinessDecision;
   simulatedGraphMutated: boolean;
   simulatedSnapshot: PurchaseIdentitySnapshot;
+  evidencePacketSummary: EvidencePacketPrivacySummaryV1;
+  deferredResolution: {
+    initialUnresolvedCount: number;
+    unresolvedStored: boolean;
+    recoveredEventCount: number;
+    movedToReviewEventCount: number;
+    unresolvedRemainingCount: number;
+  };
+}
+
+function unresolvedCount(snapshot: UnresolvedEventPoolSnapshot, userId: string): number {
+  return snapshot.records.filter((record) => record.userId === userId && record.status === 'unresolved').length;
 }
 
 /**
  * End-to-end read-only shadow orchestration:
  * EmailDocumentV1 -> frozen Extraction Engine v2 -> direct canonical adapter ->
- * Purchase creation authority -> Purchase Identity Graph v2 decision/simulation ->
+ * Purchase creation authority -> deferred Purchase Identity Graph v2 simulation ->
  * Phase E promotion-readiness audit.
  *
- * The graph may mutate its private in-memory clone to show the predicted result,
- * but this function performs no database writes and does not alter the caller's
- * snapshot. Promotion readiness is audit-only and never performs or enables a
- * production write. Legacy parser output is not an input.
+ * The deferred layer may replay only exact hard-identity-matched unresolved events
+ * against the same private graph clone. The Evidence Packet is built in memory for
+ * parity/observability, but only its privacy-safe summary leaves this function.
+ * No raw body, sender, URL or identifier from the packet is logged or returned.
+ *
+ * This function performs no database writes and does not alter caller snapshots.
+ * Promotion readiness is audit-only and never performs or enables a production write.
  */
 export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): PurchaseIdentityShadowResult {
   const extraction = (input.runExtraction ?? runExtractionEngineV2)(input.document);
@@ -49,7 +71,14 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
     throw new Error('Purchase Identity shadow requires 0-write, 0-AI extraction.');
   }
 
-  const graph = new PurchaseIdentityGraph(input.snapshot);
+  const graph = new DeferredResolutionGraph(input.snapshot, input.unresolvedSnapshot);
+  const initialUnresolvedCount = unresolvedCount(graph.unresolvedSnapshot(), input.userId);
+  const evidencePacketSummary = summarizeEvidencePacketV1(buildBuyFlowEvidencePacketV1({
+    userId: input.userId,
+    document: input.document,
+    purchaseSnapshot: input.snapshot,
+    unresolvedSnapshot: input.unresolvedSnapshot,
+  }));
   const canonicalEvent = canonicalEventFromExtractionV2({
     userId: input.userId,
     document: input.document,
@@ -69,6 +98,14 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
       promotionReadiness: evaluatePromotionReadiness({ event: null, decision: null }),
       simulatedGraphMutated: false,
       simulatedSnapshot: graph.snapshot(),
+      evidencePacketSummary,
+      deferredResolution: {
+        initialUnresolvedCount,
+        unresolvedStored: false,
+        recoveredEventCount: 0,
+        movedToReviewEventCount: 0,
+        unresolvedRemainingCount: unresolvedCount(graph.unresolvedSnapshot(), input.userId),
+      },
     };
   }
 
@@ -94,7 +131,15 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
       event: canonicalEvent,
       decision: applied.decision,
     }),
-    simulatedGraphMutated: applied.mutated,
+    simulatedGraphMutated: applied.mutated || applied.recoveredEventIds.length > 0,
     simulatedSnapshot: applied.snapshot,
+    evidencePacketSummary,
+    deferredResolution: {
+      initialUnresolvedCount,
+      unresolvedStored: applied.unresolvedStored,
+      recoveredEventCount: applied.recoveredEventIds.length,
+      movedToReviewEventCount: applied.movedToReviewEventIds.length,
+      unresolvedRemainingCount: unresolvedCount(graph.unresolvedSnapshot(), input.userId),
+    },
   };
 }
