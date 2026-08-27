@@ -1,5 +1,4 @@
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
-import { stripQuotedHistoryForGenericOrder } from '../ingestion/generic-order-confirmation-adapter.js';
 import type { CanonicalEventType, PurchaseCreationAuthority, SourceRole } from './types.js';
 
 export const PURCHASE_CREATION_AUTHORITY_V1_VERSION = 'purchase-creation-authority-v1';
@@ -34,31 +33,9 @@ const NON_ACCEPTANCE_PATTERNS = [
   /\b(?:only|merely) acknowledges? receipt of (?:your )?(?:purchase offer|order request|order)\b/i,
 ];
 
-const EXPLICIT_ACCEPTANCE_PATTERNS = [
-  /\b(?:rendelesedet|megrendelesedet|rendeleset|megrendeleset)\b.{0,80}\b(?:elfogadtuk|elfogadva|visszaigazoltuk|visszaigazolva|megerositettuk|megerositve)\b/i,
-  /\b(?:rendeles|megrendeles)\w*\b.{0,40}\b(?:sikeresen )?(?:visszaigazolva|megerositve|elfogadva)\b/i,
-  /\b(?:rendeles|megrendeles)\s+visszaigazolas(?:a)?\b/i,
-  /\b(?:your )?order\b.{0,60}\b(?:is|has been)\s+(?:confirmed|accepted)\b/i,
-  /\bwe(?:'ve| have)?\s+accepted\s+your\s+order\b/i,
-  /\border confirmation\b/i,
-  /\bbestellbest(?:a|ae)tigung\b/i,
-  /\bconfirmation de commande\b/i,
-  /\bconfirmacion de (?:tu |su )?pedido\b/i,
-];
-
-function freshMessageText(document: EmailDocumentV1): string {
-  const body = stripQuotedHistoryForGenericOrder(document.text);
-  return normalizeText(`${document.subject ?? ''}\n${body}`);
-}
-
 export function hasExplicitPurchaseNonAcceptance(document: EmailDocumentV1): boolean {
-  const fresh = freshMessageText(document);
+  const fresh = normalizeText(`${document.subject ?? ''}\n${document.text}`);
   return NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
-}
-
-export function hasExplicitPurchaseAcceptance(document: EmailDocumentV1): boolean {
-  const fresh = freshMessageText(document);
-  return EXPLICIT_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
 }
 
 function structureSignalCount(document: EmailDocumentV1): number {
@@ -69,11 +46,11 @@ function structureSignalCount(document: EmailDocumentV1): number {
   const hasShippingMethod = document.signals.shippingMethods.length > 0;
   const hasPaymentSection = document.sections.some((section) => section.type === 'payment');
   const hasShippingSection = document.sections.some((section) => section.type === 'shipping');
-  const hasExplicitAcceptance = hasExplicitPurchaseAcceptance(document);
 
-  // Acceptance is useful corroboration, but it is never substantive by itself.
-  // There must still be at least one concrete commerce signal from the current
-  // message so a confirmation-looking subject cannot create a Purchase alone.
+  // Payment/shipping headings are useful structural corroboration, but they are
+  // not independently substantive enough to authorize a Purchase together.
+  // A document must still contain at least one concrete commerce signal such
+  // as a summary, product, amount, or parsed method value.
   const hasSubstantiveCommerceSignal = hasOrderSummary
     || hasProducts
     || hasAmounts
@@ -87,7 +64,6 @@ function structureSignalCount(document: EmailDocumentV1): number {
     hasAmounts,
     hasPaymentMethod || hasPaymentSection,
     hasShippingMethod || hasShippingSection,
-    hasExplicitAcceptance,
   ].filter(Boolean).length;
 }
 
