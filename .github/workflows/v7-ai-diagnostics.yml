@@ -33,11 +33,15 @@ jobs:
       - name: API regression suite
         run: npm test --workspace @buyflow/api
 
+      - name: Prepare encrypted benchmark cache directory
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
+        run: mkdir -p "${{ github.workspace }}/.cache/v7-private-benchmark"
+
       - name: Restore encrypted private benchmark cache
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         uses: actions/cache@v4
         with:
-          path: .cache/v7-private-benchmark
+          path: ${{ github.workspace }}/.cache/v7-private-benchmark
           key: v7-private-benchmark-v1-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             v7-private-benchmark-v1-${{ runner.os }}-
@@ -84,6 +88,6 @@ jobs:
           NYLAS_API_URI: https://api.eu.nylas.com
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           V7_BENCHMARK_CACHE_KEY: ${{ secrets.V7_BENCHMARK_CACHE_KEY }}
-          V7_BENCHMARK_CACHE_DIR: .cache/v7-private-benchmark
+          V7_BENCHMARK_CACHE_DIR: ${{ github.workspace }}/.cache/v7-private-benchmark
           V7_BENCHMARK_REPLAY_ONLY: ${{ contains(github.event.head_commit.message, '[replay]') && '1' || '0' }}
           V7_ORDER_CREATED_AUDIT_LIMIT: '100'
