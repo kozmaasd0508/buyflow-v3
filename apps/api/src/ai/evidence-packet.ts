@@ -33,6 +33,10 @@ export interface EvidencePacketStructuredData {
   microdata: {
     schemaTypes: string[];
     itemProperties: string[];
+    values: Array<{
+      property: string;
+      value: string;
+    }>;
   };
   schemaOrgTypes: string[];
   technicalEvidence: Array<Pick<TechnicalEvidence,
@@ -113,6 +117,7 @@ export interface EvidencePacketPrivacySummaryV1 {
   urlCount: number;
   jsonLdBlockCount: number;
   microdataTypeCount: number;
+  microdataValueCount: number;
   schemaOrgTypeCount: number;
   technicalEvidenceCount: number;
   deterministicSignalCounts: {
@@ -133,6 +138,7 @@ export interface EvidencePacketPrivacySummaryV1 {
 }
 
 export function buildBuyFlowEvidencePacketV1(input: {
+  userId: string;
   document: EmailDocumentV1;
   purchaseSnapshot?: PurchaseIdentitySnapshot;
   priorEvents?: PurchaseJourneyMemoryEvent[];
@@ -143,8 +149,9 @@ export function buildBuyFlowEvidencePacketV1(input: {
   const document = input.document;
   const technical = collectTechnicalEvidenceV1(document);
   const structured = structuredData(document.html, technical.evidence);
-  const purchaseSnapshot = input.purchaseSnapshot ?? emptyPurchaseSnapshot();
-  const priorEvents = input.priorEvents ?? [];
+  const purchaseSnapshot = scopePurchaseSnapshot(input.purchaseSnapshot ?? emptyPurchaseSnapshot(), input.userId);
+  const allowedPurchaseIds = new Set(purchaseSnapshot.purchases.map((purchase) => purchase.purchaseId));
+  const priorEvents = (input.priorEvents ?? []).filter((event) => allowedPurchaseIds.has(event.purchaseId));
   const verified = summarizePurchaseJourneyContext(
     document,
     purchaseSnapshot,
@@ -203,7 +210,7 @@ export function buildBuyFlowEvidencePacketV1(input: {
     priorJourney: {
       verified,
       unresolved: unresolvedContext(
-        document,
+        input.userId,
         input.unresolvedSnapshot,
         input.maxUnresolvedEvents ?? 20,
       ),
@@ -226,6 +233,7 @@ export function summarizeEvidencePacketV1(packet: BuyFlowEvidencePacketV1): Evid
     urlCount: packet.currentEmail.urls.length,
     jsonLdBlockCount: packet.currentEmail.structuredData.jsonLd.length,
     microdataTypeCount: packet.currentEmail.structuredData.microdata.schemaTypes.length,
+    microdataValueCount: packet.currentEmail.structuredData.microdata.values.length,
     schemaOrgTypeCount: packet.currentEmail.structuredData.schemaOrgTypes.length,
     technicalEvidenceCount: packet.currentEmail.structuredData.technicalEvidence.length,
     deterministicSignalCounts: {
@@ -265,12 +273,12 @@ export function extractSpfVerdict(headers: EmailHeader[]): SpfVerdict {
 }
 
 function unresolvedContext(
-  document: EmailDocumentV1,
+  userId: string,
   snapshot: UnresolvedEventPoolSnapshot | undefined,
   maxEvents: number,
 ): BuyFlowEvidencePacketV1['priorJourney']['unresolved'] {
   return (snapshot?.records ?? [])
-    .filter((record) => record.userId && record.status === 'unresolved')
+    .filter((record) => record.userId === userId && record.status === 'unresolved')
     .sort((a, b) => b.firstSeenAt.localeCompare(a.firstSeenAt))
     .slice(0, Math.max(0, maxEvents))
     .map((record) => ({
@@ -289,6 +297,18 @@ function unresolvedContext(
       amount: record.event.amount,
       currency: record.event.currency,
     }));
+}
+
+function scopePurchaseSnapshot(snapshot: PurchaseIdentitySnapshot, userId: string): PurchaseIdentitySnapshot {
+  const purchases = snapshot.purchases.filter((purchase) => purchase.userId === userId);
+  const purchaseIds = new Set(purchases.map((purchase) => purchase.purchaseId));
+  return {
+    purchases: purchases.map((purchase) => ({ ...purchase })),
+    orders: snapshot.orders.filter((item) => purchaseIds.has(item.purchaseId)).map((item) => ({ ...item })),
+    shipments: snapshot.shipments.filter((item) => purchaseIds.has(item.purchaseId)).map((item) => ({ ...item })),
+    payments: snapshot.payments.filter((item) => purchaseIds.has(item.purchaseId)).map((item) => ({ ...item })),
+    invoices: snapshot.invoices.filter((item) => purchaseIds.has(item.purchaseId)).map((item) => ({ ...item })),
+  };
 }
 
 function structuredData(html: string | null, rows: TechnicalEvidence[]): EvidencePacketStructuredData {
@@ -371,9 +391,12 @@ function collectJsonLdTypes(value: unknown): string[] {
 }
 
 function extractMicrodata(html: string | null): EvidencePacketStructuredData['microdata'] {
-  if (!html) return { schemaTypes: [], itemProperties: [] };
+  if (!html) return { schemaTypes: [], itemProperties: [], values: [] };
   const types = new Set<string>();
   const properties = new Set<string>();
+  const values: Array<{ property: string; value: string }> = [];
+  const valueSeen = new Set<string>();
+
   for (const match of html.matchAll(/\bitemtype\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi)) {
     const raw = (match[1] ?? match[2] ?? match[3] ?? '').trim();
     for (const value of raw.split(/\s+/).filter(Boolean)) types.add(schemaTypeName(value));
@@ -382,10 +405,60 @@ function extractMicrodata(html: string | null): EvidencePacketStructuredData['mi
     const raw = (match[1] ?? match[2] ?? match[3] ?? '').trim();
     for (const value of raw.split(/\s+/).filter(Boolean)) properties.add(value);
   }
+
+  const paired = /<([a-z0-9]+)\b([^>]*\bitemprop\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)[^>]*)>([\s\S]*?)<\/\1\s*>/gi;
+  for (const match of html.matchAll(paired)) {
+    const attrs = match[2] ?? '';
+    const property = attributeValue(attrs, 'itemprop');
+    if (!property) continue;
+    const explicit = attributeValue(attrs, 'content') ?? attributeValue(attrs, 'href') ?? attributeValue(attrs, 'src');
+    const value = boundedText(explicit ?? stripTags(match[3] ?? ''), 1_000);
+    addMicrodataValue(values, valueSeen, property, value);
+    if (values.length >= 100) break;
+  }
+
+  if (values.length < 100) {
+    const opening = /<([a-z0-9]+)\b([^>]*\bitemprop\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)[^>]*)\/?\s*>/gi;
+    for (const match of html.matchAll(opening)) {
+      const attrs = match[2] ?? '';
+      const property = attributeValue(attrs, 'itemprop');
+      if (!property) continue;
+      const value = boundedText(
+        attributeValue(attrs, 'content') ?? attributeValue(attrs, 'href') ?? attributeValue(attrs, 'src') ?? '',
+        1_000,
+      );
+      addMicrodataValue(values, valueSeen, property, value);
+      if (values.length >= 100) break;
+    }
+  }
+
   return {
     schemaTypes: [...types].sort().slice(0, 50),
     itemProperties: [...properties].sort().slice(0, 100),
+    values,
   };
+}
+
+function addMicrodataValue(
+  output: Array<{ property: string; value: string }>,
+  seen: Set<string>,
+  propertyRaw: string,
+  value: string,
+): void {
+  if (!value) return;
+  for (const property of propertyRaw.split(/\s+/).filter(Boolean)) {
+    const key = `${property}\u0000${value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push({ property, value });
+  }
+}
+
+function attributeValue(attributes: string, name: string): string | null {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`\\b${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(attributes);
+  const value = (match?.[1] ?? match?.[2] ?? match?.[3] ?? '').trim();
+  return value ? decodeBasicHtmlEntities(value) : null;
 }
 
 function extractUrls(document: EmailDocumentV1, maxUrls: number): EvidencePacketUrl[] {
@@ -467,6 +540,14 @@ function schemaTypeName(value: string): string {
 function boundedJson(value: unknown, maxChars: number): string {
   const json = JSON.stringify(value);
   return json.length <= maxChars ? json : `${json.slice(0, maxChars)}…`;
+}
+
+function boundedText(value: string, maxChars: number): string {
+  return decodeBasicHtmlEntities(value).replace(/\s+/g, ' ').trim().slice(0, maxChars);
+}
+
+function stripTags(value: string): string {
+  return value.replace(/<[^>]+>/g, ' ');
 }
 
 function decodeBasicHtmlEntities(value: string): string {
