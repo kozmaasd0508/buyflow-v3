@@ -2,6 +2,7 @@ name: V7 Luna V2 Purchase Journey Context 300
 
 # benchmark: structured-html + trusted lifecycle memory + conservative safety baseline
 # cache-seed: absolute workspace path + domain-separated encryption
+# replay-proof: cached run must perform zero new AI/provider calls
 # [benchmark] seeds/reuses encrypted private corpus + AI extraction cache.
 # [replay] requires those encrypted caches and performs 0 new AI/provider calls.
 on:
