@@ -5,7 +5,7 @@ v7 = Path('apps/api/src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid.ts')
 source = v7.read_text()
 
 import_anchor = "import { PurchaseIdentityGraph } from '../purchase-identity-v2/graph.js';\n"
-import_addition = "import { DeferredResolutionGraph } from '../purchase-identity-v2/deferred-resolution-graph.js';\nimport type { UnresolvedEventPoolSnapshot } from '../purchase-identity-v2/unresolved-event-pool.js';\n"
+import_addition = "import { DeferredResolutionGraph } from '../purchase-identity-v2/deferred-resolution-graph.js';\nimport { normalizeStableIdentifier } from '../purchase-identity-v2/identifier-normalizer.js';\nimport { exactIdentityKeys, type UnresolvedEventPoolSnapshot } from '../purchase-identity-v2/unresolved-event-pool.js';\n"
 
 function_anchor = "\nfunction addUsage(target: { input: number; output: number; cached: number; calls: number }, result: OpenAIEmailExtractionResult): void {"
 report_anchor = "\n  const aiReport = {"
@@ -31,6 +31,31 @@ if import_addition not in source:
 
 deferred_function = r'''
 
+type RecoveryAuditIdentityKind = 'order' | 'tracking' | 'invoice' | 'payment';
+
+type RecoveryOpportunityAudit = {
+  storedEvents: number;
+  namespacedOrderKey: number;
+  namespacedTrackingKey: number;
+  namespacedInvoiceKey: number;
+  namespacedPaymentKey: number;
+  multipleExactKeys: number;
+  noExactRecoveryKey: number;
+  futureSameOwnerEventSeen: number;
+  futureSameOwnerHardIdSeen: number;
+  rawIdentifierRepeatSeenLater: number;
+  rawRepeatNamespaceMissing: number;
+  rawRepeatNamespaceMismatch: number;
+  exactSameNamespacedKeySeenLater: number;
+  exactBridgePromotionEligible: number;
+  exactBridgeBlockedReviewOrPending: number;
+  exactBridgePromotionIneligible: number;
+  exactBridgeRecovered: number;
+  exactBridgeMovedToReview: number;
+  exactBridgeMissed: number;
+  noRawIdentifierRepeatSeenLater: number;
+};
+
 type DeferredLaneScore = LaneScore & {
   deferredStoredEvents: number;
   deferredRecoveredEvents: number;
@@ -38,7 +63,95 @@ type DeferredLaneScore = LaneScore & {
   journeysWithDeferredRecovery: number;
   wrongDeferredLinks: number;
   unresolvedRemaining: number;
+  recoveryOpportunityAudit: RecoveryOpportunityAudit;
 };
+
+type RecoveryAuditIdentity = {
+  kind: RecoveryAuditIdentityKind;
+  value: string;
+  namespace: string | null;
+};
+
+type RecoveryAuditProbe = {
+  eventId: string;
+  owners: Set<string>;
+  exactKeys: string[];
+  exactKeyKinds: Set<RecoveryAuditIdentityKind>;
+  identities: RecoveryAuditIdentity[];
+  futureSameOwnerEventSeen: boolean;
+  futureSameOwnerHardIdSeen: boolean;
+  rawIdentifierRepeatSeenLater: boolean;
+  rawRepeatNamespaceMissing: boolean;
+  rawRepeatNamespaceMismatch: boolean;
+  exactSameNamespacedKeySeenLater: boolean;
+  exactBridgePromotionEligible: boolean;
+  exactBridgeBlockedReviewOrPending: boolean;
+  exactBridgePromotionIneligible: boolean;
+  exactBridgeRecovered: boolean;
+  exactBridgeMovedToReview: boolean;
+  exactBridgeMissed: boolean;
+  closed: boolean;
+};
+
+function recoveryAuditNamespace(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  return normalized || null;
+}
+
+function recoveryAuditIdentities(event: CanonicalEvent): RecoveryAuditIdentity[] {
+  const result: RecoveryAuditIdentity[] = [];
+  const add = (
+    kind: RecoveryAuditIdentityKind,
+    rawValue: string | null | undefined,
+    namespaceValue: string | null | undefined,
+  ) => {
+    const value = normalizeStableIdentifier(rawValue);
+    if (!value) return;
+    result.push({
+      kind,
+      value,
+      namespace: recoveryAuditNamespace(namespaceValue),
+    });
+  };
+
+  add('order', event.orderIdNormalized ?? event.orderIdRaw, event.merchantId ?? event.merchantNamespace);
+  add('tracking', event.trackingIdNormalized ?? event.trackingIdRaw, event.carrierId);
+  add('invoice', event.invoiceIdNormalized ?? event.invoiceIdRaw, event.invoiceIssuerId);
+  add('payment', event.paymentReference, event.paymentProviderId);
+  return result;
+}
+
+function recoveryAuditOwnersOverlap(left: Set<string>, right: Set<string>): boolean {
+  for (const value of left) if (right.has(value)) return true;
+  return false;
+}
+
+function summarizeRecoveryOpportunityAudit(probes: Map<string, RecoveryAuditProbe>): RecoveryOpportunityAudit {
+  const values = [...probes.values()];
+  const count = (predicate: (probe: RecoveryAuditProbe) => boolean) => values.filter(predicate).length;
+  return {
+    storedEvents: values.length,
+    namespacedOrderKey: count((probe) => probe.exactKeyKinds.has('order')),
+    namespacedTrackingKey: count((probe) => probe.exactKeyKinds.has('tracking')),
+    namespacedInvoiceKey: count((probe) => probe.exactKeyKinds.has('invoice')),
+    namespacedPaymentKey: count((probe) => probe.exactKeyKinds.has('payment')),
+    multipleExactKeys: count((probe) => probe.exactKeys.length > 1),
+    noExactRecoveryKey: count((probe) => probe.exactKeys.length === 0),
+    futureSameOwnerEventSeen: count((probe) => probe.futureSameOwnerEventSeen),
+    futureSameOwnerHardIdSeen: count((probe) => probe.futureSameOwnerHardIdSeen),
+    rawIdentifierRepeatSeenLater: count((probe) => probe.rawIdentifierRepeatSeenLater),
+    rawRepeatNamespaceMissing: count((probe) => probe.rawRepeatNamespaceMissing),
+    rawRepeatNamespaceMismatch: count((probe) => probe.rawRepeatNamespaceMismatch),
+    exactSameNamespacedKeySeenLater: count((probe) => probe.exactSameNamespacedKeySeenLater),
+    exactBridgePromotionEligible: count((probe) => probe.exactBridgePromotionEligible),
+    exactBridgeBlockedReviewOrPending: count((probe) => probe.exactBridgeBlockedReviewOrPending),
+    exactBridgePromotionIneligible: count((probe) => probe.exactBridgePromotionIneligible),
+    exactBridgeRecovered: count((probe) => probe.exactBridgeRecovered),
+    exactBridgeMovedToReview: count((probe) => probe.exactBridgeMovedToReview),
+    exactBridgeMissed: count((probe) => probe.exactBridgeMissed),
+    noRawIdentifierRepeatSeenLater: count((probe) => !probe.rawIdentifierRepeatSeenLater),
+  };
+}
 
 /**
  * Supplemental lane for measuring delayed exact-identity recovery without
@@ -48,6 +161,11 @@ type DeferredLaneScore = LaneScore & {
  * events. A recovered event is counted only after the current trigger itself is
  * promotion-eligible, and every recovered purchase link is checked against the
  * frozen journey ownership map. Only aggregate counts leave this function.
+ *
+ * The opportunity audit uses frozen journey ownership strictly as benchmark
+ * ground truth. It never becomes runtime authority and never logs raw identity
+ * values. Exact/raw identifiers are compared only in memory, then reduced to
+ * category counts before reporting.
  */
 function replayDeferredLane(input: {
   lane: string;
@@ -63,6 +181,7 @@ function replayDeferredLane(input: {
   const chainPurchase = new Map<string, string>();
   const chainsWithLinks = new Set<string>();
   const chainsWithDeferredRecovery = new Set<string>();
+  const recoveryAuditProbes = new Map<string, RecoveryAuditProbe>();
   const decisionCounts: Record<string, number> = {};
   const eventCounts: Record<string, number> = {};
   const promotionReasonCounts: Record<string, number> = {};
@@ -110,6 +229,8 @@ function replayDeferredLane(input: {
     canonicalEvent.purchaseCreationAuthority = creationAuthority.authority;
     canonicalEvent.purchaseCreationReasons = creationAuthority.reasons;
 
+    const currentIdentities = recoveryAuditIdentities(canonicalEvent);
+    const currentExactKeys = new Set(exactIdentityKeys(canonicalEvent).map((item) => item.key));
     const applied = graph.applyEvent(canonicalEvent);
     const decision = applied.decision;
     const promotionReadiness = evaluatePromotionReadiness({ event: canonicalEvent, decision });
@@ -118,6 +239,51 @@ function replayDeferredLane(input: {
     inc(decisionCounts, decision.kind);
     inc(eventCounts, canonicalEvent.eventType);
     for (const reason of promotionReadiness.reasons) inc(promotionReasonCounts, reason);
+
+    // Compare the current event only with unresolved records that existed before
+    // it. This makes every opportunity strictly future-looking.
+    for (const probe of recoveryAuditProbes.values()) {
+      if (probe.closed || !recoveryAuditOwnersOverlap(probe.owners, owners)) continue;
+      probe.futureSameOwnerEventSeen = true;
+      if (currentIdentities.length > 0) probe.futureSameOwnerHardIdSeen = true;
+
+      for (const storedIdentity of probe.identities) {
+        for (const currentIdentity of currentIdentities) {
+          if (
+            storedIdentity.kind !== currentIdentity.kind
+            || storedIdentity.value !== currentIdentity.value
+          ) continue;
+          probe.rawIdentifierRepeatSeenLater = true;
+          if (!storedIdentity.namespace || !currentIdentity.namespace) {
+            probe.rawRepeatNamespaceMissing = true;
+          } else if (storedIdentity.namespace !== currentIdentity.namespace) {
+            probe.rawRepeatNamespaceMismatch = true;
+          }
+        }
+      }
+
+      const exactMatch = probe.exactKeys.some((key) => currentExactKeys.has(key));
+      if (!exactMatch) continue;
+      probe.exactSameNamespacedKeySeenLater = true;
+      if (decision.kind === 'REVIEW' || decision.kind === 'PENDING') {
+        probe.exactBridgeBlockedReviewOrPending = true;
+      }
+      if (!eligible) probe.exactBridgePromotionIneligible = true;
+      if (eligible && (decision.kind === 'NEW_PURCHASE' || decision.kind === 'LINKED')) {
+        probe.exactBridgePromotionEligible = true;
+      }
+      if (applied.recoveredEventIds.includes(probe.eventId)) {
+        probe.exactBridgeRecovered = true;
+        probe.closed = true;
+      } else if (applied.movedToReviewEventIds.includes(probe.eventId)) {
+        probe.exactBridgeMovedToReview = true;
+        probe.closed = true;
+      } else if (eligible && (decision.kind === 'NEW_PURCHASE' || decision.kind === 'LINKED')) {
+        // An exact, promotion-eligible bridge that neither recovered nor moved
+        // the orphan to REVIEW would indicate a deferred-resolution bug.
+        probe.exactBridgeMissed = true;
+      }
+    }
 
     if (decision.kind === 'LINKED') {
       const owner = purchaseOwner.get(decision.purchaseId);
@@ -173,6 +339,29 @@ function replayDeferredLane(input: {
       // existing durable source_emails/unlinked state used by the real shadow.
       unresolvedSnapshot = graph.unresolvedSnapshot();
       deferredStoredEvents += 1;
+      const stored = unresolvedSnapshot.records.find((record) => record.eventId === canonicalEvent.eventId);
+      if (stored && !recoveryAuditProbes.has(stored.eventId)) {
+        recoveryAuditProbes.set(stored.eventId, {
+          eventId: stored.eventId,
+          owners: new Set(owners),
+          exactKeys: stored.identityKeys.map((item) => item.key),
+          exactKeyKinds: new Set(stored.identityKeys.map((item) => item.kind)),
+          identities: recoveryAuditIdentities(stored.event),
+          futureSameOwnerEventSeen: false,
+          futureSameOwnerHardIdSeen: false,
+          rawIdentifierRepeatSeenLater: false,
+          rawRepeatNamespaceMissing: false,
+          rawRepeatNamespaceMismatch: false,
+          exactSameNamespacedKeySeenLater: false,
+          exactBridgePromotionEligible: false,
+          exactBridgeBlockedReviewOrPending: false,
+          exactBridgePromotionIneligible: false,
+          exactBridgeRecovered: false,
+          exactBridgeMovedToReview: false,
+          exactBridgeMissed: false,
+          closed: false,
+        });
+      }
     } else if (acceptedMutation) {
       unresolvedSnapshot = graph.unresolvedSnapshot();
       deferredRecoveredEvents += applied.recoveredEventIds.length;
@@ -218,6 +407,7 @@ function replayDeferredLane(input: {
     journeysWithDeferredRecovery: chainsWithDeferredRecovery.size,
     wrongDeferredLinks,
     unresolvedRemaining: unresolvedSnapshot.records.filter((record) => record.status === 'unresolved').length,
+    recoveryOpportunityAudit: summarizeRecoveryOpportunityAudit(recoveryAuditProbes),
     unsafeCount,
   };
 }
@@ -267,6 +457,9 @@ safety_new = """  if (
     || deferredRecoveryScores.deterministic.wrongDeferredLinks > 0
     || deferredRecoveryScores.luna.wrongDeferredLinks > 0
     || deferredRecoveryScores.hybrid.wrongDeferredLinks > 0
+    || deferredRecoveryScores.deterministic.recoveryOpportunityAudit.exactBridgeMissed > 0
+    || deferredRecoveryScores.luna.recoveryOpportunityAudit.exactBridgeMissed > 0
+    || deferredRecoveryScores.hybrid.recoveryOpportunityAudit.exactBridgeMissed > 0
   ) {
     throw new Error('unsafe_v7_ai_or_deferred_score');
   }"""
