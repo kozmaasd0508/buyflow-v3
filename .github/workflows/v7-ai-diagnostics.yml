@@ -36,6 +36,9 @@ jobs:
       - name: API regression suite
         run: npm test --workspace @buyflow/api
 
+      - name: Validate deferred recovery benchmark patch
+        run: python .github/scripts/v7_deferred_recovery_benchmark_patch.py --check
+
       - name: Prepare encrypted benchmark cache directory
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         run: mkdir -p "${{ github.workspace }}/.cache/v7-private-benchmark"
@@ -81,6 +84,10 @@ jobs:
       - name: Enable encrypted frozen corpus and fast replay
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         run: python .github/scripts/v7_fast_replay_patch.py
+
+      - name: Enable deferred recovery benchmark lane
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
+        run: python .github/scripts/v7_deferred_recovery_benchmark_patch.py
 
       - name: Run 300-email Luna benchmark or cached replay
         if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
