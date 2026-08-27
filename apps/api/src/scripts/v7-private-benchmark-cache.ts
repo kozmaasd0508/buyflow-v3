@@ -1,8 +1,9 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export const V7_PRIVATE_BENCHMARK_CACHE_VERSION = 'v7-private-benchmark-cache-v1';
+export const V7_AI_INPUT_POLICY_VERSION = 'v7-structured-journey-input-v1';
 
 type CacheEnvelope = {
   version: 1;
@@ -12,7 +13,7 @@ type CacheEnvelope = {
   data: string;
 };
 
-let extractorFingerprintPromise: Promise<string> | null = null;
+let aiInputFingerprintPromise: Promise<string> | null = null;
 
 function cacheDirectory(explicit?: string): string {
   const configured = explicit?.trim() || process.env.V7_BENCHMARK_CACHE_DIR?.trim();
@@ -46,12 +47,20 @@ export function benchmarkCacheKey(parts: Array<string | number | boolean | null 
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
-export async function currentOpenAIExtractorFingerprint(): Promise<string> {
-  if (!extractorFingerprintPromise) {
-    extractorFingerprintPromise = readFile(new URL('../ai/openai-email-extractor.ts', import.meta.url), 'utf8')
-      .then((source) => createHash('sha256').update(source, 'utf8').digest('hex'));
+export async function currentV7AiInputFingerprint(): Promise<string> {
+  if (!aiInputFingerprintPromise) {
+    aiInputFingerprintPromise = Promise.all([
+      readFile(new URL('../ai/openai-email-extractor.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../ai/purchase-journey-context.ts', import.meta.url), 'utf8'),
+    ]).then(([extractorSource, journeySource]) => createHash('sha256')
+      .update(V7_AI_INPUT_POLICY_VERSION, 'utf8')
+      .update('\u0000', 'utf8')
+      .update(extractorSource, 'utf8')
+      .update('\u0000', 'utf8')
+      .update(journeySource, 'utf8')
+      .digest('hex'));
   }
-  return extractorFingerprintPromise;
+  return aiInputFingerprintPromise;
 }
 
 export async function loadEncryptedBenchmarkJson<T>(input: {
@@ -97,8 +106,7 @@ export async function saveEncryptedBenchmarkJson<T>(input: {
   if (!key) return false;
 
   const target = cachePath(input.scope, input.key, input.directory);
-  const dir = target.slice(0, target.lastIndexOf('/'));
-  await mkdir(dir, { recursive: true });
+  await mkdir(dirname(target), { recursive: true });
 
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
