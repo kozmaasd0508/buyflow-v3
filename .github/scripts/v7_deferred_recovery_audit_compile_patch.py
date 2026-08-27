@@ -9,12 +9,13 @@ benchmark_patch = benchmark_patch_path.read_text()
 deferred_anchor = "import { exactIdentityKeys, type UnresolvedEventPoolSnapshot } from '../purchase-identity-v2/unresolved-event-pool.js';\n"
 canonical_import = "import type { CanonicalEvent } from '../purchase-identity-v2/types.js';\n"
 probe = "function recoveryAuditIdentities(event: CanonicalEvent): RecoveryAuditIdentity[]"
+contract_probe = "exactIdentityKeys, type UnresolvedEventPoolSnapshot"
 
 if '--check' in sys.argv:
-    # The repository source is intentionally unpatched at this stage. Validate
-    # the patch contract itself instead of guessing how many matching imports
-    # exist inside the V7 generator's oldImports/newImports template strings.
-    if deferred_anchor not in benchmark_patch:
+    # The benchmark patch stores import_addition inside a Python string literal,
+    # so its line endings are escaped as \\n in the patch file. Validate the stable
+    # semantic import/probe tokens instead of comparing rendered source text.
+    if contract_probe not in benchmark_patch:
         raise SystemExit('v7_deferred_audit_deferred_import_contract_missing')
     if probe not in benchmark_patch:
         raise SystemExit('v7_deferred_audit_probe_contract_missing')
