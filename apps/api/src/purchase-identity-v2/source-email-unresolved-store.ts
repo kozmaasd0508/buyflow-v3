@@ -39,13 +39,29 @@ export async function loadDurableUnresolvedSnapshotForUser(
   userId: string,
   maxRows = DEFAULT_MAX_ROWS,
 ): Promise<DurableUnresolvedLoadResult> {
-  if (!userId.trim()) throw new Error('Durable unresolved load requires a user id.');
-  const limit = Math.max(1, Math.min(Math.trunc(maxRows), 1_000));
-  const db = getSupabaseAdmin() as any;
-  const { data, error } = await db
+  return loadDurableUnresolvedSnapshotFromDb({
+    db: getSupabaseAdmin() as any,
+    userId,
+    maxRows,
+  });
+}
+
+/**
+ * Dependency-injected variant used by the shadow runtime. Keeping the database
+ * handle explicit prevents tests/shadow callers from accidentally falling back
+ * to another environment while preserving the production convenience wrapper.
+ */
+export async function loadDurableUnresolvedSnapshotFromDb(input: {
+  db: any;
+  userId: string;
+  maxRows?: number;
+}): Promise<DurableUnresolvedLoadResult> {
+  if (!input.userId.trim()) throw new Error('Durable unresolved load requires a user id.');
+  const limit = Math.max(1, Math.min(Math.trunc(input.maxRows ?? DEFAULT_MAX_ROWS), 1_000));
+  const { data, error } = await input.db
     .from('source_emails')
     .select('id,user_id,provider_message_id,from_address,received_at,processing_status,validation_status,validated_result')
-    .eq('user_id', userId)
+    .eq('user_id', input.userId)
     .eq('processing_status', 'unlinked')
     .order('received_at', { ascending: false })
     .limit(limit);
@@ -56,7 +72,7 @@ export async function loadDurableUnresolvedSnapshotForUser(
 
   return buildDurableUnresolvedSnapshotFromSourceRows(
     Array.isArray(data) ? data as PersistedUnlinkedSourceEmail[] : [],
-    userId,
+    input.userId,
   );
 }
 
