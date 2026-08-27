@@ -1,6 +1,8 @@
 name: V7 Luna V2 Purchase Journey Context 300
 
-# benchmark: structured-html + trusted lifecycle memory + Purchase Anchor Rescue; conservative safety gate
+# benchmark: structured-html + trusted lifecycle memory + Purchase Anchor Rescue
+# [benchmark] seeds/reuses encrypted private corpus + AI extraction cache.
+# [replay] requires those encrypted caches and performs 0 new AI/provider calls.
 on:
   push:
     branches: [codex/v7-luna-prompt-v2]
@@ -31,16 +33,25 @@ jobs:
       - name: API regression suite
         run: npm test --workspace @buyflow/api
 
+      - name: Restore encrypted private benchmark cache
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
+        uses: actions/cache@v4
+        with:
+          path: .cache/v7-private-benchmark
+          key: v7-private-benchmark-v1-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            v7-private-benchmark-v1-${{ runner.os }}-
+
       - name: Prepare anonymized blocked order-created audit
-        if: contains(github.event.head_commit.message, '[benchmark]')
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         run: python .github/scripts/v7_order_created_audit_patch.py
 
       - name: Add trusted lifecycle event memory
-        if: contains(github.event.head_commit.message, '[benchmark]')
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         run: python .github/scripts/v7_journey_event_memory_patch.py
 
       - name: Expand audit population from 100 to 300 emails
-        if: contains(github.event.head_commit.message, '[benchmark]')
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         shell: bash
         run: |
           python - <<'PY'
@@ -60,12 +71,19 @@ jobs:
           v7.write_text(source.replace(old, '    || baseline.discoveredMessages !== 300', 1))
           PY
 
-      - name: Run 300-email Luna benchmark and blocked order-created audit
-        if: contains(github.event.head_commit.message, '[benchmark]')
+      - name: Enable encrypted frozen corpus and fast replay
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
+        run: python .github/scripts/v7_fast_replay_patch.py
+
+      - name: Run 300-email Luna benchmark or cached replay
+        if: contains(github.event.head_commit.message, '[benchmark]') || contains(github.event.head_commit.message, '[replay]')
         run: npm exec --workspace @buyflow/api -- tsx src/scripts/phase-e-100-real-lifecycle-v7-ai-hybrid-runner-fix.ts
         env:
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
           NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
           NYLAS_API_URI: https://api.eu.nylas.com
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          V7_BENCHMARK_CACHE_KEY: ${{ secrets.V7_BENCHMARK_CACHE_KEY }}
+          V7_BENCHMARK_CACHE_DIR: .cache/v7-private-benchmark
+          V7_BENCHMARK_REPLAY_ONLY: ${{ contains(github.event.head_commit.message, '[replay]') && '1' || '0' }}
           V7_ORDER_CREATED_AUDIT_LIMIT: '100'
