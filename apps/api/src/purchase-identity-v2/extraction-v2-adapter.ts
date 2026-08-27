@@ -1,4 +1,6 @@
 import type { EmailDocumentV1 } from '../ingestion/email-document.js';
+import { isPublicMailboxSenderDomain, isSharedPlatformSenderDomain } from '../ingestion/generic-order-confirmation-adapter.js';
+import { isCarrierSenderDomain } from '../email/sender-role.js';
 import type { ExtractionEngineV2Result } from '../extraction-v2/engine-v2.js';
 import type { EvidenceClaim, EvidenceField, ResolvedCommerceEvent, ResolvedField } from '../extraction-v2/types.js';
 import { extractExplicitOrderRelation } from './explicit-order-relation.js';
@@ -157,17 +159,45 @@ function hasQualifier(extraction: ExtractionEngineV2Result, qualifier: string): 
   return extraction.evidence.bundle.claims.some((claim) => claim.qualifiers?.includes(qualifier));
 }
 
-function sourceRole(extraction: ExtractionEngineV2Result): SourceRole {
+function sourceRole(document: EmailDocumentV1, extraction: ExtractionEngineV2Result): SourceRole {
   if (hasQualifier(extraction, 'authenticated_direct_carrier_sender') || hasQualifier(extraction, 'direct_carrier_sender')) {
     return 'carrier';
   }
+
+  const domain = document.sender.primaryDomain?.trim().toLowerCase() ?? '';
+  if (domain && isCarrierSenderDomain(domain)) return 'carrier';
+
   const merchant = extraction.resolved.merchant;
-  if (merchant.status === 'resolved' && merchant.provenance.some((claim) =>
-    claim.qualifiers?.includes('sender_commercial_identity') || claim.qualifiers?.includes('sender_transactional_identity')
-  )) {
+  if (merchant.status !== 'resolved' || typeof merchant.value !== 'string') return 'unknown';
+
+  // Public mailboxes and shared commerce infrastructure must never gain
+  // merchant authority from a display name or an AI merchant interpretation.
+  if (!domain || isPublicMailboxSenderDomain(domain) || isSharedPlatformSenderDomain(domain)) {
+    return 'unknown';
+  }
+
+  const authoritativeQualifier = (qualifiers: string[] | undefined) =>
+    qualifiers?.includes('sender_commercial_identity') || qualifiers?.includes('sender_transactional_identity');
+
+  if (merchant.provenance.some((claim) => authoritativeQualifier(claim.qualifiers))) {
     return 'merchant';
   }
-  return 'unknown';
+
+  // The semantic extractor may win the resolved merchant field with higher
+  // confidence and hide a lower-ranked deterministic sender claim from the
+  // resolved-field provenance. Recover authority only when that sender claim
+  // names exactly the same normalized merchant. This does not fuzzy-match a
+  // different legal/store name and never derives authority from AI alone.
+  const resolvedMerchant = normalizeMerchantToken(merchant.value);
+  const matchingSenderAuthority = extraction.evidence.bundle.claims.some((claim) =>
+    claim.field === 'merchant'
+    && claim.source === 'sender'
+    && typeof claim.value === 'string'
+    && authoritativeQualifier(claim.qualifiers)
+    && normalizeMerchantToken(claim.value) === resolvedMerchant
+  );
+
+  return matchingSenderAuthority ? 'merchant' : 'unknown';
 }
 
 function productFingerprints(extraction: ExtractionEngineV2Result): string[] {
@@ -250,7 +280,7 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
     trackingUrl: null,
     productFingerprints: productFingerprints(extraction),
     provenance,
-    sourceRole: sourceRole(extraction),
+    sourceRole: sourceRole(document, extraction),
     carrierId,
     paymentProviderId: null,
     invoiceIssuerId: null,
