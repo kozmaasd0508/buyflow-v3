@@ -13,6 +13,7 @@
     "nylas:protocol-shadow-audit": "tsx src/scripts/nylas-protocol-shadow-audit.ts",
     "nylas:markup-audit": "tsx src/scripts/nylas-markup-audit.ts",
     "openai:nano-smoke": "tsx src/scripts/openai-nano-smoke.ts",
+    "ollama:qwen-smoke": "tsx src/scripts/ollama-qwen-smoke.ts",
     "pipeline:nano-extract-pending": "tsx src/scripts/nano-extract-pending.ts",
     "pipeline:validate-extractions": "tsx src/scripts/validate-nano-extractions.ts",
     "pipeline:import-next-20": "tsx src/scripts/import-next-purchases.ts",
