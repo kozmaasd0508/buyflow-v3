@@ -137,7 +137,7 @@ function shipment(chain: string, merchantKey: string, orderId: string, trackingI
   };
 }
 
-function carrier(chain: string, type: 'shipment_created' | 'out_for_delivery' | 'delivered', trackingId: string, carrierId = 'dpd', alias = 'root', suffix = type): Step {
+function carrier(chain: string, type: 'shipment_created' | 'out_for_delivery' | 'delivered', trackingId: string, carrierId = 'dpd', alias = 'root', suffix: string = type): Step {
   return {
     name: `${carrierId}-${suffix}-${alias}`,
     event: ev({ id: `${chain}:carrier:${suffix}:${alias}:${trackingId}`, type, sourceRole: 'carrier', trackingId, carrierId }),
