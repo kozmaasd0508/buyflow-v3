@@ -5,7 +5,7 @@ Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 repoRoot = fso.GetParentFolderName(WScript.ScriptFullName)
-psScript = fso.BuildPath(repoRoot, "scripts\start-v9-teacher-chat.ps1")
+psScript = fso.BuildPath(repoRoot, "scripts\start-buyflow-ai.ps1")
 
 If Not fso.FileExists(psScript) Then
   MsgBox "Nem talalom a BuyFlow AI indito scriptet:" & vbCrLf & psScript, vbCritical, "BuyFlow AI"
