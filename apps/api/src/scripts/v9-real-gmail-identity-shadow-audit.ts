@@ -215,7 +215,7 @@ async function fetchRows(pattern: string): Promise<HoldoutRow[]> {
     .eq('dataset_role', 'HOLDOUT')
     .order('source_fingerprint', { ascending: true });
   if (error) throw new Error(`V9_IDENTITY_AUDIT_SUPABASE:${error.message}`);
-  return (data ?? []) as HoldoutRow[];
+  return (data ?? []) as unknown as HoldoutRow[];
 }
 
 function validateRows(rows: HoldoutRow[], expected: number, label: string): void {
