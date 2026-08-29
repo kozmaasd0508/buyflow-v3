@@ -38,29 +38,67 @@ function Test-JsonEndpoint([string]$Url) {
   }
 }
 
-function Find-V9RepoRoot([string]$ProjectRoot) {
+function Test-V9Run([string]$RunDir) {
+  try {
+    $metricsPath = Join-Path $RunDir 'metrics.json'
+    $weights = Join-Path $RunDir 'best\adapter_model.safetensors'
+    $config = Join-Path $RunDir 'best\adapter_config.json'
+    if (-not ((Test-Path $metricsPath) -and (Test-Path $weights) -and (Test-Path $config))) { return $false }
+    $metrics = Get-Content -Raw -Path $metricsPath | ConvertFrom-Json
+    return (
+      $metrics.status -eq 'LORA_V9_TEACHER_DIALOGUE_CORRECTION_TRAIN_COMPLETE' -and
+      $metrics.locked_test_read -eq $false -and
+      $metrics.locked_test_trained -eq $false
+    )
+  } catch {
+    return $false
+  }
+}
+
+function Find-V9ServerScript([string]$ProjectRoot, [string]$SearchRoot) {
   $candidates = New-Object System.Collections.Generic.List[string]
-  $preferred = Join-Path $ProjectRoot '.codex-worktrees\teacher-corpus-v6'
+  $preferred = Join-Path $ProjectRoot '.codex-worktrees\teacher-corpus-v6\scripts\lora-wsl-shadow-server-v9-safe.py'
   $candidates.Add($preferred)
-  $candidates.Add($ProjectRoot)
+  $candidates.Add((Join-Path $ProjectRoot 'scripts\lora-wsl-shadow-server-v9-safe.py'))
 
   $worktrees = Join-Path $ProjectRoot '.codex-worktrees'
   if (Test-Path $worktrees) {
     foreach ($dir in Get-ChildItem -Path $worktrees -Directory -ErrorAction SilentlyContinue) {
-      if (-not $candidates.Contains($dir.FullName)) { $candidates.Add($dir.FullName) }
+      $candidate = Join-Path $dir.FullName 'scripts\lora-wsl-shadow-server-v9-safe.py'
+      if (-not $candidates.Contains($candidate)) { $candidates.Add($candidate) }
     }
   }
 
   foreach ($candidate in $candidates) {
-    $script = Join-Path $candidate 'scripts\lora-wsl-shadow-server-v9-safe.py'
-    $latest = Join-Path $candidate 'local-data\lora-v7\LATEST.txt'
-    if ((Test-Path $script) -and (Test-Path $latest)) {
-      return $candidate
+    if (Test-Path $candidate) {
+      $siblingV6 = Join-Path (Split-Path $candidate -Parent) 'lora-wsl-shadow-server-v6-safe.py'
+      if (Test-Path $siblingV6) { return $candidate }
     }
   }
 
-  $checked = ($candidates | ForEach-Object { " - $_" }) -join [Environment]::NewLine
-  throw "Nem talaltam olyan BuyFlow worktree-t, ahol a V9 szerver es a local-data\lora-v7\LATEST.txt is megvan. Ellenorzott helyek:`n$checked"
+  $found = Get-ChildItem -Path $SearchRoot -Recurse -File -Filter 'lora-wsl-shadow-server-v9-safe.py' -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path (Join-Path $_.Directory.FullName 'lora-wsl-shadow-server-v6-safe.py') } |
+    Select-Object -First 1
+  if ($found) { return $found.FullName }
+
+  throw "Nem talaltam hasznalhato V9 safe server scriptet a BuyFlow mappakban."
+}
+
+function Find-V9Run([string]$SearchRoot) {
+  $exactName = '20260829T155503Z-qwen3-8b-buyflow-v9-teacher-dialogue-correction-classifier'
+  $exact = Get-ChildItem -Path $SearchRoot -Recurse -Directory -Filter $exactName -ErrorAction SilentlyContinue |
+    Where-Object { Test-V9Run $_.FullName } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if ($exact) { return $exact.FullName }
+
+  $matching = Get-ChildItem -Path $SearchRoot -Recurse -Directory -Filter '*buyflow-v9-teacher-dialogue-correction-classifier*' -ErrorAction SilentlyContinue |
+    Where-Object { Test-V9Run $_.FullName } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if ($matching) { return $matching.FullName }
+
+  throw "Nem talaltam a befejezett V9 training run-t a $SearchRoot mappa alatt. A modell sulyait nem toroljuk es nem talalgatunk helyettuk."
 }
 
 try {
@@ -72,19 +110,28 @@ try {
   Set-Content -Path $uiErrLog -Value '' -Encoding UTF8
 
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-  $projectRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation'
+  $searchRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow'
+  $projectRoot = Join-Path $searchRoot '01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation'
   $uiScript = Join-Path $repoRoot 'scripts\v9-teacher-chat-ui.py'
+  $explicitServer = Join-Path $repoRoot 'scripts\lora-v9-explicit-run-server.py'
 
+  if (-not (Test-Path $searchRoot)) { throw "Nem talalom a BuyFlow gyokermappat: $searchRoot" }
   if (-not (Test-Path $projectRoot)) { throw "Nem talalom a BuyFlow projektet: $projectRoot" }
   if (-not (Test-Path $uiScript)) { throw "Nem talalom a Tanari Chat UI-t: $uiScript" }
+  if (-not (Test-Path $explicitServer)) { throw "Nem talalom az explicit V9 launcher scriptet: $explicitServer" }
   if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { throw 'A wsl.exe nem erheto el.' }
 
-  $v9Root = Find-V9RepoRoot $projectRoot
-  $modelScript = Join-Path $v9Root 'scripts\lora-wsl-shadow-server-v9-safe.py'
-  Log "V9 repo: $v9Root"
+  Log 'V9 safe server forras keresese...'
+  $v9ServerScript = Find-V9ServerScript $projectRoot $searchRoot
+  Log "V9 server: $v9ServerScript"
 
-  $v9Wsl = To-WslPath $v9Root
+  Log 'Befejezett V9 training run keresese...'
+  $v9Run = Find-V9Run $searchRoot
+  Log "V9 run: $v9Run"
+
   $repoWsl = To-WslPath $repoRoot
+  $serverWsl = To-WslPath $v9ServerScript
+  $runWsl = To-WslPath $v9Run
 
   Log '===== BUYFLOW V9 TANARI CHAT ====='
 
@@ -92,8 +139,8 @@ try {
   if ($health -and $health.ok -and $health.ready -and $health.provider -eq 'lora-v9') {
     Log 'V9 modellszerver mar fut.'
   } else {
-    Log 'V9 modellszerver inditasa...'
-    $modelCommand = "cd '$v9Wsl' && exec python3 scripts/lora-wsl-shadow-server-v9-safe.py '$v9Wsl'"
+    Log 'V9 modellszerver inditasa explicit training run-bol...'
+    $modelCommand = "cd '$repoWsl' && exec python3 scripts/lora-v9-explicit-run-server.py '$serverWsl' '$runWsl'"
     $modelProc = Start-Process -FilePath 'wsl.exe' -ArgumentList @('bash', '-lc', $modelCommand) -WindowStyle Hidden -RedirectStandardOutput $modelOutLog -RedirectStandardError $modelErrLog -PassThru
 
     $deadline = (Get-Date).AddMinutes(5)
