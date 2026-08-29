@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body ?? $json;\nconst rawEmail = body.email ?? body;\nconst candidates = Array.isArray(body.candidates) ? body.candidates : [];\nconst subject = String(rawEmail.subject ?? '').trim();\nconst emailBody = String(rawEmail.body ?? rawEmail.text ?? '').trim();\nif (!subject && !emailBody) throw new Error('BUYFLOW_EMPTY_EMAIL');\nconst requestId = String(body.request_id ?? `local-${Date.now()}-${Math.random().toString(16).slice(2)}`);\nreturn [{ json: {\n  request_id: requestId,\n  email: {\n    from: String(rawEmail.from ?? ''),\n    subject,\n    body: emailBody,\n    received_at: rawEmail.received_at ?? null\n  },\n  candidates: candidates.map((c) => ({\n    purchase_id: String(c.purchase_id ?? c.id ?? ''),\n    merchant: c.merchant ?? null,\n    order_ids: Array.isArray(c.order_ids) ? c.order_ids : [],\n    tracking_ids: Array.isArray(c.tracking_ids) ? c.tracking_ids : [],\n    invoice_ids: Array.isArray(c.invoice_ids) ? c.invoice_ids : [],\n    amount: c.amount ?? null,\n    currency: c.currency ?? null,\n    created_at: c.created_at ?? null,\n    status: c.status ?? null\n  })).filter((c) => c.purchase_id),\n  mode: 'SHADOW'\n} }];"
+        "jsCode": "const body = $json.body ?? $json;\nconst rawEmail = body.email ?? body;\nconst candidates = Array.isArray(body.candidates) ? body.candidates : [];\nconst subject = String(rawEmail.subject ?? '').trim();\nconst emailBody = String(rawEmail.body ?? rawEmail.text ?? '').trim();\nif (!subject && !emailBody) throw new Error('BUYFLOW_EMPTY_EMAIL');\nconst requestId = String(body.request_id ?? `local-${Date.now()}-${Math.random().toString(16).slice(2)}`);\nreturn [{ json: { request_id: requestId, email: { from: String(rawEmail.from ?? ''), subject, body: emailBody, received_at: rawEmail.received_at ?? null }, candidates: candidates.map((c) => ({ purchase_id: String(c.purchase_id ?? c.id ?? ''), merchant: c.merchant ?? null, order_ids: Array.isArray(c.order_ids) ? c.order_ids : [], tracking_ids: Array.isArray(c.tracking_ids) ? c.tracking_ids : [], invoice_ids: Array.isArray(c.invoice_ids) ? c.invoice_ids : [], amount: c.amount ?? null, currency: c.currency ?? null, created_at: c.created_at ?? null, status: c.status ?? null })).filter((c) => c.purchase_id), mode: 'SHADOW' } }];"
       },
       "id": "8f3ac547-8b99-4539-8c72-42f0370f1a02",
       "name": "Normalize Request",
@@ -29,23 +29,16 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BUYFLOW_OLLAMA_URL || 'http://host.docker.internal:11434/api/chat' }}",
+        "url": "={{ $env.BUYFLOW_OLLAMA_URL || 'http://127.0.0.1:11434/api/chat' }}",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+          "parameters": [{"name": "Content-Type", "value": "application/json"}]
         },
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b', stream: false, think: false, keep_alive: 0, format: 'json', options: { temperature: 0.1 }, messages: [ { role: 'system', content: `You are the BuyFlow autonomous email decision engine. Decide what this email means and what BuyFlow should do. Return ONLY one JSON object. Allowed event_type values: ORDER_CREATED, ORDER_PROCESSING, ORDER_PACKING, SHIPMENT_CREATED, SHIPPED, IN_TRANSIT, OUT_FOR_DELIVERY, READY_FOR_PICKUP, DELIVERED, DELIVERY_FAILED, DELAYED, CANCELLED, REFUNDED, PAYMENT, INVOICE, RETURN, WARRANTY, OTHER. Allowed action values: CREATE_PURCHASE, LINK_EXISTING, REVIEW, IGNORE. is_commerce must equal event_type !== OTHER. If action is LINK_EXISTING, selected_purchase_id MUST exactly equal one of the candidate purchase_id values supplied by the caller. Never invent an ID. If there is no compatible candidate, use CREATE_PURCHASE for a genuine new purchase root, REVIEW for ambiguous commerce lifecycle mail, or IGNORE for non-commerce. Distinguish electronic shipment creation from physical carrier handoff. Distinguish failed delivery with another attempt from an actual return. confidence must be a number from 0 to 1. evidence must be a short array of exact facts from the email/candidate data. Output schema: {\\\"is_commerce\\\":boolean,\\\"event_type\\\":string,\\\"action\\\":string,\\\"selected_purchase_id\\\":string|null,\\\"confidence\\\":number,\\\"evidence\\\":string[],\\\"reason\\\":string}.` }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
-        "options": {
-          "timeout": 180000
-        }
+        "body": "={{ JSON.stringify({ model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b', stream: false, think: false, keep_alive: 0, format: 'json', options: { temperature: 0.05 }, messages: [ { role: 'system', content: `You are the BuyFlow autonomous email decision engine. Decide what the email means and what BuyFlow should do. Return ONLY one JSON object.\n\nAllowed event_type values: ORDER_CREATED, ORDER_PROCESSING, ORDER_PACKING, SHIPMENT_CREATED, SHIPPED, IN_TRANSIT, OUT_FOR_DELIVERY, READY_FOR_PICKUP, DELIVERED, DELIVERY_FAILED, DELAYED, CANCELLED, REFUNDED, PAYMENT, INVOICE, RETURN, WARRANTY, OTHER.\nAllowed action values: CREATE_PURCHASE, LINK_EXISTING, REVIEW, IGNORE.\n\nSTRICT LIFECYCLE BOUNDARIES:\n- ORDER_CREATED = order received/recorded, not yet actively processed.\n- ORDER_PROCESSING = administrative validation, payment/stock/order processing.\n- ORDER_PACKING = physical picking or packing before carrier handoff.\n- SHIPMENT_CREATED = ONLY an electronic shipping artifact exists (label, tracking number, manifest, shipment record) while the parcel has NOT yet been physically handed to the carrier.\n- SHIPPED = the parcel WAS physically handed/turned over to the carrier, or the carrier accepted/picked it up. Hungarian examples such as 'fizikailag átadtuk a futárnak', 'átadtuk a GLS futárának', 'futárszolgálatnak átadva' MUST be SHIPPED, NEVER SHIPMENT_CREATED.\n- IN_TRANSIT = carrier movement after physical handoff.\n- OUT_FOR_DELIVERY = final-mile delivery round.\n- DELIVERY_FAILED = delivery attempt failed and retry/depot state follows.\n- RETURN = an actual return-to-sender/customer return workflow, not merely a failed delivery.\n\nCONSISTENCY CHECK BEFORE OUTPUT: if your evidence or reason says the parcel was physically handed to, accepted by, or picked up by the carrier, event_type MUST be SHIPPED. If only a label/tracking number was created and the parcel remains with the sender, event_type MUST be SHIPMENT_CREATED.\n\nis_commerce must equal event_type !== OTHER. If action is LINK_EXISTING, selected_purchase_id MUST exactly equal one supplied candidate purchase_id. Never invent an ID. If there is no compatible candidate, use CREATE_PURCHASE for a genuine new purchase root, REVIEW for ambiguous commerce lifecycle mail, or IGNORE for non-commerce. confidence must be a number from 0 to 1. evidence must be a short array of exact facts from the email/candidate data. Output schema: {\\\"is_commerce\\\":boolean,\\\"event_type\\\":string,\\\"action\\\":string,\\\"selected_purchase_id\\\":string|null,\\\"confidence\\\":number,\\\"evidence\\\":string[],\\\"reason\\\":string}.` }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "options": {"timeout": 180000}
       },
       "id": "38f48790-15d2-4eef-8552-d49a24a2af03",
       "name": "Ask Local Ollama",
@@ -55,7 +48,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = String($json.message?.content ?? $json.response ?? '').trim();\nif (!raw) throw new Error('BUYFLOW_OLLAMA_EMPTY_RESPONSE');\nlet parsed;\ntry { parsed = JSON.parse(raw.replace(/^```(?:json)?\\s*/i, '').replace(/```$/i, '').trim()); } catch (e) { throw new Error(`BUYFLOW_INVALID_AI_JSON: ${raw.slice(0, 500)}`); }\nconst events = new Set(['ORDER_CREATED','ORDER_PROCESSING','ORDER_PACKING','SHIPMENT_CREATED','SHIPPED','IN_TRANSIT','OUT_FOR_DELIVERY','READY_FOR_PICKUP','DELIVERED','DELIVERY_FAILED','DELAYED','CANCELLED','REFUNDED','PAYMENT','INVOICE','RETURN','WARRANTY','OTHER']);\nconst actions = new Set(['CREATE_PURCHASE','LINK_EXISTING','REVIEW','IGNORE']);\nif (!events.has(parsed.event_type)) throw new Error(`BUYFLOW_INVALID_EVENT:${parsed.event_type}`);\nif (!actions.has(parsed.action)) throw new Error(`BUYFLOW_INVALID_ACTION:${parsed.action}`);\nconst expectedCommerce = parsed.event_type !== 'OTHER';\nif (Boolean(parsed.is_commerce) !== expectedCommerce) throw new Error('BUYFLOW_COMMERCE_INVARIANT_FAIL');\nconst confidence = Number(parsed.confidence);\nif (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error('BUYFLOW_INVALID_CONFIDENCE');\nconst original = $('Normalize Request').item.json;\nconst candidateIds = new Set((original.candidates || []).map((c) => String(c.purchase_id)));\nif (parsed.action === 'LINK_EXISTING') {\n  const selected = String(parsed.selected_purchase_id ?? '');\n  if (!selected || !candidateIds.has(selected)) throw new Error(`BUYFLOW_AI_INVENTED_OR_INVALID_PURCHASE_ID:${selected}`);\n  parsed.selected_purchase_id = selected;\n} else {\n  parsed.selected_purchase_id = null;\n}\nreturn [{ json: {\n  ok: true,\n  request_id: original.request_id,\n  provider: 'ollama-local',\n  model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b',\n  mode: 'SHADOW',\n  execution_allowed: String($env.BUYFLOW_AI_EXECUTE || 'false').toLowerCase() === 'true',\n  decision: {\n    is_commerce: expectedCommerce,\n    event_type: parsed.event_type,\n    action: parsed.action,\n    selected_purchase_id: parsed.selected_purchase_id,\n    confidence,\n    evidence: Array.isArray(parsed.evidence) ? parsed.evidence.slice(0, 8).map(String) : [],\n    reason: String(parsed.reason ?? '').slice(0, 1000)\n  }\n} }];"
+        "jsCode": "const raw = String($json.message?.content ?? $json.response ?? '').trim();\nif (!raw) throw new Error('BUYFLOW_OLLAMA_EMPTY_RESPONSE');\nlet parsed;\ntry { parsed = JSON.parse(raw.replace(/^```(?:json)?\\s*/i, '').replace(/```$/i, '').trim()); } catch (e) { throw new Error(`BUYFLOW_INVALID_AI_JSON: ${raw.slice(0, 500)}`); }\nconst events = new Set(['ORDER_CREATED','ORDER_PROCESSING','ORDER_PACKING','SHIPMENT_CREATED','SHIPPED','IN_TRANSIT','OUT_FOR_DELIVERY','READY_FOR_PICKUP','DELIVERED','DELIVERY_FAILED','DELAYED','CANCELLED','REFUNDED','PAYMENT','INVOICE','RETURN','WARRANTY','OTHER']);\nconst actions = new Set(['CREATE_PURCHASE','LINK_EXISTING','REVIEW','IGNORE']);\nif (!events.has(parsed.event_type)) throw new Error(`BUYFLOW_INVALID_EVENT:${parsed.event_type}`);\nif (!actions.has(parsed.action)) throw new Error(`BUYFLOW_INVALID_ACTION:${parsed.action}`);\nconst expectedCommerce = parsed.event_type !== 'OTHER';\nif (Boolean(parsed.is_commerce) !== expectedCommerce) throw new Error('BUYFLOW_COMMERCE_INVARIANT_FAIL');\nconst confidence = Number(parsed.confidence);\nif (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error('BUYFLOW_INVALID_CONFIDENCE');\nconst original = $('Normalize Request').item.json;\nconst candidateIds = new Set((original.candidates || []).map((c) => String(c.purchase_id)));\nif (parsed.action === 'LINK_EXISTING') { const selected = String(parsed.selected_purchase_id ?? ''); if (!selected || !candidateIds.has(selected)) throw new Error(`BUYFLOW_AI_INVENTED_OR_INVALID_PURCHASE_ID:${selected}`); parsed.selected_purchase_id = selected; } else { parsed.selected_purchase_id = null; }\nreturn [{ json: { ok: true, request_id: original.request_id, provider: 'ollama-local', model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b', mode: 'SHADOW', execution_allowed: String($env.BUYFLOW_AI_EXECUTE || 'false').toLowerCase() === 'true', decision: { is_commerce: expectedCommerce, event_type: parsed.event_type, action: parsed.action, selected_purchase_id: parsed.selected_purchase_id, confidence, evidence: Array.isArray(parsed.evidence) ? parsed.evidence.slice(0, 8).map(String) : [], reason: String(parsed.reason ?? '').slice(0, 1000) } } }];"
       },
       "id": "ed6a7a93-d5e0-4a05-a95f-31f6a6702104",
       "name": "Validate AI Decision",
@@ -77,18 +70,10 @@
     }
   ],
   "connections": {
-    "Incoming Email": {
-      "main": [[{"node":"Normalize Request","type":"main","index":0}]]
-    },
-    "Normalize Request": {
-      "main": [[{"node":"Ask Local Ollama","type":"main","index":0}]]
-    },
-    "Ask Local Ollama": {
-      "main": [[{"node":"Validate AI Decision","type":"main","index":0}]]
-    },
-    "Validate AI Decision": {
-      "main": [[{"node":"Return Decision","type":"main","index":0}]]
-    }
+    "Incoming Email": {"main": [[{"node": "Normalize Request", "type": "main", "index": 0}]]},
+    "Normalize Request": {"main": [[{"node": "Ask Local Ollama", "type": "main", "index": 0}]]},
+    "Ask Local Ollama": {"main": [[{"node": "Validate AI Decision", "type": "main", "index": 0}]]},
+    "Validate AI Decision": {"main": [[{"node": "Return Decision", "type": "main", "index": 0}]]}
   },
   "pinData": {},
   "settings": {
@@ -98,10 +83,7 @@
     "saveManualExecutions": true
   },
   "active": true,
-  "versionId": "a3f85d9f-465a-435c-b802-e09726aa4221",
-  "meta": {
-    "buyflow": "local-ai-v1",
-    "write_mode": "shadow"
-  },
+  "versionId": "4d3cb0b7-5f73-4a8d-8e89-7f0d8f97c201",
+  "meta": {"buyflow": "local-ai-v1", "write_mode": "shadow", "decision_rules": "shipment-boundary-v2"},
   "tags": []
 }
