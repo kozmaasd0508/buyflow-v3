@@ -33,9 +33,37 @@ const NON_ACCEPTANCE_PATTERNS = [
   /\b(?:only|merely) acknowledges? receipt of (?:your )?(?:purchase offer|order request|order)\b/i,
 ];
 
+const PURCHASE_ROOT_PATTERNS = [
+  /\b(?:rendelesed|megrendelesed|rendeles|megrendeles)\b.{0,100}\b(?:megkaptuk|beerkezett|rogzitettuk|felvettuk|elfogadtuk|visszaigazoltuk)\b/i,
+  /\b(?:megkaptuk|rogzitettuk|felvettuk|elfogadtuk|visszaigazoltuk)\b.{0,100}\b(?:a )?(?:rendelesedet|megrendelesedet|rendelest|megrendelest)\b/i,
+  /\b(?:rendeleset|megrendeleset)\b.{0,80}\b(?:rendben\s+)?(?:atvettuk|rogzitettuk|felvettuk)\b/i,
+  /\bbeerkezett\b.{0,80}\b(?:rendelesi|megrendelesi)(?:\s*\/\s*foglalasi)?\s+(?:igeny|igenye)\b/i,
+  /\b(?:rendeles|megrendeles)\w*\s+(?:beerkezese|beerkezeset)\b/i,
+  /\b(?:koszonjuk|sikeres)\b.{0,80}\b(?:a )?(?:rendelesed|megrendelesed|rendeles|megrendeles)\b/i,
+  /\b(?:rendeles|megrendeles)\w*\s+visszaigazolas\w*\b/i,
+  /\b(?:order|purchase)\b.{0,100}\b(?:received|placed|accepted|confirmed|recorded)\b/i,
+  /\b(?:received|accepted|confirmed|recorded)\b.{0,100}\b(?:your )?(?:order|purchase)\b/i,
+  /\bthank(?:s| you)?\b.{0,80}\bfor (?:your )?order\b/i,
+  /\b(?:bestellung)\b.{0,100}\b(?:erhalten|aufgenommen|angenommen|bestatigt)\b/i,
+  /\b(?:commande)\b.{0,100}\b(?:recue|enregistree|confirmee|acceptee)\b/i,
+  /\b(?:pedido)\b.{0,100}\b(?:recibido|registrado|confirmado|aceptado)\b/i,
+  /\b(?:veteli\s+)?ajanlat\b.{0,100}\b(?:megerkezes(?:erol|et)|beerkezes(?:erol|et)|atvetel(?:erol|et))\b/i,
+];
+
 export function hasExplicitPurchaseNonAcceptance(document: EmailDocumentV1): boolean {
   const fresh = normalizeText(`${document.subject ?? ''}\n${document.text}`);
   return NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
+}
+
+/**
+ * Independent order-root evidence. This answers "did this message establish or
+ * acknowledge a concrete order root?" and is deliberately separate from the
+ * message's primary lifecycle event. A message may therefore be primarily
+ * ORDER_PROCESSING/ORDER_PACKING while also carrying deterministic root evidence.
+ */
+export function hasExplicitPurchaseRootEvidence(document: EmailDocumentV1): boolean {
+  const fresh = normalizeText(`${document.subject ?? ''}\n${document.text}`);
+  return PURCHASE_ROOT_PATTERNS.some((pattern) => pattern.test(fresh));
 }
 
 function structureSignalCount(document: EmailDocumentV1): number {
@@ -54,11 +82,15 @@ export function evaluatePurchaseCreationAuthority(input: {
   sourceRole: SourceRole;
   orderId: string | null;
 }): PurchaseCreationAuthorityDecision {
-  if (input.eventType !== 'order_created') {
+  const hasRootEvidence = hasExplicitPurchaseRootEvidence(input.document);
+
+  // A true lifecycle-only message remains ineligible. The primary lifecycle
+  // label is no longer the creation gate; explicit order-root evidence is.
+  if (!hasRootEvidence) {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
-      authority: 'none',
-      reasons: ['not_order_created'],
+      authority: input.eventType === 'order_created' ? 'review' : 'none',
+      reasons: [input.eventType === 'order_created' ? 'order_created_without_explicit_root_evidence' : 'no_purchase_root_evidence'],
     };
   }
 
@@ -66,7 +98,7 @@ export function evaluatePurchaseCreationAuthority(input: {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
       authority: 'review',
-      reasons: ['missing_hard_order_identity'],
+      reasons: ['purchase_root_evidence', 'missing_hard_order_identity'],
     };
   }
 
@@ -74,7 +106,7 @@ export function evaluatePurchaseCreationAuthority(input: {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
       authority: 'review',
-      reasons: ['merchant_source_authority_unproven'],
+      reasons: ['purchase_root_evidence', 'merchant_source_authority_unproven'],
     };
   }
 
@@ -82,15 +114,19 @@ export function evaluatePurchaseCreationAuthority(input: {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
       authority: 'review',
-      reasons: ['explicit_order_non_acceptance_or_contract_disclaimer'],
+      reasons: ['purchase_root_evidence', 'explicit_order_non_acceptance_or_contract_disclaimer'],
     };
   }
 
-  if (structureSignalCount(input.document) < 2) {
+  // Root text + hard order identity + merchant source are already independent
+  // evidence classes. Require at least one additional commerce-structure signal
+  // (product, amount, payment/shipping method or order-summary structure), but
+  // never authorize a structure-free root acknowledgement.
+  if (structureSignalCount(input.document) < 1) {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
       authority: 'review',
-      reasons: ['insufficient_independent_commerce_structure'],
+      reasons: ['purchase_root_evidence', 'insufficient_independent_commerce_structure'],
     };
   }
 
@@ -98,10 +134,12 @@ export function evaluatePurchaseCreationAuthority(input: {
     version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
     authority: 'authorized',
     reasons: [
+      'purchase_root_evidence',
       'hard_order_identity',
       'merchant_source_authority',
       'independent_commerce_structure',
       'no_explicit_non_acceptance_conflict',
+      ...(input.eventType === 'order_created' ? ['primary_event_order_created'] : ['lifecycle_event_with_independent_order_root']),
     ],
   };
 }

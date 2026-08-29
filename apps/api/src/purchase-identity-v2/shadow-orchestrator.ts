@@ -4,6 +4,7 @@ import {
   canonicalEventFromExtractionV2,
   type ExtractionV2CarrierIdentityResolver,
   type ExtractionV2MerchantIdentityResolver,
+  type SemanticEventOverride,
 } from './extraction-v2-adapter.js';
 import { PurchaseIdentityGraph } from './graph.js';
 import { deriveMerchantSenderNamespace } from './merchant-sender-namespace.js';
@@ -18,6 +19,12 @@ export interface PurchaseIdentityShadowInput {
   merchantResolver?: ExtractionV2MerchantIdentityResolver;
   carrierResolver?: ExtractionV2CarrierIdentityResolver;
   runExtraction?: (document: EmailDocumentV1) => ExtractionEngineV2Result;
+  /**
+   * Optional already-computed semantic event selection. It is not an identity
+   * evidence source and is unable to provide order/tracking/payment/etc values.
+   * This function itself still performs zero AI calls.
+   */
+  semanticEventOverride?: SemanticEventOverride;
 }
 
 export interface PurchaseIdentityShadowResult {
@@ -35,13 +42,17 @@ export interface PurchaseIdentityShadowResult {
 /**
  * End-to-end read-only shadow orchestration:
  * EmailDocumentV1 -> frozen Extraction Engine v2 -> direct canonical adapter ->
- * Purchase creation authority -> Purchase Identity Graph v2 decision/simulation ->
- * Phase E promotion-readiness audit.
+ * optional precomputed semantic-only event overlay -> Purchase root authority ->
+ * Purchase Identity Graph v2 decision/simulation -> Phase E readiness audit.
  *
  * The graph may mutate its private in-memory clone to show the predicted result,
  * but this function performs no database writes and does not alter the caller's
  * snapshot. Promotion readiness is audit-only and never performs or enables a
  * production write. Legacy parser output is not an input.
+ *
+ * semanticEventOverride changes only CanonicalEvent.eventType. Every identity
+ * value still comes from Extraction v2, and purchase creation still requires
+ * separate deterministic purchase-root authority.
  */
 export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): PurchaseIdentityShadowResult {
   const extraction = (input.runExtraction ?? runExtractionEngineV2)(input.document);
@@ -56,6 +67,7 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
     extraction,
     merchantResolver: input.merchantResolver,
     carrierResolver: input.carrierResolver,
+    semanticEventOverride: input.semanticEventOverride,
   });
 
   if (!canonicalEvent) {

@@ -17,7 +17,8 @@
     "pipeline:validate-extractions": "tsx src/scripts/validate-nano-extractions.ts",
     "pipeline:import-next-20": "tsx src/scripts/import-next-purchases.ts",
     "nylas:discover": "tsx src/scripts/nylas-discover.ts",
-    "eml:audit": "tsx src/scripts/eml-audit.ts"
+    "eml:audit": "tsx src/scripts/eml-audit.ts",
+    "identity:v9-real-gmail-shadow": "tsx src/scripts/v9-real-gmail-identity-shadow-audit.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

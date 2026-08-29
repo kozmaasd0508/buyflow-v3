@@ -91,20 +91,36 @@ function document(): EmailDocumentV1 {
   };
 }
 
+function purchaseRootDocument(): EmailDocumentV1 {
+  const doc = document();
+  doc.subject = 'Megrendelés visszaigazolása #ORDER-1';
+  doc.text = [
+    'Köszönjük a rendelésed.',
+    'Rendelés #ORDER-1',
+    '1x Teszt termék',
+    'Végösszeg: 12 990 Ft',
+    'Fizetési mód: utánvét',
+  ].join('\n');
+  doc.sections = [{ type: 'order_summary', text: 'Rendelés #ORDER-1' }];
+  doc.signals.amounts = [{ amount: 12990, currency: 'HUF', raw: '12 990 Ft' }];
+  doc.signals.paymentMethods = ['utánvét'];
+  return doc;
+}
+
 function emptySnapshot(): PurchaseIdentitySnapshot {
   return { purchases: [], orders: [], shipments: [], payments: [], invoices: [] };
 }
 
 test('simulates a safe new purchase without mutating the caller snapshot', () => {
   const eventType = claim('event_type', 'order_created', 'explicit_order_created_event');
-  const merchant = claim('merchant', 'Example Shop', 'explicit_merchant_label');
+  const merchant = claim('merchant', 'Example Shop', 'sender_commercial_identity', 'sender');
   const order = claim('order_number', 'ORDER-1', 'explicit_order_label');
   const inputSnapshot = emptySnapshot();
   const before = structuredClone(inputSnapshot);
 
   const result = runPurchaseIdentityShadow({
     userId: 'user-1',
-    document: document(),
+    document: purchaseRootDocument(),
     snapshot: inputSnapshot,
     merchantResolver: { resolve: () => 'merchant:example-shop' },
     runExtraction: () => extraction(event({

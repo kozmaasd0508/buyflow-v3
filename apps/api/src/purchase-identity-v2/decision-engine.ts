@@ -52,6 +52,9 @@ export function decideCorrelation(
     }
   }
 
+  // Existing identity always wins before considering new-Purchase authority.
+  // The semantic lifecycle label therefore cannot fork a second Purchase when
+  // hard evidence already points to exactly one existing Purchase.
   if (hardCandidateIds.length === 1) {
     const purchaseId = hardCandidateIds[0]!;
     return {
@@ -69,7 +72,13 @@ export function decideCorrelation(
     };
   }
 
-  const knownMerchantCreationAuthorized = Boolean(event.merchantId);
+  // Purchase-root authority is a separate deterministic channel from the
+  // primary lifecycle event. ORDER_PROCESSING/ORDER_PACKING may be the current
+  // state of the very first merchant email while the same message independently
+  // proves the order root. AI semantics alone cannot authorize creation because
+  // purchaseCreationAuthority must already be `authorized` upstream.
+  const knownMerchantCreationAuthorized =
+    Boolean(event.merchantId) && event.purchaseCreationAuthority === 'authorized';
   const unknownMerchantCreationAuthorized =
     event.sourceRole === 'merchant' &&
     Boolean(event.merchantNamespace) &&
@@ -77,7 +86,6 @@ export function decideCorrelation(
 
   const hasSafeNewPurchaseAnchor =
     !event.orderRelation &&
-    event.eventType === 'order_created' &&
     Boolean(event.orderIdNormalized ?? event.orderIdRaw) &&
     (knownMerchantCreationAuthorized || unknownMerchantCreationAuthorized);
 
@@ -89,7 +97,10 @@ export function decideCorrelation(
     return { kind: 'NEW_PURCHASE', reasons: [] };
   }
 
-  if (event.eventType === 'order_created' && event.purchaseCreationAuthority === 'review') {
+  // REVIEW purchase-root authority is fail-closed regardless of the primary
+  // lifecycle event. Hard linking above still takes precedence for an already
+  // known Purchase, so a disclaimer cannot break a proven existing identity.
+  if (event.purchaseCreationAuthority === 'review') {
     return {
       kind: 'REVIEW',
       candidatePurchaseIds: candidates.sort(),

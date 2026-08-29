@@ -67,7 +67,7 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
 
 test('explicit split child shipment links to parent purchase and records machine-readable evidence', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1' }));
+  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1', purchaseCreationAuthority: 'authorized' }));
 
   const result = graph.applyEvent(event({
     eventType: 'shipment_created',
@@ -93,7 +93,7 @@ test('explicit split child shipment links to parent purchase and records machine
 
 test('two explicit child shipments remain separate shipments under one purchase', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1' }));
+  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1', purchaseCreationAuthority: 'authorized' }));
 
   const first = graph.applyEvent(event({
     eventType: 'shipment_created',
@@ -135,7 +135,7 @@ test('relation-bearing child order cannot create a new Purchase when parent is m
 
 test('relation without explicit provenance is review-only', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1' }));
+  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1', purchaseCreationAuthority: 'authorized' }));
   const before = graph.snapshot();
 
   const result = graph.applyEvent(event({
