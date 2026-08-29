@@ -10,8 +10,18 @@ $logFile = Join-Path $dataRoot 'n8n.log'
 $errFile = Join-Path $dataRoot 'n8n.err.log'
 $pidFile = Join-Path $dataRoot 'n8n.pid'
 $importMarker = Join-Path $dataRoot '.buyflow-workflows-imported-v1'
-$n8nCmd = Join-Path $runtimeRoot 'node_modules\.bin\n8n.cmd'
 $model = 'qwen3:8b'
+
+# Keep BuyFlow on a known-good Node ABI instead of using the user's system Node.
+# n8n 2.37.x supports Node 24+, and @confluentinc/kafka-javascript 1.9.1
+# ships a Windows x64 prebuilt binary for Node ABI v137 (Node 24).
+$buyflowNodeVersion = '24.20.0'
+$n8nVersion = '2.37.3'
+$nodeDirName = "node-v$buyflowNodeVersion-win-x64"
+$nodeHome = Join-Path $dataRoot $nodeDirName
+$nodeExe = Join-Path $nodeHome 'node.exe'
+$npmCmd = Join-Path $nodeHome 'npm.cmd'
+$n8nBin = Join-Path $runtimeRoot 'node_modules\n8n\bin\n8n'
 
 New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
@@ -34,6 +44,32 @@ function Test-Http([string]$url, [int]$timeout = 3) {
     }
 }
 
+function Ensure-BuyFlowNode {
+    if ((Test-Path $nodeExe) -and (Test-Path $npmCmd)) {
+        return
+    }
+
+    Write-Host "BuyFlow sajat Node.js $buyflowNodeVersion runtime letoltese..."
+    Write-Host '(A gepeden levo Node.js 26 valtozatlan marad.)'
+
+    $zip = Join-Path $env:TEMP "$nodeDirName.zip"
+    $url = "https://nodejs.org/dist/v$buyflowNodeVersion/$nodeDirName.zip"
+
+    try {
+        if (Test-Path $zip) { Remove-Item -Force $zip }
+        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 180
+        Expand-Archive -Path $zip -DestinationPath $dataRoot -Force
+    } catch {
+        Fail "BuyFlow Node.js $buyflowNodeVersion letoltese/kicsomagolasa sikertelen: $($_.Exception.Message)"
+    } finally {
+        if (Test-Path $zip) { Remove-Item -Force $zip -ErrorAction SilentlyContinue }
+    }
+
+    if (-not (Test-Path $nodeExe) -or -not (Test-Path $npmCmd)) {
+        Fail "A helyi Node runtime nem jott letre: $nodeHome"
+    }
+}
+
 Write-Host ''
 Write-Host '========================================'
 Write-Host 'BUYFLOW LOCAL AI'
@@ -42,18 +78,24 @@ Write-Host 'Docker NEM szukseges'
 Write-Host '========================================'
 Write-Host ''
 
-$node = Get-Command node.exe -ErrorAction SilentlyContinue
-$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
-if (-not $node) { Fail 'node.exe nem talalhato. A Windows Node.js szukseges.' }
-if (-not $npm) { Fail 'npm.cmd nem talalhato. A Windows Node.js/npm szukseges.' }
+$systemNode = Get-Command node.exe -ErrorAction SilentlyContinue
+if ($systemNode) {
+    try {
+        $systemNodeVersion = (& $systemNode.Source --version 2>&1 | Out-String).Trim()
+        Write-Host "Rendszer Node: $systemNodeVersion (nem ezt hasznaljuk az n8n-hez)"
+    } catch {
+        Write-Host 'Rendszer Node: megtalalva, verzio nem olvashato'
+    }
+} else {
+    Write-Host 'Rendszer Node: nincs - ez nem problema'
+}
 
-$nodeVersionRaw = (& node.exe --version).Trim()
-Write-Host "Node: $nodeVersionRaw"
-try {
-    $nodeVersion = [version]($nodeVersionRaw.TrimStart('v'))
-    if ($nodeVersion.Major -lt 20) { Fail "Tul regi Node.js: $nodeVersionRaw. n8n-hez modern Node.js kell." }
-} catch {
-    Fail "Nem tudom ertelmezni a Node.js verziot: $nodeVersionRaw"
+Ensure-BuyFlowNode
+$env:PATH = "$nodeHome;$env:PATH"
+$buyflowNodeVersionRaw = (& $nodeExe --version 2>&1 | Out-String).Trim()
+Write-Host "BuyFlow Node: $buyflowNodeVersionRaw"
+if ($buyflowNodeVersionRaw -ne "v$buyflowNodeVersion") {
+    Fail "Varatlan BuyFlow Node verzio: $buyflowNodeVersionRaw"
 }
 
 $ollama = Get-Command ollama.exe -ErrorAction SilentlyContinue
@@ -117,16 +159,26 @@ $env:BUYFLOW_OLLAMA_URL = 'http://127.0.0.1:11434/api/chat'
 $env:BUYFLOW_OLLAMA_MODEL = $model
 $env:BUYFLOW_AI_EXECUTE = 'false'
 
-if (-not (Test-Path $n8nCmd)) {
+if (-not (Test-Path $n8nBin)) {
     Write-Host ''
-    Write-Host 'n8n nincs meg helyben. Elso telepites indul...'
-    Write-Host '(Ez nehany percig tarthat, csak egyszer kell.)'
-    & npm.cmd install --prefix $runtimeRoot n8n@latest --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $n8nCmd)) { Fail 'n8n npm telepitese sikertelen.' }
+    Write-Host "n8n $n8nVersion nincs meg helyben. Telepites indul..."
+    Write-Host '(Az elozo Node 26-os felbemaradt telepitest automatikusan takaritom.)'
+
+    $partialModules = Join-Path $runtimeRoot 'node_modules'
+    $partialLock = Join-Path $runtimeRoot 'package-lock.json'
+    $partialPackage = Join-Path $runtimeRoot 'package.json'
+    if (Test-Path $partialModules) { Remove-Item -Recurse -Force $partialModules -ErrorAction SilentlyContinue }
+    if (Test-Path $partialLock) { Remove-Item -Force $partialLock -ErrorAction SilentlyContinue }
+    if (Test-Path $partialPackage) { Remove-Item -Force $partialPackage -ErrorAction SilentlyContinue }
+
+    & $npmCmd install --prefix $runtimeRoot "n8n@$n8nVersion" --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $n8nBin)) {
+        Fail "n8n $n8nVersion telepitese sikertelen BuyFlow Node $buyflowNodeVersion alatt."
+    }
 }
 
-$n8nVersion = (& $n8nCmd --version 2>&1 | Out-String).Trim()
-Write-Host "n8n: $n8nVersion"
+$installedN8nVersion = (& $nodeExe $n8nBin --version 2>&1 | Out-String).Trim()
+Write-Host "n8n: $installedN8nVersion"
 
 $decisionWorkflow = Join-Path $workflowDir 'buyflow-local-ai-decision.json'
 $teacherWorkflow = Join-Path $workflowDir 'buyflow-teacher-chat.json'
@@ -135,9 +187,9 @@ if (-not (Test-Path $teacherWorkflow)) { Fail "Workflow hianyzik: $teacherWorkfl
 
 if (-not (Test-Path $importMarker)) {
     Write-Host 'BuyFlow workflow-k importalasa...'
-    & $n8nCmd import:workflow --input=$decisionWorkflow
+    & $nodeExe $n8nBin import:workflow --input=$decisionWorkflow
     if ($LASTEXITCODE -ne 0) { Fail 'AI Decision workflow import sikertelen.' }
-    & $n8nCmd import:workflow --input=$teacherWorkflow
+    & $nodeExe $n8nBin import:workflow --input=$teacherWorkflow
     if ($LASTEXITCODE -ne 0) { Fail 'Teacher Chat workflow import sikertelen.' }
     Set-Content -Path $importMarker -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -Encoding ASCII
 }
@@ -153,7 +205,7 @@ Write-Host 'n8n inditasa Windows alatt...'
 Set-Content -Path $logFile -Value '' -Encoding UTF8
 Set-Content -Path $errFile -Value '' -Encoding UTF8
 
-$proc = Start-Process -FilePath $n8nCmd -ArgumentList @('start') -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errFile -PassThru
+$proc = Start-Process -FilePath $nodeExe -ArgumentList @($n8nBin, 'start') -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errFile -PassThru
 Set-Content -Path $pidFile -Value $proc.Id -Encoding ASCII
 
 $deadline = (Get-Date).AddMinutes(3)
@@ -177,6 +229,7 @@ Write-Host '========================================'
 Write-Host 'BUYFLOW LOCAL AI KESZ' -ForegroundColor Green
 Write-Host '========================================'
 Write-Host 'n8n: http://127.0.0.1:5678'
+Write-Host "BuyFlow Node: v$buyflowNodeVersion (elkülonitve)"
 Write-Host "Ollama: $model"
 Write-Host 'Adattar: helyi SQLite'
 Write-Host 'Mod: SHADOW - BuyFlow adatbazis iras kikapcsolva'
