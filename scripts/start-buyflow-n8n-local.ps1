@@ -3,8 +3,15 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $stack = Join-Path $root 'infra\n8n-local'
 $workflowDir = Join-Path $stack 'workflows'
-$dataRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow\.n8n-local-ai-data'
-$runtimeRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow\.n8n-local-ai-runtime'
+
+# IMPORTANT: n8n 2.30+ currently has an upstream Windows startup regression where
+# /healthz becomes available but the editor/API routes never register (Cannot GET /).
+# BuyFlow therefore uses a clean, isolated pre-regression n8n 2.27.2 + Node 22.22 runtime.
+# The previously created 2.37 SQLite DB is intentionally left untouched because it
+# contains newer migrations and must not be opened by an older n8n version.
+$dataRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow\.n8n-local-ai-data-v227'
+$runtimeRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow\.n8n-local-ai-runtime-v227'
+$legacyDataRoot = Join-Path $env:USERPROFILE 'Desktop\buyflow\.n8n-local-ai-data'
 $envFile = Join-Path $dataRoot 'local.env'
 $logFile = Join-Path $dataRoot 'n8n.log'
 $errFile = Join-Path $dataRoot 'n8n.err.log'
@@ -12,11 +19,8 @@ $pidFile = Join-Path $dataRoot 'n8n.pid'
 $importMarker = Join-Path $dataRoot '.buyflow-workflows-imported-v1'
 $model = 'qwen3:8b'
 
-# Keep BuyFlow on a known-good Node ABI instead of using the user's system Node.
-# n8n 2.37.x supports Node 24+, and @confluentinc/kafka-javascript 1.9.1
-# ships a Windows x64 prebuilt binary for Node ABI v137 (Node 24).
-$buyflowNodeVersion = '24.20.0'
-$n8nVersion = '2.37.3'
+$buyflowNodeVersion = '22.22.0'
+$n8nVersion = '2.27.2'
 $nodeDirName = "node-v$buyflowNodeVersion-win-x64"
 $nodeHome = Join-Path $dataRoot $nodeDirName
 $nodeExe = Join-Path $nodeHome 'node.exe'
@@ -35,26 +39,47 @@ function Fail([string]$message) {
     exit 1
 }
 
-function Test-Http([string]$url, [int]$timeout = 3) {
+function Test-Http200([string]$url, [int]$timeout = 3) {
     try {
         $r = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec $timeout
-        return $r.StatusCode -ge 200 -and $r.StatusCode -lt 500
+        return $r.StatusCode -eq 200
     } catch {
         return $false
     }
 }
 
+function Test-Health([int]$timeout = 2) {
+    return Test-Http200 'http://127.0.0.1:5678/healthz' $timeout
+}
+
+function Test-Editor([int]$timeout = 3) {
+    return Test-Http200 'http://127.0.0.1:5678/' $timeout
+}
+
+function Stop-TrackedProcess([string]$file) {
+    if (-not (Test-Path $file)) { return }
+    try {
+        $raw = (Get-Content $file -Raw -ErrorAction Stop).Trim()
+        if ($raw -match '^\d+$') {
+            $p = Get-Process -Id ([int]$raw) -ErrorAction SilentlyContinue
+            if ($p) {
+                Write-Host "Korabbi n8n folyamat leallitasa (PID $raw)..."
+                Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            }
+        }
+    } catch {}
+    Remove-Item $file -Force -ErrorAction SilentlyContinue
+}
+
 function Ensure-BuyFlowNode {
-    if ((Test-Path $nodeExe) -and (Test-Path $npmCmd)) {
-        return
-    }
+    if ((Test-Path $nodeExe) -and (Test-Path $npmCmd)) { return }
 
     Write-Host "BuyFlow sajat Node.js $buyflowNodeVersion runtime letoltese..."
-    Write-Host '(A gepeden levo Node.js 26 valtozatlan marad.)'
+    Write-Host '(A gepeden levo Node.js valtozatlan marad.)'
 
     $zip = Join-Path $env:TEMP "$nodeDirName.zip"
     $url = "https://nodejs.org/dist/v$buyflowNodeVersion/$nodeDirName.zip"
-
     try {
         if (Test-Path $zip) { Remove-Item -Force $zip }
         Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip -TimeoutSec 180
@@ -90,6 +115,22 @@ if ($systemNode) {
     Write-Host 'Rendszer Node: nincs - ez nem problema'
 }
 
+# Stop only our tracked previous n8n processes. The old 2.37 process can keep
+# port 5678 alive while returning Cannot GET /, so it must be stopped first.
+Stop-TrackedProcess (Join-Path $legacyDataRoot 'n8n.pid')
+
+# If this version is already fully ready, reuse it. If only healthz works, restart it.
+if (Test-Editor 2) {
+    Write-Host 'n8n web UI mar fut: OK'
+    Start-Process 'http://127.0.0.1:5678'
+    exit 0
+}
+if (Test-Health 2) {
+    Write-Host 'Felkesz n8n folyamat talalhato (healthz OK, UI nem). Ujrainditas...'
+    Stop-TrackedProcess $pidFile
+    Start-Sleep -Seconds 2
+}
+
 Ensure-BuyFlowNode
 $env:PATH = "$nodeHome;$env:PATH"
 $buyflowNodeVersionRaw = (& $nodeExe --version 2>&1 | Out-String).Trim()
@@ -101,15 +142,17 @@ if ($buyflowNodeVersionRaw -ne "v$buyflowNodeVersion") {
 $ollama = Get-Command ollama.exe -ErrorAction SilentlyContinue
 if (-not $ollama) { Fail 'ollama.exe nem talalhato a PATH-ban.' }
 
-if (-not (Test-Http 'http://127.0.0.1:11434/api/tags' 2)) {
+if (-not (Test-Http200 'http://127.0.0.1:11434/api/tags' 2)) {
     Write-Host 'Ollama inditasa...'
     Start-Process -FilePath 'ollama.exe' -ArgumentList @('serve') -WindowStyle Hidden | Out-Null
     $deadline = (Get-Date).AddSeconds(60)
     do {
         Start-Sleep -Seconds 2
-        if (Test-Http 'http://127.0.0.1:11434/api/tags' 2) { break }
+        if (Test-Http200 'http://127.0.0.1:11434/api/tags' 2) { break }
     } while ((Get-Date) -lt $deadline)
-    if (-not (Test-Http 'http://127.0.0.1:11434/api/tags' 2)) { Fail 'Ollama API nem indult el a 127.0.0.1:11434 cimen.' }
+    if (-not (Test-Http200 'http://127.0.0.1:11434/api/tags' 2)) {
+        Fail 'Ollama API nem indult el a 127.0.0.1:11434 cimen.'
+    }
 }
 Write-Host 'Ollama: OK'
 
@@ -122,7 +165,7 @@ if ($list -notmatch [regex]::Escape($model)) {
 Write-Host "Modell: $model OK"
 
 if (-not (Test-Path $envFile)) {
-    Write-Host 'Elso inditas: helyi n8n titkositasi kulcs generalasa...'
+    Write-Host 'Elso v2.27 inditas: helyi n8n titkositasi kulcs generalasa...'
     $bytes = New-Object byte[] 32
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $key = ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
@@ -151,6 +194,7 @@ $env:N8N_DIAGNOSTICS_ENABLED = 'false'
 $env:N8N_PERSONALIZATION_ENABLED = 'false'
 $env:N8N_VERSION_NOTIFICATIONS_ENABLED = 'false'
 $env:N8N_BLOCK_ENV_ACCESS_IN_NODE = 'false'
+$env:N8N_LOG_LEVEL = 'info'
 $env:GENERIC_TIMEZONE = 'Europe/Budapest'
 $env:TZ = 'Europe/Budapest'
 $env:DB_TYPE = 'sqlite'
@@ -161,8 +205,8 @@ $env:BUYFLOW_AI_EXECUTE = 'false'
 
 if (-not (Test-Path $n8nBin)) {
     Write-Host ''
-    Write-Host "n8n $n8nVersion nincs meg helyben. Telepites indul..."
-    Write-Host '(Az elozo Node 26-os felbemaradt telepitest automatikusan takaritom.)'
+    Write-Host "n8n $n8nVersion telepitese indul a kulon BuyFlow runtime-ba..."
+    Write-Host '(Ez a Windows Cannot GET / regresszio elotti verzio.)'
 
     $partialModules = Join-Path $runtimeRoot 'node_modules'
     $partialLock = Join-Path $runtimeRoot 'package-lock.json'
@@ -179,6 +223,9 @@ if (-not (Test-Path $n8nBin)) {
 
 $installedN8nVersion = (& $nodeExe $n8nBin --version 2>&1 | Out-String).Trim()
 Write-Host "n8n: $installedN8nVersion"
+if ($installedN8nVersion -ne $n8nVersion) {
+    Fail "Varatlan n8n verzio: $installedN8nVersion"
+}
 
 $decisionWorkflow = Join-Path $workflowDir 'buyflow-local-ai-decision.json'
 $teacherWorkflow = Join-Path $workflowDir 'buyflow-teacher-chat.json'
@@ -188,7 +235,7 @@ if (-not (Test-Path $decisionWorkflow)) { Fail "Workflow hianyzik: $decisionWork
 if (-not (Test-Path $teacherWorkflow)) { Fail "Workflow hianyzik: $teacherWorkflow" }
 
 if (-not (Test-Path $importMarker)) {
-    Write-Host 'BuyFlow workflow-k importalasa...'
+    Write-Host 'BuyFlow workflow-k importalasa a tiszta v2.27 adatbazisba...'
     & $nodeExe $n8nBin import:workflow --input=$decisionWorkflow
     if ($LASTEXITCODE -ne 0) { Fail 'AI Decision workflow import sikertelen.' }
     & $nodeExe $n8nBin import:workflow --input=$teacherWorkflow
@@ -203,34 +250,40 @@ if (-not (Test-Path $importMarker)) {
     Set-Content -Path $importMarker -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -Encoding ASCII
 }
 
-if (Test-Http 'http://127.0.0.1:5678/healthz' 2) {
-    Write-Host 'n8n mar fut: OK'
-    Start-Process 'http://127.0.0.1:5678'
-    exit 0
-}
-
 Write-Host ''
 Write-Host 'n8n inditasa Windows alatt...'
+Write-Host 'Most mar a TELJES web UI-ra varok, nem csak a healthz-re.'
 Set-Content -Path $logFile -Value '' -Encoding UTF8
 Set-Content -Path $errFile -Value '' -Encoding UTF8
 
 $proc = Start-Process -FilePath $nodeExe -ArgumentList @($n8nBin, 'start') -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errFile -PassThru
 Set-Content -Path $pidFile -Value $proc.Id -Encoding ASCII
 
-$deadline = (Get-Date).AddMinutes(3)
+$deadline = (Get-Date).AddMinutes(5)
+$healthSeen = $false
 do {
-    Start-Sleep -Seconds 2
-    if (Test-Http 'http://127.0.0.1:5678/healthz' 2) { break }
+    Start-Sleep -Seconds 3
+
+    if (Test-Editor 3) { break }
+    if (Test-Health 2) {
+        if (-not $healthSeen) {
+            Write-Host 'n8n healthz: OK - a web UI meg inicializal, varok...'
+            $healthSeen = $true
+        }
+    }
+
     if ($proc.HasExited) {
-        $err = if (Test-Path $errFile) { (Get-Content $errFile -Tail 60 | Out-String) } else { '' }
-        $out = if (Test-Path $logFile) { (Get-Content $logFile -Tail 60 | Out-String) } else { '' }
+        $err = if (Test-Path $errFile) { (Get-Content $errFile -Tail 80 | Out-String) } else { '' }
+        $out = if (Test-Path $logFile) { (Get-Content $logFile -Tail 80 | Out-String) } else { '' }
         Fail "n8n leallt indulas kozben.`n$err`n$out"
     }
 } while ((Get-Date) -lt $deadline)
 
-if (-not (Test-Http 'http://127.0.0.1:5678/healthz' 2)) {
-    $err = if (Test-Path $errFile) { (Get-Content $errFile -Tail 60 | Out-String) } else { '' }
-    Fail "n8n 3 percen belul nem lett elerheto.`n$err"
+if (-not (Test-Editor 3)) {
+    $err = if (Test-Path $errFile) { (Get-Content $errFile -Tail 80 | Out-String) } else { '' }
+    $out = if (Test-Path $logFile) { (Get-Content $logFile -Tail 80 | Out-String) } else { '' }
+    Stop-TrackedProcess $pidFile
+    Fail "n8n healthz elindulhatott, de a web UI 5 percen belul nem lett kesz. Nem nyitok Cannot GET / oldalt.`n$err`n$out"
 }
 
 Write-Host ''
@@ -238,13 +291,14 @@ Write-Host '========================================'
 Write-Host 'BUYFLOW LOCAL AI KESZ' -ForegroundColor Green
 Write-Host '========================================'
 Write-Host 'n8n: http://127.0.0.1:5678'
-Write-Host "BuyFlow Node: v$buyflowNodeVersion (elkülonitve)"
+Write-Host "n8n verzio: $n8nVersion (Windows-regresszio elotti)"
+Write-Host "BuyFlow Node: v$buyflowNodeVersion (elkulonitve)"
 Write-Host "Ollama: $model"
-Write-Host 'Adattar: helyi SQLite'
+Write-Host 'Adattar: uj, kulon helyi SQLite v2.27'
 Write-Host 'Mod: SHADOW - BuyFlow adatbazis iras kikapcsolva'
 Write-Host 'AI valasz utan Ollama keep_alive=0 -> modell unload'
 Write-Host ''
-Write-Host 'Elso alkalommal az n8n bongeszoben helyi tulajdonosi fiokot kerhet.'
+Write-Host 'Web UI ellenorzes: PASS'
 Write-Host ''
 Start-Process 'http://127.0.0.1:5678'
 exit 0
