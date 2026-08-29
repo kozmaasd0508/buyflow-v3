@@ -2,7 +2,7 @@ import type { EmailDocumentV1 } from '../ingestion/email-document.js';
 import type { ExtractionEngineV2Result } from '../extraction-v2/engine-v2.js';
 import type { EvidenceClaim, EvidenceField, ResolvedCommerceEvent, ResolvedField } from '../extraction-v2/types.js';
 import { extractExplicitOrderRelation } from './explicit-order-relation.js';
-import { normalizeMerchantToken, normalizeStableIdentifier } from './identifier-normalizer.js';
+import { normalizeCarrierToken, normalizeStableIdentifier } from './identifier-normalizer.js';
 import type {
   CanonicalEvent,
   CanonicalEventType,
@@ -225,9 +225,9 @@ function productFingerprints(extraction: ExtractionEngineV2Result): string[] {
  *
  * Merchant identity is deliberately not invented from display text. A caller
  * must provide a canonical merchant resolver. Carrier values may fall back to a
- * deterministic normalized carrier token because the Extraction v2 carrier
- * field already resolves a carrier identity. Payment provider and invoice issuer
- * remain null until those namespaces are explicitly evidenced upstream.
+ * deterministic carrier-specific normalized token because the Extraction v2
+ * carrier field already resolves a carrier identity. Payment provider and invoice
+ * issuer remain null until those namespaces are explicitly evidenced upstream.
  */
 export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtractionV2Input): CanonicalEvent | null {
   const { document, extraction } = input;
@@ -254,7 +254,7 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
       })
     : null;
   const carrierId = carrierRaw
-    ? input.carrierResolver?.resolve({ carrierRaw, senderDomain, provenance }) ?? normalizeMerchantToken(carrierRaw)
+    ? input.carrierResolver?.resolve({ carrierRaw, senderDomain, provenance }) ?? normalizeCarrierToken(carrierRaw)
     : null;
 
   const trackingIdRaw = resolvedValue(extraction.resolved.trackingNumber);
