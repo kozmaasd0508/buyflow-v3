@@ -64,6 +64,7 @@ interface CaseAudit {
   canonicalEventType: string | null;
   sourceRole: string | null;
   creationAuthority: string | null;
+  creationReasons: string[];
   decision: CorrelationDecision['kind'] | null;
   hardEvidenceTypes: string[];
   mutated: boolean;
@@ -122,6 +123,27 @@ function aliasEvidenceLines(aliases: AliasToken[]): string[] {
   });
 }
 
+/**
+ * Sanitization flattened some original HTML/table label boundaries into a
+ * single sentence. Preserve only explicit label/value text that is already
+ * present in the sanitized body and expose it on its own line so EmailDocument
+ * can recover the same structure signal. No value is invented or inferred.
+ */
+function explicitStructureEvidenceLines(value: string): string[] {
+  const lines = new Set<string>();
+  const patterns = [
+    /\b(?:Szállítási mód|Szallitasi mod|Shipping method|Delivery method)\s*[:：-]\s*[^.\n;]+/giu,
+    /\b(?:Fizetési mód|Fizetesi mod|Payment method)\s*[:：-]\s*[^.\n;]+/giu,
+  ];
+  for (const pattern of patterns) {
+    for (const match of value.matchAll(pattern)) {
+      const line = match[0]?.trim();
+      if (line) lines.add(line);
+    }
+  }
+  return [...lines];
+}
+
 const DISPLAY_BY_DOMAIN: Record<string, string> = {
   'service.gymbeam.hu': 'GymBeam',
   'expressone.hu': 'Express One',
@@ -143,8 +165,10 @@ function buildDocument(row: HoldoutRow, sequence: number) {
   const combined = `${row.sanitized_subject}\n${row.sanitized_body}`;
   const aliases = aliasTokens(combined);
   const subject = replaceAliases(row.sanitized_subject, aliases);
+  const sanitizedBodyWithAliases = replaceAliases(row.sanitized_body, aliases);
   const body = [
-    replaceAliases(row.sanitized_body, aliases),
+    sanitizedBodyWithAliases,
+    ...explicitStructureEvidenceLines(sanitizedBodyWithAliases),
     ...aliasEvidenceLines(aliases),
   ].join('\n');
   const domain = (row.sanitized_sender_domain || 'sanitized.real.gmail').toLowerCase();
@@ -275,6 +299,7 @@ for (let i = 0; i < v1Rows.length; i += 1) {
       canonicalEventType: null,
       sourceRole: null,
       creationAuthority: null,
+      creationReasons: [],
       decision: null,
       hardEvidenceTypes: [],
       mutated: false,
@@ -327,6 +352,7 @@ for (let i = 0; i < v1Rows.length; i += 1) {
     canonicalEventType: result.canonicalEvent?.eventType ?? null,
     sourceRole: result.canonicalEvent?.sourceRole ?? null,
     creationAuthority: result.canonicalEvent?.purchaseCreationAuthority ?? null,
+    creationReasons: [...(result.canonicalEvent?.purchaseCreationReasons ?? [])],
     decision: result.decision?.kind ?? null,
     hardEvidenceTypes: [...new Set(hardReasons.map((reason) => reason.evidenceType))].sort(),
     mutated: result.simulatedGraphMutated,
@@ -368,6 +394,7 @@ const report = {
     rawSubjectsOrBodiesInReport: false,
     sourceDataset: 'REAL_EMAIL_SANITIZED',
     aliasNormalization: 'deterministic-non-real-pseudonyms',
+    explicitStructureLayoutRecovery: 'existing sanitized label/value text only; whitespace boundary recovery only',
   },
   dataset: {
     auditedRealGmailTotal: allRows.length,
@@ -418,6 +445,7 @@ console.log(`v1_semantic: ${report.semantics.strictV1.correct}/${report.semantic
 console.log(`strict_v1_cases: ${report.dataset.strictEndToEndV1Cases}`);
 console.log(`generic_domain_rows_not_claimed_as_strict_identity_e2e: ${report.dataset.genericSenderDomainCasesExcludedFromStrictIdentityClaim}`);
 console.log(`decisions: ${JSON.stringify(report.strictV1IdentityShadow.decisions)}`);
+console.log(`source_roles: ${JSON.stringify(report.strictV1IdentityShadow.sourceRoles)}`);
 console.log(`creation_authorities: ${JSON.stringify(report.strictV1IdentityShadow.creationAuthorities)}`);
 console.log(`false_merges: ${report.strictV1IdentityShadow.falseMerges}`);
 console.log(`false_shipment_merges: ${report.strictV1IdentityShadow.falseShipmentMerges}`);
