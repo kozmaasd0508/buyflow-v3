@@ -1,0 +1,88 @@
+{
+  "name": "BuyFlow Teacher Chat",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "buyflow-teacher-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a6f80d25-d4ae-447f-a5b8-4d7864766101",
+      "name": "Teacher Message",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-520, 0],
+      "webhookId": "buyflow-teacher-chat-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst prompt = String(body.prompt ?? body.message ?? '').trim();\nif (!prompt) throw new Error('BUYFLOW_EMPTY_TEACHER_MESSAGE');\nconst history = Array.isArray(body.history) ? body.history.slice(-12).filter((m) => m && ['user','assistant'].includes(m.role) && typeof m.content === 'string') : [];\nreturn [{json:{prompt, history}}];"
+      },
+      "id": "e2aa4ab0-697a-4fd9-a1a0-429462370102",
+      "name": "Normalize Teacher Chat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-300, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BUYFLOW_OLLAMA_URL || 'http://host.docker.internal:11434/api/chat' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name":"Content-Type","value":"application/json"}]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b', stream: false, think: false, messages: [ { role: 'system', content: 'You are the local BuyFlow Teacher. Discuss BuyFlow email understanding, lifecycle events, identity matching and corrections with the user. Be concise, explicit about uncertainty, and never claim that a chat correction changes model weights live. When the user teaches a correction, summarize it as a candidate training rule/example, but do not write training data automatically.' }, ...$json.history, { role: 'user', content: $json.prompt } ] }) }}",
+        "options": {"timeout":180000}
+      },
+      "id": "8d9ed6cc-e8ee-41f8-a4c8-a13c1062ce03",
+      "name": "Ask Local Teacher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-60, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = String($json.message?.content ?? $json.response ?? '').trim();\nif (!response) throw new Error('BUYFLOW_EMPTY_TEACHER_RESPONSE');\nreturn [{json:{ok:true,provider:'ollama-local',model:$env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b',response}}];"
+      },
+      "id": "f8c293eb-c9ce-4b06-a05e-852a44304f04",
+      "name": "Teacher Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "3f1d7ed2-0d1d-4f0b-b466-7246d76d9b05",
+      "name": "Return Teacher Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [420, 0]
+    }
+  ],
+  "connections": {
+    "Teacher Message": {"main":[[{"node":"Normalize Teacher Chat","type":"main","index":0}]]},
+    "Normalize Teacher Chat": {"main":[[{"node":"Ask Local Teacher","type":"main","index":0}]]},
+    "Ask Local Teacher": {"main":[[{"node":"Teacher Response","type":"main","index":0}]]},
+    "Teacher Response": {"main":[[{"node":"Return Teacher Reply","type":"main","index":0}]]}
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": true,
+  "versionId": "4ac8d601-ea95-447f-9ea8-85c77936e200",
+  "meta": {"buyflow":"local-ai-v1","purpose":"teacher-chat"},
+  "tags": []
+}
