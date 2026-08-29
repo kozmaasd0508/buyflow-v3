@@ -2,18 +2,13 @@
 setlocal EnableExtensions
 title BuyFlow Local AI - Leallitas
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
-set "STACK=%ROOT%\infra\n8n-local"
+set "PS1=%ROOT%\scripts\stop-buyflow-n8n-local.ps1"
 
-echo BuyFlow n8n leallitasa...
-if exist "%STACK%\docker-compose.yml" (
-  pushd "%STACK%"
-  docker compose --env-file .env -f docker-compose.yml down
-  popd
+if not exist "%PS1%" (
+  echo HIBA: Nem talalom: %PS1%
+  timeout /t 3 /nobreak >nul
+  exit /b 1
 )
 
-where ollama.exe >nul 2>&1
-if not errorlevel 1 ollama stop qwen3:8b >nul 2>&1
-
-echo KESZ. A PostgreSQL/n8n adatok megmaradtak, a model memoriabol ki lett rakva.
-timeout /t 3 /nobreak >nul
-exit /b 0
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
+exit /b %ERRORLEVEL%
