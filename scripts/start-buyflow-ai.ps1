@@ -8,19 +8,34 @@ function Get-V9Health {
   }
 }
 
-function Test-TeacherUi {
+function Get-TeacherUiResponse {
   try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:4393/' -TimeoutSec 2
-    return $response.StatusCode -eq 200
+    return Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:4393/' -TimeoutSec 2
   } catch {
-    return $false
+    return $null
   }
 }
 
-# If the teacher UI is already alive, do not recycle the model. Just reopen it.
-if (Test-TeacherUi) {
-  Start-Process 'http://127.0.0.1:4393'
-  exit 0
+function Stop-LegacyTeacherUi {
+  if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+    throw 'A regi Tanari Chat UI fut, de a wsl.exe nem erheto el a celzott leallitashoz.'
+  }
+  & wsl.exe bash -lc "pkill -f '[v]9-teacher-chat-ui.py' || true" | Out-Null
+  Start-Sleep -Seconds 1
+}
+
+$uiResponse = Get-TeacherUiResponse
+if ($uiResponse -and $uiResponse.StatusCode -eq 200) {
+  $serverHeader = [string]$uiResponse.Headers['Server']
+  if ($serverHeader -match 'BuyFlowTeacherChatUI/1\.1') {
+    Start-Process 'http://127.0.0.1:4393'
+    exit 0
+  }
+
+  # Old 1.0 UI stays alive after the browser tab is closed. Remove only that
+  # specific teacher UI process, then recycle the matching V9 server below.
+  Write-Host "Regi Tanari Chat UI talalva ($serverHeader), celzott leallitas..."
+  Stop-LegacyTeacherUi
 }
 
 # Migration/repair path: an older launcher could leave V9 alive after the browser
