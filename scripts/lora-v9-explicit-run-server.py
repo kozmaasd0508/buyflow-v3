@@ -7,8 +7,8 @@ server source. The selected run still must prove the recorded V9 training status
 locked-test isolation, and a complete best adapter directory.
 
 The wrapper may initially be invoked by WSL's system python. If that interpreter
-is not the isolated BuyFlow LoRA runtime, it re-execs itself with the exact venv
-used by the training stack: ~/.venvs/buyflow-lora/bin/python.
+is not running inside the isolated BuyFlow LoRA venv, it re-execs itself with the
+exact runtime used by training: ~/.venvs/buyflow-lora/bin/python.
 """
 import json
 import os
@@ -17,7 +17,8 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 EXPECTED_STATUS = "LORA_V9_TEACHER_DIALOGUE_CORRECTION_TRAIN_COMPLETE"
-VENV_PYTHON = Path.home() / ".venvs" / "buyflow-lora" / "bin" / "python"
+VENV_ROOT = Path.home() / ".venvs" / "buyflow-lora"
+VENV_PYTHON = VENV_ROOT / "bin" / "python"
 
 
 def ensure_lora_runtime():
@@ -25,14 +26,19 @@ def ensure_lora_runtime():
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     os.environ.setdefault("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
 
-    current = Path(sys.executable).resolve()
     if not VENV_PYTHON.is_file():
         raise RuntimeError(
             f"BuyFlow LoRA venv missing: {VENV_PYTHON}. "
             "Refusing to install or alter the training environment automatically."
         )
-    expected = VENV_PYTHON.resolve()
-    if current != expected:
+
+    # Do NOT compare resolved python executables here: venv/bin/python is usually
+    # a symlink to the system binary, so both resolve to the same file even though
+    # only one interpreter has the venv site-packages active. sys.prefix is the
+    # reliable signal that the venv itself is active.
+    active_prefix = Path(sys.prefix).resolve()
+    expected_prefix = VENV_ROOT.resolve()
+    if active_prefix != expected_prefix:
         os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]])
 
 
@@ -79,6 +85,7 @@ def main():
         raise RuntimeError("V9 best adapter path mismatch")
 
     print(f"runtime_python: {sys.executable}")
+    print(f"runtime_prefix: {sys.prefix}")
     print(f"runtime_torch: {torch.__version__}")
     print(f"runtime_hip: {torch.version.hip}")
     print(f"runtime_gpu: {torch.cuda.get_device_name(0)}")
