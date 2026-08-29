@@ -5,13 +5,40 @@ This is a local-launch compatibility wrapper. It preserves the V9 server's safet
 checks but does not depend on local-data/lora-v7/LATEST.txt living beside the
 server source. The selected run still must prove the recorded V9 training status,
 locked-test isolation, and a complete best adapter directory.
+
+The wrapper may initially be invoked by WSL's system python. If that interpreter
+is not the isolated BuyFlow LoRA runtime, it re-execs itself with the exact venv
+used by the training stack: ~/.venvs/buyflow-lora/bin/python.
 """
 import json
+import os
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 EXPECTED_STATUS = "LORA_V9_TEACHER_DIALOGUE_CORRECTION_TRAIN_COMPLETE"
+VENV_PYTHON = Path.home() / ".venvs" / "buyflow-lora" / "bin" / "python"
+
+
+def ensure_lora_runtime():
+    os.environ.setdefault("HSA_ENABLE_DXG_DETECTION", "1")
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    os.environ.setdefault("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
+
+    current = Path(sys.executable).resolve()
+    expected = VENV_PYTHON.resolve()
+    if current == expected:
+        return
+
+    try:
+        import torch  # noqa: F401
+    except ModuleNotFoundError:
+        if not VENV_PYTHON.is_file():
+            raise RuntimeError(
+                f"BuyFlow LoRA venv missing: {VENV_PYTHON}. "
+                "Refusing to install or alter the training environment automatically."
+            )
+        os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]])
 
 
 def load_module(script: Path):
@@ -26,6 +53,13 @@ def load_module(script: Path):
 def main():
     if len(sys.argv) != 3:
         raise SystemExit("Usage: lora-v9-explicit-run-server.py <v9-server-script> <v9-run-dir>")
+
+    ensure_lora_runtime()
+
+    # Prove the active runtime is the trained GPU stack before loading model code.
+    import torch
+    if not torch.cuda.is_available():
+        raise RuntimeError("BuyFlow LoRA runtime loaded, but ROCm GPU is unavailable")
 
     server_script = Path(sys.argv[1]).resolve()
     run_dir = Path(sys.argv[2]).resolve()
@@ -48,6 +82,12 @@ def main():
     recorded_best = metrics.get("best_adapter_dir")
     if recorded_best and Path(recorded_best).resolve() != best_dir:
         raise RuntimeError("V9 best adapter path mismatch")
+
+    print(f"runtime_python: {sys.executable}")
+    print(f"runtime_torch: {torch.__version__}")
+    print(f"runtime_hip: {torch.version.hip}")
+    print(f"runtime_gpu: {torch.cuda.get_device_name(0)}")
+    sys.stdout.flush()
 
     v9 = load_module(server_script)
 
