@@ -15,6 +15,10 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
     occurredAt: overrides.occurredAt ?? null,
     merchantRaw: overrides.merchantRaw ?? 'Shop',
     merchantId: overrides.merchantId ?? 'shop',
+    merchantNamespace: overrides.merchantNamespace ?? null,
+    purchaseCreationAuthority: overrides.purchaseCreationAuthority ?? 'none',
+    purchaseCreationReasons: overrides.purchaseCreationReasons ?? [],
+    orderRelation: overrides.orderRelation ?? null,
     orderIdRaw: overrides.orderIdRaw ?? null,
     orderIdNormalized: overrides.orderIdNormalized ?? null,
     trackingIdRaw: overrides.trackingIdRaw ?? null,
@@ -28,17 +32,29 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
     trackingUrl: overrides.trackingUrl ?? null,
     productFingerprints: overrides.productFingerprints ?? [],
     provenance: overrides.provenance ?? [],
+    sourceRole: overrides.sourceRole,
     carrierId: overrides.carrierId ?? null,
     paymentProviderId: overrides.paymentProviderId ?? null,
     invoiceIssuerId: overrides.invoiceIssuerId ?? null,
+    platformMerchantId: overrides.platformMerchantId ?? null,
+    sellerMerchantId: overrides.sellerMerchantId ?? null,
     conflicts: overrides.conflicts ?? [],
   };
+}
+
+function root(orderId: string): CanonicalEvent {
+  return event({
+    eventType: 'order_created',
+    orderIdRaw: orderId,
+    purchaseCreationAuthority: 'authorized',
+    purchaseCreationReasons: ['test-authorized-root'],
+  });
 }
 
 test('builds one purchase timeline from order, shipment, payment, invoice and delivery', () => {
   const graph = new PurchaseIdentityGraph();
 
-  const created = graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ABC-123' }));
+  const created = graph.applyEvent(root('ABC-123'));
   assert.equal(created.decision.kind, 'NEW_PURCHASE');
   assert.equal(created.productionWrites, 0);
   assert.equal(created.aiCalls, 0);
@@ -94,7 +110,7 @@ test('builds one purchase timeline from order, shipment, payment, invoice and de
 
 test('supports multiple shipments under one purchase', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ORDER-1' }));
+  graph.applyEvent(root('ORDER-1'));
   graph.applyEvent(event({ eventType: 'shipment_created', orderIdRaw: 'ORDER1', carrierId: 'gls', trackingIdRaw: 'TRACK-1' }));
   graph.applyEvent(event({ eventType: 'shipment_created', orderIdRaw: 'ORDER1', carrierId: 'gls', trackingIdRaw: 'TRACK-2' }));
 
@@ -103,7 +119,7 @@ test('supports multiple shipments under one purchase', () => {
 
 test('does not collapse identical external ids across different namespaces inside one purchase', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ORDER-1' }));
+  graph.applyEvent(root('ORDER-1'));
 
   graph.applyEvent(event({
     eventType: 'shipment_created',
@@ -181,7 +197,7 @@ test('keeps ambiguous event review-only and does not mutate graph', () => {
 
 test('keeps hard-conflict event pending and does not mutate graph', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'ORDER-1' }));
+  graph.applyEvent(root('ORDER-1'));
   const before = graph.snapshot();
 
   const result = graph.applyEvent(event({
@@ -203,7 +219,7 @@ test('keeps hard-conflict event pending and does not mutate graph', () => {
 
 test('adds explicit split child order to the same purchase', () => {
   const graph = new PurchaseIdentityGraph();
-  graph.applyEvent(event({ eventType: 'order_created', orderIdRaw: 'PARENT-1' }));
+  graph.applyEvent(root('PARENT-1'));
 
   const added = graph.addParentChildOrder('user-1', {
     parentOrderId: 'PARENT1',
