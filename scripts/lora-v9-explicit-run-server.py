@@ -26,18 +26,13 @@ def ensure_lora_runtime():
     os.environ.setdefault("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
 
     current = Path(sys.executable).resolve()
+    if not VENV_PYTHON.is_file():
+        raise RuntimeError(
+            f"BuyFlow LoRA venv missing: {VENV_PYTHON}. "
+            "Refusing to install or alter the training environment automatically."
+        )
     expected = VENV_PYTHON.resolve()
-    if current == expected:
-        return
-
-    try:
-        import torch  # noqa: F401
-    except ModuleNotFoundError:
-        if not VENV_PYTHON.is_file():
-            raise RuntimeError(
-                f"BuyFlow LoRA venv missing: {VENV_PYTHON}. "
-                "Refusing to install or alter the training environment automatically."
-            )
+    if current != expected:
         os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]])
 
 
