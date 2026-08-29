@@ -29,12 +29,25 @@ export interface ExtractionV2CarrierIdentityResolver {
   }): string | null;
 }
 
+/**
+ * Optional semantic-only override for the primary lifecycle event. It may select
+ * a CanonicalEventType but cannot supply or mutate any identity field. Fixed
+ * provenance qualifiers make that trust boundary visible downstream.
+ */
+export interface SemanticEventOverride {
+  eventType: CanonicalEventType;
+  semanticLabel: string;
+  sourceId: string;
+  sourceVersion: string;
+}
+
 export interface CanonicalEventFromExtractionV2Input {
   userId: string;
   document: EmailDocumentV1;
   extraction: ExtractionEngineV2Result;
   merchantResolver?: ExtractionV2MerchantIdentityResolver;
   carrierResolver?: ExtractionV2CarrierIdentityResolver;
+  semanticEventOverride?: SemanticEventOverride;
 }
 
 const FIELD_NAMES: EvidenceField[] = [
@@ -108,6 +121,23 @@ function provenanceFromClaim(claim: EvidenceClaim): EvidenceProvenance {
     extractorVersion: claim.extractorVersion || null,
     confidence: Number.isFinite(claim.confidence) ? claim.confidence : null,
     qualifiers: [...(claim.qualifiers ?? [])],
+  };
+}
+
+function semanticProvenance(override: SemanticEventOverride): EvidenceProvenance {
+  return {
+    field: 'semantic_event_type',
+    source: 'provider_adapter',
+    parserVersion: override.sourceVersion,
+    extractorId: override.sourceId,
+    extractorVersion: override.sourceVersion,
+    confidence: null,
+    qualifiers: [
+      'semantic_only',
+      'non_authoritative',
+      'no_identity_evidence_from_ai',
+      `semantic_label:${override.semanticLabel}`,
+    ],
   };
 }
 
@@ -185,8 +215,13 @@ function productFingerprints(extraction: ExtractionEngineV2Result): string[] {
 
 /**
  * Read-only bridge from frozen Extraction Engine v2 output into the Purchase
- * Identity Graph v2 contract. It never reads legacy parser output, never calls
- * AI, and never mutates extraction results.
+ * Identity Graph v2 contract. It never reads legacy parser output and never
+ * mutates extraction results.
+ *
+ * A semanticEventOverride can replace only the primary CanonicalEventType. All
+ * order/tracking/invoice/payment/merchant/carrier fields remain exclusively
+ * sourced from Extraction v2. This permits a local classifier to answer "what
+ * happened?" without giving it any authority over "which Purchase is this?".
  *
  * Merchant identity is deliberately not invented from display text. A caller
  * must provide a canonical merchant resolver. Carrier values may fall back to a
@@ -198,13 +233,14 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
   const { document, extraction } = input;
   const resolvedEventType = resolvedValue(extraction.resolved.eventType);
   const eventTypeConflict = extraction.resolved.eventType.status === 'conflict';
-  if (!resolvedEventType && !eventTypeConflict) return null;
+  if (!resolvedEventType && !eventTypeConflict && !input.semanticEventOverride) return null;
 
   const orderIdRaw = resolvedValue(extraction.resolved.orderNumber);
   const relationExtraction = extractExplicitOrderRelation(document, orderIdRaw);
   const provenance = [
     ...resolvedProvenance(extraction.resolved),
     ...(relationExtraction.relation?.provenance ?? []),
+    ...(input.semanticEventOverride ? [semanticProvenance(input.semanticEventOverride)] : []),
   ];
   const merchantRaw = resolvedValue(extraction.resolved.merchant);
   const carrierRaw = resolvedValue(extraction.resolved.carrier);
@@ -228,7 +264,7 @@ export function canonicalEventFromExtractionV2(input: CanonicalEventFromExtracti
   return {
     eventId: `${document.provider}:${document.providerMessageId}:extraction-v2`,
     userId: input.userId,
-    eventType: mapEventType(resolvedEventType),
+    eventType: input.semanticEventOverride?.eventType ?? mapEventType(resolvedEventType),
     sourceProvider: document.provider,
     sourceMessageId: document.providerMessageId,
     senderDomain,
