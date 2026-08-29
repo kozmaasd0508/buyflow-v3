@@ -32,6 +32,10 @@ Run-Step 'API TYPECHECK' {
   npm.cmd run typecheck
 }
 
+Run-Step 'API TESTS' {
+  npm.cmd test
+}
+
 Run-Step 'V9 REAL GMAIL IDENTITY SHADOW' {
   npm.cmd run identity:v9-real-gmail-shadow --workspace '@buyflow/api'
 }
