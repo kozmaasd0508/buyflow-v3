@@ -9,16 +9,23 @@ locked-test isolation, and a complete best adapter directory.
 The wrapper may initially be invoked by WSL's system python. If that interpreter
 is not running inside the isolated BuyFlow LoRA venv, it re-execs itself with the
 exact runtime used by training: ~/.venvs/buyflow-lora/bin/python.
+
+For the local teacher UI only, this wrapper also adds a localhost-only /shutdown
+endpoint. The endpoint requires a custom header so an unrelated web page cannot
+silently stop the model with a simple cross-origin form POST.
 """
 import json
 import os
 import sys
+import threading
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 EXPECTED_STATUS = "LORA_V9_TEACHER_DIALOGUE_CORRECTION_TRAIN_COMPLETE"
 VENV_ROOT = Path.home() / ".venvs" / "buyflow-lora"
 VENV_PYTHON = VENV_ROOT / "bin" / "python"
+SHUTDOWN_HEADER = "X-BuyFlow-Shutdown"
+SHUTDOWN_TOKEN = "teacher-ui-v1"
 
 
 def ensure_lora_runtime():
@@ -49,6 +56,25 @@ def load_module(script: Path):
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def install_local_shutdown(v9):
+    original_do_post = v9.V9Handler.do_POST
+
+    def do_post_with_shutdown(self):
+        if self.path != "/shutdown":
+            return original_do_post(self)
+
+        if self.headers.get(SHUTDOWN_HEADER) != SHUTDOWN_TOKEN:
+            self._send(403, {"ok": False, "reason": "SHUTDOWN_FORBIDDEN"})
+            return
+
+        self._send(200, {"ok": True, "stopping": True, "provider": "lora-v9"})
+        # BaseHTTPRequestHandler runs inside ThreadingHTTPServer. shutdown() must
+        # be invoked from another thread or it can deadlock the serving loop.
+        threading.Thread(target=self.server.shutdown, name="buyflow-v9-shutdown", daemon=True).start()
+
+    v9.V9Handler.do_POST = do_post_with_shutdown
 
 
 def main():
@@ -100,6 +126,7 @@ def main():
     # hook at runtime, so replacing it keeps the proven model-loading path while
     # supplying an explicit audited run directory.
     v9.BASE.load_latest_v4 = explicit_loader
+    install_local_shutdown(v9)
 
     # V9.main only uses its repo-root argument as input to BASE.load_model. The
     # explicit loader above intentionally ignores it.
