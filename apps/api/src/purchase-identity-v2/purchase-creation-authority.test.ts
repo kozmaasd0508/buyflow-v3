@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NormalizedEmail } from '../email/types.js';
 import { buildEmailDocumentV1 } from '../ingestion/email-document.js';
-import { evaluatePurchaseCreationAuthority, hasExplicitPurchaseNonAcceptance } from './purchase-creation-authority.js';
+import {
+  evaluatePurchaseCreationAuthority,
+  hasExplicitPurchaseNonAcceptance,
+  hasExplicitPurchaseRootEvidence,
+} from './purchase-creation-authority.js';
 
 function document(body: string, subject = 'Megrendelés visszaigazolása #AB-778812') {
   const email: NormalizedEmail = {
@@ -32,6 +36,7 @@ const richStructure = `
 
 test('rich unknown merchant confirmation receives creation authority when no contradiction exists', () => {
   const doc = document(richStructure);
+  assert.equal(hasExplicitPurchaseRootEvidence(doc), true);
   const result = evaluatePurchaseCreationAuthority({
     document: doc,
     eventType: 'order_created',
@@ -127,8 +132,43 @@ test('missing hard order id or non-merchant source cannot authorize Purchase cre
   }).authority, 'review');
 });
 
-test('lifecycle event never receives new Purchase creation authority', () => {
-  const doc = document(richStructure);
+test('ORDER_PROCESSING primary lifecycle may still receive authority from independent root evidence', () => {
+  const doc = document(`
+    ${richStructure}
+    <p>Rendelésed megkaptuk, jelenleg feldolgozás alatt van.</p>
+  `, 'Rendelésed megkaptuk #AB-778812');
+  assert.equal(hasExplicitPurchaseRootEvidence(doc), true);
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_updated',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'authorized');
+  assert.ok(result.reasons.includes('lifecycle_event_with_independent_order_root'));
+});
+
+test('root evidence plus explicit non-acceptance remains REVIEW even when primary lifecycle is order_updated', () => {
+  const doc = document(`
+    ${richStructure}
+    <p>Rendelésed megérkezett és ellenőrzés alatt van.</p>
+    <p>Ez az e-mail nem minősül a megrendelés visszaigazolásának, csupán a vételi ajánlat megérkezéséről értesít.</p>
+  `, 'Rendelés beérkezett #AB-778812');
+  const result = evaluatePurchaseCreationAuthority({
+    document: doc,
+    eventType: 'order_updated',
+    sourceRole: 'merchant',
+    orderId: 'AB-778812',
+  });
+  assert.equal(result.authority, 'review');
+});
+
+test('true lifecycle-only shipment message receives no new Purchase creation authority', () => {
+  const doc = document(`
+    <p>A csomagot átadtuk a futárszolgálatnak.</p>
+    <p>Nyomkövetési szám: 123456789012</p>
+  `, 'Csomagod úton van');
+  assert.equal(hasExplicitPurchaseRootEvidence(doc), false);
   assert.equal(evaluatePurchaseCreationAuthority({
     document: doc,
     eventType: 'shipment_created',
