@@ -11,5 +11,10 @@ if not exist "%PS1%" (
   exit /b 1
 )
 
+if /I "%~1"=="/refresh" (
+  echo BuyFlow workflow kenyszeritett frissitese...
+  del "%USERPROFILE%\Desktop\buyflow\.n8n-local-ai-data\.buyflow-workflows-imported-v*" >nul 2>&1
+)
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
 exit /b %ERRORLEVEL%
