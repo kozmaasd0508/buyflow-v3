@@ -37,6 +37,13 @@ Run-Step 'V9 REAL GMAIL IDENTITY SHADOW' {
 }
 
 Write-Host ""
+Write-Host '===== V9 IDENTITY DIAGNOSTICS =====' -ForegroundColor Cyan
+& powershell.exe -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'show-v9-identity-diagnostics.ps1') -ReportPath $env:BUYFLOW_V9_IDENTITY_REPORT
+if ($LASTEXITCODE -ne 0) {
+  throw "V9 IDENTITY DIAGNOSTICS FAIL - exit code: $LASTEXITCODE"
+}
+
+Write-Host ""
 Write-Host '========================================' -ForegroundColor Green
 Write-Host 'V9 SHADOW RUN COMPLETE' -ForegroundColor Green
 Write-Host '========================================' -ForegroundColor Green
