@@ -15,6 +15,10 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
     occurredAt: overrides.occurredAt ?? null,
     merchantRaw: overrides.merchantRaw ?? null,
     merchantId: overrides.merchantId ?? null,
+    merchantNamespace: overrides.merchantNamespace ?? null,
+    purchaseCreationAuthority: overrides.purchaseCreationAuthority ?? 'none',
+    purchaseCreationReasons: overrides.purchaseCreationReasons ?? [],
+    orderRelation: overrides.orderRelation ?? null,
     orderIdRaw: overrides.orderIdRaw ?? null,
     orderIdNormalized: overrides.orderIdNormalized ?? null,
     trackingIdRaw: overrides.trackingIdRaw ?? null,
@@ -28,9 +32,12 @@ function event(overrides: Partial<CanonicalEvent>): CanonicalEvent {
     trackingUrl: overrides.trackingUrl ?? null,
     productFingerprints: overrides.productFingerprints ?? [],
     provenance: overrides.provenance ?? [],
+    sourceRole: overrides.sourceRole,
     carrierId: overrides.carrierId ?? null,
     paymentProviderId: overrides.paymentProviderId ?? null,
     invoiceIssuerId: overrides.invoiceIssuerId ?? null,
+    platformMerchantId: overrides.platformMerchantId ?? null,
+    sellerMerchantId: overrides.sellerMerchantId ?? null,
     conflicts: overrides.conflicts ?? [],
   };
 }
@@ -101,8 +108,33 @@ test('links by exact invoice identity inside issuer namespace', () => {
   if (result.kind === 'LINKED') assert.equal(result.purchaseId, 'p1');
 });
 
-test('creates a new purchase only from a safe order anchor', () => {
-  const result = decideCorrelation(event({ eventType: 'order_created', merchantId: 'new-shop', orderIdRaw: 'NEW-1' }), snapshot());
+test('creates a new purchase only from an explicitly authorized safe root anchor', () => {
+  const result = decideCorrelation(event({
+    eventType: 'order_created',
+    merchantId: 'new-shop',
+    orderIdRaw: 'NEW-1',
+    purchaseCreationAuthority: 'authorized',
+  }), snapshot());
+  assert.equal(result.kind, 'NEW_PURCHASE');
+});
+
+test('known merchant plus order id is not enough without independent creation authority', () => {
+  const result = decideCorrelation(event({
+    eventType: 'order_created',
+    merchantId: 'new-shop',
+    orderIdRaw: 'NEW-1',
+    purchaseCreationAuthority: 'none',
+  }), snapshot());
+  assert.equal(result.kind, 'UNLINKED');
+});
+
+test('authorized lifecycle primary event can create only through the separate root authority channel', () => {
+  const result = decideCorrelation(event({
+    eventType: 'order_updated',
+    merchantId: 'new-shop',
+    orderIdRaw: 'NEW-2',
+    purchaseCreationAuthority: 'authorized',
+  }), snapshot());
   assert.equal(result.kind, 'NEW_PURCHASE');
 });
 
