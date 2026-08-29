@@ -34,8 +34,11 @@ const NON_ACCEPTANCE_PATTERNS = [
 ];
 
 const PURCHASE_ROOT_PATTERNS = [
-  /\b(?:rendelesed|megrendelesed|rendeles|megrendeles)\b.{0,100}\b(?:megkaptuk|beerkezett|beerkezett|rogzitettuk|felvettuk|elfogadtuk|visszaigazoltuk)\b/i,
+  /\b(?:rendelesed|megrendelesed|rendeles|megrendeles)\b.{0,100}\b(?:megkaptuk|beerkezett|rogzitettuk|felvettuk|elfogadtuk|visszaigazoltuk)\b/i,
   /\b(?:megkaptuk|rogzitettuk|felvettuk|elfogadtuk|visszaigazoltuk)\b.{0,100}\b(?:a )?(?:rendelesedet|megrendelesedet|rendelest|megrendelest)\b/i,
+  /\b(?:rendeleset|megrendeleset)\b.{0,80}\b(?:rendben\s+)?(?:atvettuk|rogzitettuk|felvettuk)\b/i,
+  /\bbeerkezett\b.{0,80}\b(?:rendelesi|megrendelesi)(?:\s*\/\s*foglalasi)?\s+(?:igeny|igenye)\b/i,
+  /\b(?:rendeles|megrendeles)\w*\s+(?:beerkezese|beerkezeset)\b/i,
   /\b(?:koszonjuk|sikeres)\b.{0,80}\b(?:a )?(?:rendelesed|megrendelesed|rendeles|megrendeles)\b/i,
   /\b(?:rendeles|megrendeles)\w*\s+visszaigazolas\w*\b/i,
   /\b(?:order|purchase)\b.{0,100}\b(?:received|placed|accepted|confirmed|recorded)\b/i,
@@ -115,7 +118,11 @@ export function evaluatePurchaseCreationAuthority(input: {
     };
   }
 
-  if (structureSignalCount(input.document) < 2) {
+  // Root text + hard order identity + merchant source are already independent
+  // evidence classes. Require at least one additional commerce-structure signal
+  // (product, amount, payment/shipping method or order-summary structure), but
+  // never authorize a structure-free root acknowledgement.
+  if (structureSignalCount(input.document) < 1) {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,
       authority: 'review',
