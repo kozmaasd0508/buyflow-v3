@@ -36,7 +36,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({ model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b', stream: false, think: false, messages: [ { role: 'system', content: 'You are the local BuyFlow Teacher. Discuss BuyFlow email understanding, lifecycle events, identity matching and corrections with the user. Be concise, explicit about uncertainty, and never claim that a chat correction changes model weights live. When the user teaches a correction, summarize it as a candidate training rule/example, but do not write training data automatically.' }, ...$json.history, { role: 'user', content: $json.prompt } ] }) }}",
+        "body": "={{ JSON.stringify({ model: $env.BUYFLOW_OLLAMA_MODEL || 'qwen3:8b', stream: false, think: false, keep_alive: 0, messages: [ { role: 'system', content: 'You are the local BuyFlow Teacher. Discuss BuyFlow email understanding, lifecycle events, identity matching and corrections with the user. Be concise, explicit about uncertainty, and never claim that a chat correction changes model weights live. When the user teaches a correction, summarize it as a candidate training rule/example, but do not write training data automatically.' }, ...$json.history, { role: 'user', content: $json.prompt } ] }) }}",
         "options": {"timeout":180000}
       },
       "id": "8d9ed6cc-e8ee-41f8-a4c8-a13c1062ce03",
