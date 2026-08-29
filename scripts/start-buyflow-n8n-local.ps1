@@ -182,6 +182,8 @@ Write-Host "n8n: $installedN8nVersion"
 
 $decisionWorkflow = Join-Path $workflowDir 'buyflow-local-ai-decision.json'
 $teacherWorkflow = Join-Path $workflowDir 'buyflow-teacher-chat.json'
+$decisionWorkflowId = 'bf-local-ai-decision-v1'
+$teacherWorkflowId = 'bf-teacher-chat-v1'
 if (-not (Test-Path $decisionWorkflow)) { Fail "Workflow hianyzik: $decisionWorkflow" }
 if (-not (Test-Path $teacherWorkflow)) { Fail "Workflow hianyzik: $teacherWorkflow" }
 
@@ -191,6 +193,13 @@ if (-not (Test-Path $importMarker)) {
     if ($LASTEXITCODE -ne 0) { Fail 'AI Decision workflow import sikertelen.' }
     & $nodeExe $n8nBin import:workflow --input=$teacherWorkflow
     if ($LASTEXITCODE -ne 0) { Fail 'Teacher Chat workflow import sikertelen.' }
+
+    Write-Host 'BuyFlow workflow-k publikalasa...'
+    & $nodeExe $n8nBin publish:workflow --id=$decisionWorkflowId
+    if ($LASTEXITCODE -ne 0) { Fail 'AI Decision workflow publikalasa sikertelen.' }
+    & $nodeExe $n8nBin publish:workflow --id=$teacherWorkflowId
+    if ($LASTEXITCODE -ne 0) { Fail 'Teacher Chat workflow publikalasa sikertelen.' }
+
     Set-Content -Path $importMarker -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -Encoding ASCII
 }
 
