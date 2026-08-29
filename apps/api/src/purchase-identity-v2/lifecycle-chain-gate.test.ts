@@ -329,12 +329,13 @@ test('Lifecycle Chain Gate: 25 independent multi-email lifecycles preserve zero-
         eligibleLinks += 1;
         if (applied.decision.kind !== 'LINKED') unsafe.push(`${scenario.id}/${step.name}: LINK_EVENT without LINKED`);
         else {
-          const hard = applied.decision.reasons.filter(e=>e.strength==='hard');
+          const linked = applied.decision;
+          const hard = linked.reasons.filter(e=>e.strength==='hard');
           if (!hard.length) { linksWithoutHardEvidence += 1; unsafe.push(`${scenario.id}/${step.name}: no hard evidence`); }
-          if (hard.some(e=>e.candidatePurchaseId!==applied.decision.purchaseId)) unsafe.push(`${scenario.id}/${step.name}: hard evidence target mismatch`);
+          if (hard.some(e=>e.candidatePurchaseId!==linked.purchaseId)) unsafe.push(`${scenario.id}/${step.name}: hard evidence target mismatch`);
           if (step.expect.linkAlias) {
             const expected = aliases.get(step.expect.linkAlias);
-            if (!expected || expected !== applied.decision.purchaseId) { falsePurchaseMerges += 1; unsafe.push(`${scenario.id}/${step.name}: linked=${applied.decision.purchaseId} expected=${expected ?? 'missing'}`); }
+            if (!expected || expected !== linked.purchaseId) { falsePurchaseMerges += 1; unsafe.push(`${scenario.id}/${step.name}: linked=${linked.purchaseId} expected=${expected ?? 'missing'}`); }
           }
         }
       } else if (step.expect.action === null) blockedSteps += 1;
