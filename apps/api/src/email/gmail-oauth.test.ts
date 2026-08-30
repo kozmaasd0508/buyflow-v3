@@ -24,6 +24,7 @@ test('Gmail OAuth authorize URL uses least-privilege readonly scope and PKCE', (
 
   assert.equal(url.searchParams.get('scope'), GMAIL_READONLY_SCOPE);
   assert.equal(url.searchParams.get('access_type'), 'offline');
+  assert.equal(url.searchParams.get('include_granted_scopes'), 'false');
   assert.equal(url.searchParams.get('state'), 'state-1');
   assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
   assert.equal(url.searchParams.get('code_challenge'), pkce.challenge);
@@ -57,6 +58,27 @@ test('Gmail OAuth code exchange sends PKCE verifier server-to-server', async () 
   assert.equal(token.accessToken, 'access-1');
   assert.equal(token.refreshToken, 'refresh-1');
   assert.deepEqual(token.scopes, [GMAIL_READONLY_SCOPE]);
+});
+
+test('Gmail OAuth refuses an initial credential without gmail.readonly', async () => {
+  const fetchImpl = (async () => jsonResponse({
+    access_token: 'access-1',
+    refresh_token: 'refresh-1',
+    expires_in: 3600,
+    scope: 'openid email',
+    token_type: 'Bearer',
+  })) as typeof fetch;
+  const client = new GoogleGmailOAuthClient({
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    redirectUri: 'https://api.example.com/auth/google/gmail/callback',
+    fetchImpl,
+  });
+
+  await assert.rejects(
+    () => client.exchangeCode({ code: 'code-1', codeVerifier: 'verifier-1' }),
+    /missing required Gmail readonly scope/,
+  );
 });
 
 test('Gmail OAuth refresh and profile lookup keep credentials out of URLs', async () => {
