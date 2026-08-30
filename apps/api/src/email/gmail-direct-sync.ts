@@ -1,4 +1,5 @@
 import { env, requireGmailDirectRuntimeConfig } from '../config.js';
+import { evaluateGmailDirectCandidate } from './gmail-direct-candidate-gate.js';
 import { GoogleGmailOAuthClient } from './gmail-oauth.js';
 import { GmailRuntimeProvider } from './gmail-runtime-provider.js';
 import { ProviderCredentialCrypto } from './provider-credential-crypto.js';
@@ -107,10 +108,25 @@ export async function createDirectGmailRuntime(input: {
     credentialCrypto,
     oauthClient,
     pubsubTopicName: runtimeConfig.pubsubTopicName,
-    watchLabelIds: ['INBOX'],
+    // No Gmail category/label is authoritative for commerce. Watch the mailbox
+    // broadly and let evaluateGmailDirectCandidate protect the privacy boundary.
+    watchLabelIds: [],
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
   return { connection, runtime };
+}
+
+function ignoredDirectMailboxResult(): NormalizedInboundPersistResult {
+  return {
+    status: 'non_commerce_ignored',
+    classification: 'non_commerce',
+    deduped: false,
+    sourceArchived: false,
+    purchaseWrites: 0,
+    shipmentWrites: 0,
+    documentWrites: 0,
+    aiCalls: 0,
+  };
 }
 
 async function persistObservedMessage(input: {
@@ -120,6 +136,11 @@ async function persistObservedMessage(input: {
   email: Parameters<typeof planNormalizedInboundEmail>[0]['email'];
   sourceQuery: string;
 }): Promise<NormalizedInboundPersistResult> {
+  // A directly connected Gmail account is a personal mailbox, not a dedicated
+  // shopping inbox. Unknown/personal messages are discarded before DB/archive.
+  const candidate = evaluateGmailDirectCandidate(input.email);
+  if (candidate.action === 'ignore') return ignoredDirectMailboxResult();
+
   const preview = planNormalizedInboundEmail({ email: input.email });
   const shouldArchive = env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED
     && preview.status !== 'non_commerce_ignored';
@@ -173,7 +194,8 @@ export async function runDirectGmailInitialSync(input: {
     addPersistResult(summary, result);
   }
 
-  // Cursor advances only after every observable message was safely processed.
+  // Cursor advances only after every observable message was either deliberately
+  // ignored by the privacy gate or safely persisted.
   await runtime.commitCheckpoint(read.checkpoint);
   summary.cursorCommitted = true;
   return summary;
