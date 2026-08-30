@@ -94,8 +94,8 @@ const UNKNOWN_AUTHENTICATION: EmailAuthenticationResults = {
 
 /**
  * Backwards-compatible adapter for the current provider contract.
- * It intentionally does not invent plain text, structured data or authentication
- * results that the provider did not supply.
+ * It intentionally does not invent structured data or authentication results
+ * that the provider did not supply. Provider-supplied bodyText is preserved.
  */
 export function upgradeNormalizedEmailToDocumentV1(
   email: NormalizedEmail,
@@ -113,7 +113,7 @@ export function upgradeNormalizedEmailToDocumentV1(
     bcc: email.bcc,
     receivedAt: email.receivedAt,
     snippet: email.snippet ?? null,
-    bodyText: options.bodyText ?? null,
+    bodyText: options.bodyText ?? email.bodyText ?? null,
     bodyHtml: email.bodyHtml ?? null,
     headers: email.headers ?? [],
     folders: email.folders,
