@@ -1,173 +1,102 @@
 # BuyFlow V3 — persistent handoff
 
-> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md` / `BUYFLOW_WORKLOG.md`. Reconcile with current GitHub state before changing runtime code.
+> Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md` / `BUYFLOW_WORKLOG.md`. Reconcile with GitHub before runtime changes.
 
 **Last updated:** 2026-08-31 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current `main`:** `92461ac103d4e337baa69ef91d09717eeb488d00`  
-**Architecture base:** `codex/v9-real-gmail-identity-shadow` @ `2e05b435a9f4fbc6467477c02fac462004bfa183`  
-**Extension branch:** `codex/modern-email-source-foundation-v1`  
-**Extension PR:** #295 (draft) -> `codex/v9-real-gmail-identity-shadow`  
-**Implementation head before this handoff commit:** `9391fbe9ddb4c16bf65656303cba5a020e9e07dd`
+**Identity architecture base:** `codex/v9-real-gmail-identity-shadow`  
+**Modern email source branch:** `codex/modern-email-source-foundation-v1` / PR #295 (draft)  
+**Mobile cleanup branch:** `codex/mobile-architecture-cleanup-v1` / PR #297 (draft)  
+**Exact mobile-cleanup code head verified by CI:** `b90670c9c7e4654537c060f99733b6d56ddb8553`
 
-## CURRENT SAFETY CONTRACT
+## SAFETY CONTRACT
 
-Safety remains unchanged:
-- AI/V9 may provide lifecycle semantics only, never hard identity.
-- lifecycle-only mail cannot create Purchase.
-- hard conflicts -> REVIEW/PENDING.
-- wrong auto-link / false Purchase create tolerance = 0.
-- direct Gmail runtime defaults OFF.
-- source archive defaults OFF.
-- Mailgun source persistence defaults OFF.
-- no modern email-source/direct-Gmail migration has been applied live.
-- no new provider has been cut over into production.
-- no raw customer email content is committed to Git.
-- Pub/Sub/OAuth/Gmail source state never grants Purchase identity authority.
+- AI/Qwen may provide lifecycle semantics only; it never grants hard identity/link authority.
+- Lifecycle-only mail cannot create a Purchase.
+- Hard conflicts remain REVIEW/PENDING; false merge / false Purchase-create tolerance is zero.
+- Direct Gmail runtime, source archive and Mailgun source persistence remain OFF by default.
+- No modern email-source/direct-Gmail migration has been applied live from this development flow.
+- No provider cutover, Purchase/Shipment/Identity authority change or raw customer mail commit occurred in the mobile cleanup.
 
-## PURCHASE IDENTITY GRAPH V2 ALREADY EXISTS
+## EXISTING PURCHASE IDENTITY GRAPH
 
-Use/extend the existing `CanonicalEvent`, Purchase/Order/Shipment/Payment/Invoice identities, `EvidenceEdge`, `CorrelationDecision`, merchant identity and parent/child relation types. Do not build duplicate parallel graph concepts.
+Extend the existing Purchase Identity Graph v2 concepts; do not create a parallel graph. Existing core includes `CanonicalEvent`, Purchase/Order/Shipment/Payment/Invoice identities, `EvidenceEdge`, `CorrelationDecision`, merchant identity and explicit parent/child order relations.
 
-## MODERN EMAIL SOURCE FOUNDATION V1
+## MODERN EMAIL SOURCE + DIRECT GMAIL FOUNDATION
 
-PR #295 contains:
-- `NormalizedEmailDocumentV1` with provider full text + HTML + headers + attachment metadata;
-- bounded JSON-LD/schema.org extraction before AI;
-- safe HTTP(S) link extraction;
-- fail-closed DKIM/SPF/DMARC normalization;
-- immutable raw + normalized object archive with SHA-256;
-- opaque content-addressed object paths;
-- deterministic trace id;
-- retry-safe immutable-object verification;
-- additive `source_emails` metadata migration + private `buyflow-email-source-v1` bucket;
-- archive flag `BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED=false` by default.
+PR #295 contains the privacy-first source layer:
+- `NormalizedEmailDocumentV1` with plain text + HTML, headers, attachments, structured data, safe links, auth verdicts and provenance;
+- JSON-LD/schema.org extraction before AI;
+- immutable raw/normalized object archive with SHA-256 and opaque keys;
+- direct Gmail provider with exact RAW MIME, attachments, initial snapshot + `history.list`, expired-history reset and Pub/Sub watch/renew/stop;
+- OAuth Authorization Code + PKCE with `gmail.readonly`, encrypted refresh token storage and separate durable cursor/watch state;
+- authenticated Google Pub/Sub wake-up path with OIDC/JWKS verification, dedupe/retry/stale recovery/dead-letter;
+- personal-mailbox privacy gate: broad Gmail read may happen, but unknown personal mail is dropped before source/archive persistence unless positive commerce evidence exists;
+- read-only `gmail:direct-shadow-smoke` command that performs 0 source writes, 0 Purchase/Shipment/Document writes and 0 AI calls.
 
-The generic normalized inbound pipeline may store source/provenance when deliberately enabled, but its Purchase/Shipment/Document/AI write counters remain zero.
+Live Google staging/shadow setup is still pending; do not claim direct Gmail production cutover.
 
-## DIRECT GMAIL PROVIDER + OAUTH RUNTIME
+## MOBILE ARCHITECTURE CLEANUP V1
 
-`GmailIncrementalEmailProvider` now has a server runtime behind `BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED=false`.
+PR #297 is based on the modern email source branch and is intentionally separate from Gmail/identity runtime work.
 
-Provider support:
-- Gmail search + full message fetch;
-- full provider text/HTML/headers/attachment metadata;
-- exact RAW MIME (`format=raw`);
-- attachment bytes;
-- initial `historyId` captured before snapshot scan;
-- `history.list` created/updated/deleted replay;
-- expired history -> `resetRequired=true`, no guessed continuation;
-- Pub/Sub watch / renew / stop.
+Implemented on verified code head `b90670c9c7e4654537c060f99733b6d56ddb8553`:
+- one `purchase-detail-controller.ts` now owns purchase status overview, lifecycle timeline and product cards/editing;
+- deleted the three legacy purchase-detail TS enhancers (`purchase-detail-overview-panel.ts`, `purchase-timeline-panel.ts`, `product-details-panel.ts`);
+- removed their top-level script tags and their three independent document-wide `MutationObserver`s;
+- first purchase-detail render reuses the already-loaded `PurchaseDetail` instead of re-fetching the same record independently for overview/timeline/products;
+- product edit/hide refreshes the combined detail enhancement with one fresh purchase read;
+- `/api/purchases` now exposes `productPreviewImageUrl` from an already-stored visible product image;
+- purchase cards render that safe HTTP(S) product image with lazy loading + `no-referrer`, otherwise fall back to the existing icon;
+- shipment-facing UI label is now **Csomagok**, while the internal legacy route key `orders` remains for compatibility;
+- visible lifecycle labels now cover shipment-created, in-transit, out-for-delivery, pickup-ready, delayed and delivery-failed states;
+- CI exposed one stale hidden import in `password-reset-helper.ts`; it was removed before the final green gate.
 
-OAuth/runtime security:
-- Google OAuth Authorization Code + PKCE;
-- required scope is exactly Gmail read-only authority (`gmail.readonly` must be present; unexpected extra Gmail scopes are rejected by the runtime boundary);
-- refresh token encrypted with AES-256-GCM;
-- encryption AAD binds credential to user + connection + provider + key version;
-- encrypted credential table is server-only with RLS and no authenticated-client grant;
-- provider cursor/watch state is stored separately from Purchase identity state;
-- cursor commit uses compare-and-swap so a stale worker cannot overwrite a newer Gmail cursor.
+What this cleanup does NOT do:
+- it does not invent or externally search for product images; it only displays `products.image_url` already present in BuyFlow data;
+- it does not yet consolidate every remaining design/settings/inbox enhancer;
+- it does not change Gmail provider selection or OAuth cutover;
+- it does not add first-class Return/Refund/Warranty persistence/UI yet.
 
-## DIRECT GMAIL PERSONAL-MAILBOX PRIVACY GATE
+## MOBILE VERIFICATION
 
-Direct Gmail intentionally does NOT rely exclusively on `category:purchases`.
+Temporary PR #298 targeted `main` only for CI and is closed unmerged.
 
-Default direct Gmail discovery query:
-`newer_than:30d -in:spam -in:trash`
+GitHub Actions CI **#1139** on exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553`:
+- API typecheck PASS
+- API tests **1286 / 1286 PASS**
+- API build PASS
+- Mobile typecheck PASS
+- Mobile web build PASS
 
-The broad provider read is followed by a positive-commerce gate. A personal Gmail message is persisted only when at least one supported positive signal exists, for example:
-- Gmail `CATEGORY_PURCHASES`, OR
-- transactional schema.org markup such as Order / ParcelDelivery / Invoice, OR
-- deterministic commerce recognition, OR
-- universal commerce lifecycle semantics.
+A browser visual smoke is still required before merge/APK. Verify at minimum:
+1. purchase cards with image and icon fallback;
+2. **Csomagok** navigation and empty/loading states;
+3. purchase detail ordering and responsive layout;
+4. product edit/hide behavior after the controller consolidation.
 
-Unknown personal mail is ignored before DB/archive persistence. Product/Offer-only markup is insufficient by itself. Strong promotional mail remains ignored.
+Do not claim visual validation until it is actually run.
 
-## AUTHENTICATED GMAIL PUB/SUB WAKE-UP PATH
+## NEXT ACTIONS
 
-`POST /webhooks/google/gmail` is a wake-up endpoint, not an evidence endpoint.
+Mobile track:
+1. browser visual smoke for PR #297;
+2. refine only concrete visual/interaction regressions found there;
+3. keep #297 draft until the smoke is clean;
+4. later cleanup v2 may replace remaining route-repurposing/design enhancer MutationObservers with explicit app routes/components.
 
-Security and durability:
-- Google Pub/Sub OIDC bearer JWT verified locally using Google JWKS;
-- only RS256 accepted;
-- issuer, audience, expiry/not-before/issued-at and exact configured Google service-account email are checked;
-- malformed/oversized payloads fail closed;
-- payload contributes only `emailAddress + historyId` wake-up metadata;
-- durable `gmail_sync_inbox` dedupes `(email_connection_id, history_id)`;
-- safe claim/retry/stale-processing recovery;
-- explicit exponential retry schedule;
-- `dead_letter` after 8 failed attempts;
-- 60-second recovery drain covers crash-after-Pub/Sub-ack cases;
-- worker resumes from the DB-committed Gmail cursor, not from the Pub/Sub history id directly.
+Product track after the cleanup gate:
+- decide deterministic product-image acquisition/provenance rules (email structured data / merchant product URL first; never guess a model image);
+- add first-class Return / Refund / Warranty views on Purchase Detail;
+- add Gmail disconnect/data-deletion/export UX;
+- cut Gmail settings over to direct Gmail only after the staging migration + real shadow smoke is green.
 
-## CONTROLLED DIRECT-GMAIL SHADOW SMOKE
-
-New command:
-`npm run gmail:direct-shadow-smoke --workspace @buyflow/api`
-
-Required controlled environment:
-- `BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED=true`
-- Google OAuth client configuration
-- `BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64`
-- Supabase admin configuration
-- a pre-connected direct Gmail test account selected by `BUYFLOW_SMOKE_USER_ID` + `BUYFLOW_SMOKE_CONNECTION_ID`
-- optional `BUYFLOW_GMAIL_SHADOW_SMOKE_LIMIT` (default 10, hard max 50)
-
-The smoke is deliberately read-only:
-- reads a small Gmail sample using `GMAIL_DIRECT_DISCOVERY_QUERY`;
-- fetches exact RAW MIME for each sampled message;
-- evaluates the personal-mailbox commerce privacy gate;
-- exercises `history.list` from the captured boundary;
-- prints only privacy-reduced counters/reasons;
-- does NOT persist `source_emails`;
-- does NOT write archive objects;
-- does NOT commit the durable Gmail cursor;
-- does NOT mutate the mailbox;
-- does NOT write Purchase/Shipment/Document state;
-- does NOT call AI.
-
-This means the first live Google smoke can be run before enabling source archive or any Purchase-side behavior.
-
-## MAILGUN EXACT EML SOURCE PATH
-
-The existing Mailgun shadow route preserves full plain text and can pass an expanded forwarded `.eml` attachment's exact bytes into the immutable archive path.
-
-Two independent gates remain OFF by default:
-- `BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED=false`
-- `BUYFLOW_MAILGUN_SOURCE_PERSIST_ENABLED=false`
-
-Only when both are deliberately enabled may Mailgun source persistence/archive run. Purchase/Shipment/Document writes remain disabled.
-
-## DATABASE / DEPLOYMENT STATE
-
-Committed migrations include:
-- modern raw/normalized source archive metadata + private bucket;
-- direct Gmail OAuth credential state;
-- direct Gmail cursor/watch state;
-- durable Gmail Pub/Sub sync inbox.
-
-These migrations are code-reviewed artifacts only at this point and have NOT been applied live from this development flow.
-
-No Google OAuth client secret, refresh token, AES key, Pub/Sub service-account credential or customer raw mail exists in the repository.
-
-## VERIFICATION
-
-Historical checkpoints:
-- CI #1092: rich normalizer/source archive GREEN.
-- CI #1095: Gmail incremental provider GREEN.
-- CI #1099: Mailgun exact EML/source wiring GREEN.
-- CI #1132 on code head `30bd9baaf64bd5f2660ee223f1d54ed8994a49db`: API typecheck/tests/build + mobile typecheck/build all GREEN.
-
-After the new shadow-smoke + handoff/worklog commits, run one final exact-head CI before claiming the entire current PR head green. Temporary PR #296 is CI-only and must be closed unmerged after verification.
-
-## NEXT ACTION
-
-1. Run final exact-head CI for the current branch.
-2. Keep live flags OFF.
-3. In a controlled staging/test Supabase project, review/apply only the additive direct-Gmail/source-state migrations needed for a shadow account.
-4. Configure one Google OAuth test client + one dedicated test Gmail account + encrypted credential key.
-5. Run `gmail:direct-shadow-smoke` and require: RAW parity for every sample, valid captured cursor, history replay without guessed continuation, 0 persistent source writes, 0 Purchase/Shipment/Document writes, 0 AI calls.
-6. Only after that smoke is green consider enabling source persistence/archive for the single controlled shadow account; Purchase/Identity authority still remains unchanged.
+Direct Gmail track remains as before:
+- staging/test Supabase migrations;
+- dedicated Google OAuth test client/account + encrypted credential key;
+- run `gmail:direct-shadow-smoke` with zero writes;
+- only then consider single-account source persistence/archive shadow enablement.
 
 ## RESUME CONTRACT
 
