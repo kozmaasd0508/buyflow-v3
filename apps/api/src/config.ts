@@ -63,11 +63,17 @@ const envSchema = z.object({
   GOOGLE_GMAIL_PUBSUB_AUDIENCE: z.string().url().optional(),
   GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL: z.string().email().optional(),
   BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64: z.string().min(1).optional(),
+  // Gmail categories are advisory only. Direct Gmail scans a broad mailbox
+  // window and lets BuyFlow's commerce gate decide which messages matter.
+  GMAIL_DIRECT_DISCOVERY_QUERY: z
+    .string()
+    .default('newer_than:30d -in:spam -in:trash'),
 
   BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
 
+  // Legacy/Nylas discovery query retained unchanged for backwards compatibility.
   EMAIL_DISCOVERY_QUERY: z
     .string()
     .default('category:purchases newer_than:30d -in:spam -in:trash'),
