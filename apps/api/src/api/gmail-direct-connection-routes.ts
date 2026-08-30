@@ -3,6 +3,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env, requireGmailDirectRuntimeConfig } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
+  renewDirectGmailWatch,
+  runDirectGmailIncrementalSync,
+  runDirectGmailInitialSync,
+} from '../email/gmail-direct-sync.js';
+import {
   GoogleGmailOAuthClient,
   createGmailPkcePair,
 } from '../email/gmail-oauth.js';
@@ -13,6 +18,7 @@ import {
   saveGmailRefreshCredential,
 } from '../email/gmail-runtime-state.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
+import { registerGmailPushRoutes } from './gmail-push-routes.js';
 
 function stateHash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -24,6 +30,12 @@ function publicBaseUrl(): string {
 
 function callbackUri(): string {
   return `${publicBaseUrl()}/auth/google/gmail/callback`;
+}
+
+function boundedSyncLimit(value: unknown, fallback: number): number | null {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 500) return null;
+  return value;
 }
 
 async function requireUser(request: FastifyRequest, reply: FastifyReply) {
@@ -45,6 +57,8 @@ function oauthClient() {
 }
 
 export async function registerGmailDirectConnectionRoutes(app: FastifyInstance) {
+  await registerGmailPushRoutes(app);
+
   app.post('/api/email-connections/gmail/start', async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
@@ -91,6 +105,101 @@ export async function registerGmailDirectConnectionRoutes(app: FastifyInstance) 
         errorType: error instanceof Error ? error.name : 'UnknownError',
       }, 'Failed to start direct Gmail connection');
       return reply.code(503).send({ error: 'gmail_connection_start_unavailable' });
+    }
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { limit?: number };
+  }>('/api/email-connections/:id/gmail/initial-sync', async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    if (!env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
+      return reply.code(503).send({ error: 'gmail_direct_runtime_disabled' });
+    }
+    const limit = boundedSyncLimit(request.body?.limit, 100);
+    if (limit === null) return reply.code(400).send({ error: 'invalid_sync_limit' });
+
+    try {
+      const summary = await runDirectGmailInitialSync({
+        db: getSupabaseAdmin() as any,
+        userId: user.id,
+        emailConnectionId: request.params.id,
+        limit,
+      });
+      return reply.code(200).send({
+        ok: true,
+        provider: 'gmail',
+        authority: 'source_only',
+        summary,
+      });
+    } catch (error) {
+      request.log.error({
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }, 'Direct Gmail initial source sync failed');
+      return reply.code(503).send({ error: 'gmail_initial_sync_failed' });
+    }
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: { limit?: number };
+  }>('/api/email-connections/:id/gmail/sync', async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    if (!env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
+      return reply.code(503).send({ error: 'gmail_direct_runtime_disabled' });
+    }
+    const limit = boundedSyncLimit(request.body?.limit, 100);
+    if (limit === null) return reply.code(400).send({ error: 'invalid_sync_limit' });
+
+    try {
+      const summary = await runDirectGmailIncrementalSync({
+        db: getSupabaseAdmin() as any,
+        userId: user.id,
+        emailConnectionId: request.params.id,
+        limit,
+      });
+      return reply.code(200).send({
+        ok: true,
+        provider: 'gmail',
+        authority: 'source_only',
+        summary,
+      });
+    } catch (error) {
+      request.log.error({
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }, 'Direct Gmail incremental source sync failed');
+      return reply.code(503).send({ error: 'gmail_incremental_sync_failed' });
+    }
+  });
+
+  app.post<{
+    Params: { id: string };
+  }>('/api/email-connections/:id/gmail/watch', async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    if (!env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
+      return reply.code(503).send({ error: 'gmail_direct_runtime_disabled' });
+    }
+
+    try {
+      const registration = await renewDirectGmailWatch({
+        db: getSupabaseAdmin() as any,
+        userId: user.id,
+        emailConnectionId: request.params.id,
+      });
+      return reply.code(200).send({
+        ok: true,
+        provider: 'gmail',
+        authority: 'source_only',
+        expiresAt: registration.expiresAt,
+      });
+    } catch (error) {
+      request.log.error({
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }, 'Direct Gmail watch start/renew failed');
+      return reply.code(503).send({ error: 'gmail_watch_failed' });
     }
   });
 
