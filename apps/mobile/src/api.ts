@@ -80,9 +80,10 @@ export interface PurchaseSummary {
   documentCount: number;
   productCount: number;
   productPreview: string[];
+  productPreviewImageUrl: string | null;
 }
 
-export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount' | 'productCount' | 'productPreview'> {
+export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount' | 'productCount' | 'productPreview' | 'productPreviewImageUrl'> {
   subtotal: number | string | null;
   shippingAmount: number | string | null;
   discountAmount: number | string | null;

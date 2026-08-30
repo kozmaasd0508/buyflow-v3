@@ -1,7 +1,6 @@
 import './ambient-fix.css';
 import './settings-panel.js';
 import './purchase-recovery-panel.js';
-import './product-details-panel.js';
 import './email-scan-review-panel.js';
 import { supabase } from './supabase.js';
 
