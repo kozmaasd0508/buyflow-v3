@@ -1,36 +1,40 @@
 # BuyFlow worklog latest
 
-## 2026-08-30 — Modern email source foundation v1: first gate GREEN
+## 2026-08-30 — Modern email source archive + rich normalizer v1 GREEN
 
 Current extension branch: `codex/modern-email-source-foundation-v1`  
 Architecture PR: #295 -> `codex/v9-real-gmail-identity-shadow`  
-Exact verified head: `aa9bdb39508aa408191f9903d97b7bf5d6ffb9b5`
+Exact verified head: `1f1ae0023d695f8e3b21bb4ebcde249714d358de`
 
 Implemented additively:
-- `NormalizedEmailDocumentV1` with text/HTML, structured-data slots, links, authentication verdicts, immutable raw-source reference, normalizer version and trace id;
-- `IncrementalEmailProvider` capability contract for initial sync, cursor changes and watch lifecycle;
-- additive `source_emails` raw/normalized object-reference + SHA-256/retention/version/trace metadata migration;
-- fail-closed compatibility adapter + tests.
+- `NormalizedEmailDocumentV1` now preserves provider full plain text + HTML, headers, attachments, structured data, safe links, authentication verdicts, immutable source reference, normalizer version and trace id;
+- provider-neutral `normalizeEmailDocumentV1(...)` runs JSON-LD/schema.org extraction, safe HTTP(S) link extraction and DKIM/SPF/DMARC normalization before any AI stage;
+- conflicting/malformed authentication or structured data fails closed instead of inventing trust;
+- immutable content-addressed raw/normalized archive with SHA-256, opaque keys and retry verification;
+- disabled-by-default archive wiring in normalized inbound persistence; source/provenance metadata may be written but Purchase/Shipment/Document/AI write counters remain zero;
+- additive migration now includes raw + normalized hashes/sizes/content types/version/trace metadata and creates private `buyflow-email-source-v1` storage bucket;
+- retention metadata is validated before any raw object write to avoid orphaning bytes on invalid metadata;
+- tests cover structured extraction, malicious/non-HTTP links, auth conflict, immutable retry/idempotency, opaque keys and zero commerce writes.
 
-The first CI run exposed one pre-existing V9 regression: flattened one-line email text could contain an explicit `Fizetési mód: ...` structure signal while the line-based payment-method extractor returned none. The implementation was fixed conservatively by accepting only an explicitly labelled non-empty payment/shipping method as the independent structure signal; the non-acceptance and hard-order/source gates remain unchanged.
-
-GitHub Actions CI run #1090 on exact head `aa9bdb39508aa408191f9903d97b7bf5d6ffb9b5` is GREEN:
+GitHub Actions CI run **#1092** on exact head `1f1ae0023d695f8e3b21bb4ebcde249714d358de` is GREEN:
 - API typecheck PASS
 - API tests PASS
 - API build PASS
 - mobile typecheck PASS
 - mobile web build PASS
 
-Temporary main-targeting CI PR #296 was closed unmerged after verification. PR #295 remains the architecture PR against the active V9 branch.
+Temporary main-targeting CI PR #296 was reopened only for this verification and closed again **without merge**. PR #295 remains draft/mergeable against the active V9 branch.
 
 Safety unchanged:
-- no provider runtime cutover
-- no live Supabase migration application
-- no Purchase/Shipment/Identity production authority change
-- no AI identity authority
-- no raw customer email content committed
+- archive feature flag defaults false;
+- no provider runtime cutover;
+- no live Supabase migration application;
+- no Purchase/Shipment/Identity production authority change;
+- no AI identity authority;
+- no raw customer email content committed;
+- raw email bytes stay private object-storage data, never inline Postgres content.
 
-Next implementation slice: immutable raw-email object writer + provider-to-`NormalizedEmailDocumentV1` normalizer + JSON-LD/Schema.org extraction, still shadow/read-only for Purchase/Identity writes.
+Next implementation slice: provider-specific source acquisition into the new stable document/archive contract, starting with the safest available raw source path, then Gmail incremental `watch + history` behind the existing `IncrementalEmailProvider` contract. Purchase/Identity authority stays unchanged.
 
 ---
 
