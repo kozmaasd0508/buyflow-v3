@@ -1,3 +1,5 @@
+import type { EmailStructuredDataRecord } from './document-v1.js';
+
 export interface StructuredMarkupAudit {
   hasJsonLd: boolean;
   jsonLdBlocks: number;
@@ -22,6 +24,9 @@ const COMMERCE_TYPES = new Set([
   'ReturnAction',
   'CancelAction',
 ]);
+
+const JSON_LD_SCRIPT_REGEX = /<script\b[^>]*type\s*=\s*(?:["']application\/ld\+json["']|application\/ld\+json)[^>]*>([\s\S]*?)<\/script\s*>/gi;
+const ITEM_TYPE_REGEX = /\bitemtype\s*=\s*(?:["']([^"']+)["']|([^\s>]+))/gi;
 
 function normalizeType(value: unknown): string[] {
   if (typeof value === 'string') {
@@ -58,19 +63,94 @@ function decodeBasicHtmlEntities(value: string): string {
     .replace(/&gt;/gi, '>');
 }
 
+function cleanedJsonLdSource(raw: string): string {
+  return decodeBasicHtmlEntities(raw.trim())
+    .replace(/^<!--\s*/, '')
+    .replace(/\s*-->$/, '')
+    .trim();
+}
+
+function topLevelJsonLdNodes(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [value];
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record['@graph'])) return record['@graph'];
+  return [value];
+}
+
+/**
+ * Extracts bounded, parseable structured-data records before any AI stage.
+ * Malformed/oversized JSON-LD is ignored here and remains visible through
+ * auditStructuredMarkup() counters. Raw HTML is never copied into the record.
+ */
+export function extractStructuredDataRecords(
+  html: string,
+  options: { maxRecords?: number; maxJsonLdBlockBytes?: number } = {},
+): EmailStructuredDataRecord[] {
+  const maxRecords = Math.min(Math.max(options.maxRecords ?? 32, 1), 128);
+  const maxJsonLdBlockBytes = Math.min(
+    Math.max(options.maxJsonLdBlockBytes ?? 128 * 1024, 1024),
+    1024 * 1024,
+  );
+  const records: EmailStructuredDataRecord[] = [];
+
+  for (const match of html.matchAll(JSON_LD_SCRIPT_REGEX)) {
+    if (records.length >= maxRecords) break;
+    const raw = cleanedJsonLdSource(match[1] ?? '');
+    if (!raw || Buffer.byteLength(raw, 'utf8') > maxJsonLdBlockBytes) continue;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      for (const node of topLevelJsonLdNodes(parsed)) {
+        if (records.length >= maxRecords) break;
+        const schemaType = node && typeof node === 'object'
+          ? (normalizeType((node as Record<string, unknown>)['@type'])[0] ?? null)
+          : null;
+        records.push({
+          kind: 'json_ld',
+          schemaType,
+          payload: node,
+          source: 'body_html',
+        });
+      }
+    } catch {
+      // Audit path reports malformed JSON-LD; extraction remains fail-closed.
+    }
+  }
+
+  const seenMicrodata = new Set<string>();
+  for (const match of html.matchAll(ITEM_TYPE_REGEX)) {
+    if (records.length >= maxRecords) break;
+    const value = (match[1] ?? match[2] ?? '').trim();
+    if (!/schema\.org/i.test(value)) continue;
+    for (const part of value.split(/\s+/)) {
+      if (records.length >= maxRecords) break;
+      if (!/schema\.org/i.test(part)) continue;
+      const schemaType = normalizeType(part)[0];
+      if (!schemaType) continue;
+      const key = `${schemaType}:${part}`;
+      if (seenMicrodata.has(key)) continue;
+      seenMicrodata.add(key);
+      records.push({
+        kind: 'microdata',
+        schemaType,
+        payload: { itemType: part },
+        source: 'body_html',
+      });
+    }
+  }
+
+  return records;
+}
+
 export function auditStructuredMarkup(html: string): StructuredMarkupAudit {
   const jsonLdTypes = new Set<string>();
   const microdataTypes = new Set<string>();
   let jsonLdBlocks = 0;
   let jsonLdParseErrors = 0;
 
-  const scriptRegex = /<script\b[^>]*type\s*=\s*(?:["']application\/ld\+json["']|application\/ld\+json)[^>]*>([\s\S]*?)<\/script\s*>/gi;
-  for (const match of html.matchAll(scriptRegex)) {
+  for (const match of html.matchAll(JSON_LD_SCRIPT_REGEX)) {
     jsonLdBlocks += 1;
-    const raw = decodeBasicHtmlEntities((match[1] ?? '').trim())
-      .replace(/^<!--\s*/, '')
-      .replace(/\s*-->$/, '')
-      .trim();
+    const raw = cleanedJsonLdSource(match[1] ?? '');
     if (!raw) continue;
     try {
       const parsed = JSON.parse(raw) as unknown;
@@ -80,8 +160,7 @@ export function auditStructuredMarkup(html: string): StructuredMarkupAudit {
     }
   }
 
-  const itemTypeRegex = /\bitemtype\s*=\s*(?:["']([^"']+)["']|([^\s>]+))/gi;
-  for (const match of html.matchAll(itemTypeRegex)) {
+  for (const match of html.matchAll(ITEM_TYPE_REGEX)) {
     const value = (match[1] ?? match[2] ?? '').trim();
     if (!/schema\.org/i.test(value)) continue;
     for (const part of value.split(/\s+/)) {
