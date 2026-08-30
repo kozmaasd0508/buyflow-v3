@@ -20,7 +20,7 @@ BuyFlow remains safety-first and shadow-oriented for the new identity path:
 - automatic identity linking requires machine-readable hard evidence.
 - no raw customer email bodies or identifiers are committed to the repository.
 - no modern email-source migration has been applied live.
-- no provider runtime cutover has occurred.
+- no new provider has been cut over into production runtime.
 
 ## PURCHASE IDENTITY GRAPH V2 — ALREADY IMPLEMENTED
 
@@ -45,7 +45,7 @@ V9 trust boundary:
 
 ## MODERN EMAIL SOURCE FOUNDATION V1 — IMPLEMENTED ON PR #295
 
-Core files now include:
+Core files include:
 - `apps/api/src/email/document-v1.ts`
 - `apps/api/src/email/normalize-document-v1.ts`
 - `apps/api/src/email/authentication-v1.ts`
@@ -53,9 +53,10 @@ Core files now include:
 - `apps/api/src/email/structured-markup.ts`
 - `apps/api/src/email/source-archive-v1.ts`
 - `apps/api/src/email/incremental-provider.ts`
+- `apps/api/src/email/gmail-incremental-provider.ts`
 - `supabase/migrations/20260830203000_add_modern_email_source_foundation.sql`
 
-The stable `NormalizedEmailDocumentV1` path now provides:
+The stable `NormalizedEmailDocumentV1` path provides:
 - provider full plain text when available, otherwise deterministic HTML-to-text fallback;
 - body HTML, headers and attachment metadata;
 - bounded JSON-LD/schema.org extraction before AI;
@@ -67,15 +68,30 @@ The stable `NormalizedEmailDocumentV1` path now provides:
 - deterministic cross-pipeline trace id;
 - retry-safe immutable-object verification.
 
-Archive runtime wiring exists in `persistNormalizedInboundEmail(...)` but is disabled by default with `BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED=false`.
-When explicitly enabled after infrastructure deployment, it writes only source/provenance metadata; Purchase/Shipment/Document/AI write counters remain zero.
+Archive runtime wiring exists in `persistNormalizedInboundEmail(...)` but defaults OFF with `BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED=false`.
+When deliberately enabled after infrastructure deployment, it writes source/provenance metadata only; Purchase/Shipment/Document/AI write counters remain zero.
 
 The migration adds raw + normalized object reference/hash/size/content-type/version/trace columns and defines private bucket `buyflow-email-source-v1`. It is committed only and has NOT been applied live.
 
+## GMAIL INCREMENTAL PROVIDER V1 — IMPLEMENTED, NOT RUNTIME-WIRED
+
+`GmailIncrementalEmailProvider` now implements the additive `IncrementalEmailProvider` contract using Gmail REST directly, without a new dependency:
+- `messages.list` search + full `messages.get` normalization;
+- full provider plain text + HTML + headers + attachment metadata;
+- exact RAW MIME retrieval through `messages.get?format=raw` for source archiving;
+- attachment byte download;
+- initial sync captures Gmail `historyId` **before** snapshot scan so racing mailbox changes can be replayed instead of missed;
+- incremental `history.list` change replay with created/updated/deleted dedupe;
+- expired/invalid Gmail history cursor (404) -> `resetRequired=true`, never a guessed cursor;
+- `watch` / renew / stop support for configured Google Pub/Sub topic;
+- access token is supplied externally and never placed in URLs or diagnostics.
+
+This class is not connected to user OAuth/runtime yet, so it cannot change live ingestion behavior.
+
 ## VERIFICATION STATUS
 
-GitHub Actions CI **#1092** verified code head:
-`1f1ae0023d695f8e3b21bb4ebcde249714d358de`
+GitHub Actions CI **#1095** verified Gmail provider + source foundation code head:
+`234cdb2b139dc245cfa0c30b3d8cd5a2a01b2646`
 
 PASS:
 - API typecheck
@@ -84,19 +100,20 @@ PASS:
 - mobile typecheck
 - mobile web build
 
-Temporary main-targeting CI PR #296 was reopened only for verification and closed again without merge.
-Documentation updates followed that verified code head; run the normal exact-head CI gate again after the final handoff/worklog commit before claiming the whole PR head green.
+The first Gmail CI attempt #1094 failed only on a strict optional test assertion (`message.headers` possibly undefined); that test typing was fixed without changing provider behavior, then #1095 passed fully.
+
+Temporary main-targeting CI PR #296 is verification-only and must be closed without merge after the final exact-head documentation gate.
 
 No Supabase migration has been applied live. No production provider/runtime/identity authority was changed.
 
 ## NEXT ACTION
 
-Connect real provider source acquisition to the stable document/archive contract without changing Purchase authority:
-1. inventory each provider's actual available source bytes/body/headers;
-2. wire the safest existing raw source path first (Mailgun forwarded `.eml` already exposes exact bytes in shadow);
-3. keep archive flag off by default and preserve zero Purchase/Identity writes;
-4. add Gmail first-class incremental provider behind `IncrementalEmailProvider` (`watch + historyId/history.list`) after source acquisition contracts are proven;
-5. do not use Nylas/provider snippet as a substitute for raw/full content when richer source is available.
+Finish provider-source wiring without changing Purchase authority:
+1. connect the existing Mailgun forwarded `.eml` exact bytes to the archive path when persistence is explicitly enabled;
+2. add the Gmail OAuth/token/runtime adapter that supplies access tokens to `GmailIncrementalEmailProvider`, still behind a disabled feature flag;
+3. persist provider cursor/watch state separately from Purchase identity state;
+4. run synthetic + read-only Gmail smoke before any provider cutover;
+5. only then consider enabling source archive/runtime for a controlled shadow account.
 
 After provider ingestion is stable, persisted graph/review/projection tables must extend the existing Purchase Identity Graph v2 concepts instead of duplicating them.
 
