@@ -67,7 +67,7 @@ foreach ($case in $cases) {
         reason = $null
     }
     try {
-        $uri = "$endpoint?message_id=$($case.gmail_id)"
+        $uri = "${endpoint}?message_id=$($case.gmail_id)"
         $r = Invoke-RestMethod -Uri $uri -Method Get -TimeoutSec 300
         $d = $r.buyflow_result.decision
         $row.actual_event = $d.event_type
@@ -132,7 +132,7 @@ $json = $report | ConvertTo-Json -Depth 30
 
 Write-Host ''
 Write-Host '==================== SUMMARY ==================='
-Write-Host ("Exact:        {0}/19 ({1}%%)" -f $exactCount,$percent)
+Write-Host ("Exact:        {0}/19 ({1}%)" -f $exactCount,$percent)
 Write-Host ("Event:        {0}/19" -f $eventCount)
 Write-Host ("Action:       {0}/19" -f $actionCount)
 Write-Host ("SHADOW safe:  {0}/19" -f $shadowCount)
