@@ -169,7 +169,7 @@ function ensureBottomNav() {
   nav.dataset.oxshop = '1';
   nav.classList.add('oxshop-bottom-nav');
 
-  const labels = ['Kezdőlap', 'Rendelések', 'Vásárlások', 'Üzenetek', 'Profil'];
+  const labels = ['Kezdőlap', 'Csomagok', 'Vásárlások', 'Üzenetek', 'Profil'];
   Array.from(nav.querySelectorAll<HTMLElement>('.nav-item')).forEach((item, index) => {
     item.classList.add('oxshop-nav-item');
     const span = item.querySelector<HTMLElement>('span');
