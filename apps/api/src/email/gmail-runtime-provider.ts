@@ -1,5 +1,8 @@
 import { GmailIncrementalEmailProvider } from './gmail-incremental-provider.js';
-import { GoogleGmailOAuthClient } from './gmail-oauth.js';
+import {
+  GoogleGmailOAuthClient,
+  assertGmailReadonlyScope,
+} from './gmail-oauth.js';
 import type {
   EmailChangePage,
   EmailSyncCursor,
@@ -80,6 +83,10 @@ export class GmailRuntimeProvider {
       userId: this.config.userId,
       emailConnectionId: this.config.emailConnectionId,
     });
+    // Scope is stored at the original authorization boundary. A refresh token
+    // response can omit the scope field, so validate the durable grant before
+    // asking Google for a new short-lived access token.
+    assertGmailReadonlyScope(credential.scopes);
     const refreshed = await this.config.oauthClient.refreshAccessToken(credential.refreshToken);
     const expiry = Date.parse(refreshed.expiresAt);
     this.cachedAccessToken = {
