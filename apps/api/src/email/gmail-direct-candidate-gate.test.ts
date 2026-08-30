@@ -46,6 +46,16 @@ test('schema.org Order markup is observed outside Gmail Purchases category', () 
   });
 });
 
+test('product-only schema markup does not turn a personal mailbox message into stored commerce', () => {
+  const result = evaluateGmailDirectCandidate(email({
+    bodyHtml: '<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Sample product"}</script>',
+  }));
+  assert.deepEqual(result, {
+    action: 'ignore',
+    reason: 'no_positive_commerce_evidence',
+  });
+});
+
 test('generic order confirmation is observed outside Gmail Purchases category', () => {
   const result = evaluateGmailDirectCandidate(email({
     subject: 'Order confirmation #123456',
