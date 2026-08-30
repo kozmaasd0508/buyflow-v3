@@ -58,7 +58,7 @@ test('normalizes Gmail full payload with plain/html bodies, headers and attachme
     contentType: 'application/pdf',
     size: 321,
   }]);
-  assert.ok(message.headers.some((header) => header.name === 'Authentication-Results'));
+  assert.ok((message.headers ?? []).some((header) => header.name === 'Authentication-Results'));
 });
 
 test('direct Gmail provider exposes exact raw MIME and attachment bytes without logging token/content', async () => {
