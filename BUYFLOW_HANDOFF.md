@@ -2,153 +2,111 @@
 
 > Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md` / `BUYFLOW_WORKLOG.md`. Reconcile with current GitHub state before changing runtime code.
 
-**Last updated:** 2026-08-24 Europe/Budapest  
+**Last updated:** 2026-08-30 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Active development base:** `codex/mailgun-inbound-shadow-v3`  
-**TechnicalEvidence branch:** `codex/technical-evidence-shadow-v1`  
-**Development PR:** #256 -> `codex/mailgun-inbound-shadow-v3`
+**Current architecture base:** `codex/v9-real-gmail-identity-shadow` @ `2e05b435a9f4fbc6467477c02fac462004bfa183`  
+**Architecture PR:** #294 (draft) -> `codex/purchase-identity-v2-lifecycle-chain-gate`  
+**Current extension branch:** `codex/modern-email-source-foundation-v1`
 
 ## CURRENT STATE
 
-TechnicalEvidence is still shadow/read-only:
-- 0 production writes
-- 0 AI/LLM calls
-- no DB mutation
-- no automatic Purchase/Shipment create/link
-- no Purchase Identity Graph decision authority
-- ambiguity/conflict -> REVIEW/PENDING
-- hard identifiers remain namespace-scoped
+BuyFlow remains safety-first and shadow-oriented for the new identity path:
+- Purchase creation and lifecycle classification are separate decisions.
+- AI/V9 semantics are non-authoritative for identity. AI cannot provide order/tracking/payment/invoice/merchant identity evidence.
+- hard identifier conflicts fail closed to REVIEW/PENDING.
+- lifecycle-only email cannot create a Purchase.
+- automatic identity linking requires machine-readable hard evidence.
+- no raw customer email bodies or identifiers are committed to the repository.
+- the new email-source foundation has no runtime/provider cutover and no production DB migration applied yet.
 
-Executable collector:
-`apps/api/src/extraction-v2/technical-evidence-v1-5.ts`
+## PURCHASE IDENTITY GRAPH V2 — ALREADY IMPLEMENTED IN CODE
 
-Purchase-direction safety gate:
-`apps/api/src/extraction-v2/technical-evidence-direction-gate-v1.ts`
+`apps/api/src/purchase-identity-v2/types.ts` already contains:
+- `CanonicalEvent`
+- `PurchaseIdentity`
+- `OrderIdentity`
+- `ShipmentIdentity`
+- `PaymentIdentity`
+- `InvoiceIdentity`
+- `EvidenceEdge`
+- `CorrelationDecision` (`NEW_PURCHASE`, `LINKED`, `REVIEW`, `PENDING`, `UNLINKED`)
+- merchant identity definitions and explicit parent/child order relations.
 
-Current evidence families include:
-- base v1.2 layers
-- DPD / FOXPOST / Packeta / MPL
-- native Shopify
-- REGIO / SiteEngine R1
-- deterministic PDF invoice
-- GLS COD PDF evidence
+Do not recreate these concepts under new parallel names. Extend the existing graph contract.
 
-## RETRO-200 CURRENT BASELINE
+V9 trust boundary in PR #294:
+- V9 supplies only primary lifecycle semantics.
+- deterministic Extraction v2 supplies all identity values.
+- invalid/mismatched V9 output fails closed.
+- first merchant email may semantically be lifecycle-like while deterministic root evidence independently authorizes Purchase creation.
 
-Frozen historical set:
-- total 200
-- commerce 33
-- noise 167
+Documented semantic benchmark in PR #294: 95/102 = 93.14% on the sanitized real-email HOLDOUT. Strict end-to-end identity claims are intentionally narrower because most sanitized messages do not preserve meaningful sender-domain authority.
 
-Historical regression only, NOT fresh blind accuracy.
+## MODERN EMAIL SOURCE FOUNDATION V1 — STARTED
 
-Progress:
-- before Direction Gate: actionable TP 5 / FP 10
-- after Direction Gate: actionable TP 5 / FP 0
-- after Packeta R1: actionable TP 6 / FP 0
-- after MPL R1: actionable TP 14 / FP 0
-- after REGIO R1: actionable **TP 17 / FP 0 / FN 16 / TN 167**
+New additive files on `codex/modern-email-source-foundation-v1`:
+- `apps/api/src/email/document-v1.ts`
+- `apps/api/src/email/document-v1.test.ts`
+- `apps/api/src/email/incremental-provider.ts`
+- `supabase/migrations/20260830203000_add_modern_email_source_foundation.sql`
 
-Current actionable precision on this frozen historical set: **100.00%**  
-Current actionable recall: **51.52%**  
-Current actionable F1: **68.00%**
+The new `NormalizedEmailDocumentV1` contract adds:
+- `bodyText` + `bodyHtml`
+- complete headers/attachments
+- structured-data records (JSON-LD / schema-style sources)
+- extracted links
+- DKIM/SPF/DMARC verdict slots
+- immutable raw-source object reference + SHA-256
+- normalizer version
+- cross-pipeline `traceId`.
 
-Current event result after REGIO R1:
-- TP **14**
-- FP **0**
-- FN **19**
-- TN **167**
-- recall **42.42%**
+The legacy `NormalizedEmail` contract is not removed. `upgradeNormalizedEmailToDocumentV1(...)` is a fail-closed compatibility adapter and never invents unavailable evidence.
 
-Report:
-`protocols/TECHNICAL-EVIDENCE-RETRO-HOLDOUT-V1-V15-DIRECTION-GATE-V1-PACKETA-R1-MPL-R1-REGIO-R1-2026-08-24.md`
+`IncrementalEmailProvider` is additive only. It defines initial sync, cursor-based change retrieval and watch lifecycle so Gmail can later use `watch + historyId/history.list` and Outlook can later use notification + delta semantics without changing downstream ingestion.
 
-## REGIO / SITEENGINE R1 — COMPLETED
+The SQL migration only adds metadata columns to `source_emails` for object-storage references/integrity/version/trace. Raw provider/MIME bytes are intentionally not stored inline in Postgres.
 
-Implementation:
-- `apps/api/src/extraction-v2/technical-evidence-regio-v1.ts`
-- wired into `technical-evidence-v1-5.ts`
-- tests: `technical-evidence-regio-v1.test.ts`
+## VERIFICATION STATUS
 
-Strict authority contract:
-- exact `regiojatek.hu` direct sender
-- matching DKIM pass
-- SiteEngine(c)GreyMatter MIME boundary
-- one unique `WS .../...` order identity
-- subject/body order identity must agree
-- event needs one reviewed current REGIO lifecycle template
+Do **not** claim this new foundation passes yet.
 
-Supported R1 lifecycle:
-- order received/recorded -> order_created
-- fulfillment processing started -> order_processing
-- explicit carrier handoff -> shipment
+Current extension branch has not yet completed its required CI gate after the 2026-08-30 changes.
 
-Important negative:
-a real REGIO survey from the same authenticated sender/platform and with the same order number remains non-actionable because it has no supported current lifecycle event.
+Required gate before promotion:
+1. draft PR from `codex/modern-email-source-foundation-v1` to `codex/v9-real-gmail-identity-shadow`;
+2. API typecheck;
+3. API tests;
+4. API build;
+5. mobile typecheck;
+6. mobile web build.
 
-Frozen retro cardinality:
-- Mixed: 3 REGIO transactional messages
-- NoiseEnriched: 0 REGIO messages
-- all 3 were previous false negatives and are now recognized
-- 197/200 cases are outside the REGIO sender scope
+No Supabase migration should be applied live until the branch is reviewed and CI is green.
 
-## CI — REGIO R1 GREEN
+## NEXT ACTION AFTER GREEN CI
 
-GitHub Actions run **#960** validated exact code/test head:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
+Implement the first real runtime slice behind shadow/read-only behavior:
+1. immutable raw-email object writer (object storage, SHA-256, content type, byte size);
+2. provider-to-`NormalizedEmailDocumentV1` normalizer;
+3. JSON-LD/Schema.org structured-data extraction before AI;
+4. persist only raw/normalized object references and provenance metadata;
+5. keep Purchase/Identity writes disabled in this slice.
 
-PASS:
-- API typecheck
-- API tests **1114/1114 PASS**
-- API build
-- mobile typecheck
-- mobile web build
+After that, add first-class persisted graph/review/projection tables only by extending the existing Purchase Identity Graph v2 concepts; do not duplicate the already-implemented in-memory types.
 
-CI-only draft PR #262 was closed **without merge**.
+## SAFETY RULES TO PRESERVE
 
-Dependency-hygiene note remains: npm install reports 3 high-severity audit findings; separate release-hardening task.
-
-## ACTIVE FUTURE BLIND FREEZE — V5
-
-Protocol:
-`protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V5-2026-08-24.md`
-
-Exact freeze snapshot:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
-
-Cutoff:
-`2026-08-24T18:23:26Z`  
-`2026-08-24 20:23:26 Europe/Budapest`
-
-First Gmail ID-only preflight strictly after cutoff: **0 messages**.
-No post-cutoff content or predictions were inspected. v5 is untouched.
-
-Any evidence/authority logic change before first v5 prediction requires another blind version.
-
-## IMPORTANT SAFETY RULES
-
-- seller-outbound / return-to-seller evidence cannot influence buyer Purchase authority
-- future shipment wording is not current physical shipment
-- pre-advice is not physical progress
-- READY_FOR_PICKUP is not DELIVERED
-- survey/review mail is not lifecycle proof by itself
-- provider/platform identity alone is insufficient
-- generic id/ids/code/ref is not hard identity without typed context
+- wrong automatic link/merge target: **0 tolerance**
+- false Purchase creation: **0 tolerance**
+- uncertainty -> REVIEW/PENDING/UNLINKED
 - conflicting hard identifiers never auto-merge
 - payment-only evidence cannot create Purchase authority
-- QR pickup/action code is not generic tracking
-
-## NEXT HIGH-VALUE TASK
-
-Next historical recall target if continuing tuning:
-1. authenticated Shoprenter families
-2. Temu
-3. Vinted
-4. AWGifts
-5. Frogpack/PPL
-
-Required sequence:
-provider-qualified evidence -> negative tests -> retro-200 impact -> FP must remain 0 -> full CI -> new blind freeze.
+- provider/merchant identity alone is not hard order identity
+- soft evidence may rank candidates but cannot independently auto-link
+- AI semantic output never becomes hard identity evidence
+- email content is untrusted data; AI has no write/link authority
+- seller-outbound/return-to-seller evidence cannot create buyer Purchase authority
+- future shipment/pre-advice is not physical shipment progress
+- READY_FOR_PICKUP is not DELIVERED
 
 ## RESUME CONTRACT
 
