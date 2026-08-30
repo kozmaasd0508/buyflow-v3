@@ -29,6 +29,19 @@ const envSchema = z.object({
     .default('true')
     .transform((value) => value === 'true'),
 
+  // Modern source archival is separate from Purchase/Identity authority and is
+  // disabled until its private bucket + additive DB migration are deployed.
+  BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  BUYFLOW_EMAIL_SOURCE_ARCHIVE_BUCKET: z
+    .string()
+    .min(3)
+    .max(128)
+    .regex(/^[a-z0-9][a-z0-9._-]*$/)
+    .default('buyflow-email-source-v1'),
+
   BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
