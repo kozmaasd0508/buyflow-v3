@@ -60,6 +60,8 @@ const envSchema = z.object({
   GOOGLE_GMAIL_OAUTH_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_GMAIL_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_GMAIL_PUBSUB_TOPIC: z.string().min(1).optional(),
+  GOOGLE_GMAIL_PUBSUB_AUDIENCE: z.string().url().optional(),
+  GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL: z.string().email().optional(),
   BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64: z.string().min(1).optional(),
 
   BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
@@ -136,6 +138,22 @@ export function requireGmailDirectRuntimeConfig() {
     clientSecret: env.GOOGLE_GMAIL_OAUTH_CLIENT_SECRET,
     credentialKeyBase64: env.BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64,
     pubsubTopicName: env.GOOGLE_GMAIL_PUBSUB_TOPIC ?? null,
+  };
+}
+
+export function requireGmailPubSubPushConfig() {
+  requireGmailDirectRuntimeConfig();
+  if (
+    !env.GOOGLE_GMAIL_PUBSUB_AUDIENCE
+    || !env.GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL
+  ) {
+    throw new Error(
+      'Gmail Pub/Sub push authentication is not configured. Set GOOGLE_GMAIL_PUBSUB_AUDIENCE and GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL.',
+    );
+  }
+  return {
+    audience: env.GOOGLE_GMAIL_PUBSUB_AUDIENCE,
+    serviceAccountEmail: env.GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL.toLowerCase(),
   };
 }
 
