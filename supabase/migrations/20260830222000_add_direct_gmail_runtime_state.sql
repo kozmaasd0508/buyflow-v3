@@ -38,6 +38,7 @@ revoke all on table public.email_provider_credentials from anon, authenticated;
 comment on table public.email_provider_credentials is
   'Server-only encrypted provider refresh credentials. Plain OAuth tokens must never be stored in this table.';
 
+drop trigger if exists trg_email_provider_credentials_updated_at on public.email_provider_credentials;
 create trigger trg_email_provider_credentials_updated_at
 before update on public.email_provider_credentials
 for each row execute function public.set_updated_at();
@@ -72,6 +73,53 @@ revoke all on table public.email_sync_states from anon, authenticated;
 comment on table public.email_sync_states is
   'Server-only provider cursor/watch state. Cursor advancement is separate from Purchase identity state.';
 
+drop trigger if exists trg_email_sync_states_updated_at on public.email_sync_states;
 create trigger trg_email_sync_states_updated_at
 before update on public.email_sync_states
 for each row execute function public.set_updated_at();
+
+-- History cursors may be processed by concurrent workers. Advancing the cursor
+-- must therefore be compare-and-swap: a stale worker may never overwrite a
+-- newer committed historyId.
+create or replace function public.commit_email_sync_cursor(
+  p_email_connection_id uuid,
+  p_user_id uuid,
+  p_expected_cursor text,
+  p_next_cursor text,
+  p_cursor_observed_at timestamptz,
+  p_last_synced_at timestamptz default now()
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count integer;
+begin
+  if p_next_cursor is null or p_next_cursor !~ '^[0-9]+$' then
+    raise exception 'invalid gmail history cursor';
+  end if;
+  if p_expected_cursor is not null and p_expected_cursor !~ '^[0-9]+$' then
+    raise exception 'invalid expected gmail history cursor';
+  end if;
+
+  update public.email_sync_states
+  set cursor_value = p_next_cursor,
+      cursor_observed_at = p_cursor_observed_at,
+      sync_status = 'idle',
+      last_synced_at = p_last_synced_at,
+      last_error_code = null,
+      updated_at = now()
+  where email_connection_id = p_email_connection_id
+    and user_id = p_user_id
+    and provider = 'gmail'
+    and cursor_value is not distinct from p_expected_cursor;
+
+  get diagnostics v_count = row_count;
+  return v_count = 1;
+end;
+$$;
+
+revoke all on function public.commit_email_sync_cursor(uuid, uuid, text, text, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.commit_email_sync_cursor(uuid, uuid, text, text, timestamptz, timestamptz) to service_role;
