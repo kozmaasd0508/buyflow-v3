@@ -50,6 +50,18 @@ const envSchema = z.object({
     .default('false')
     .transform((value) => value === 'true'),
 
+  // Direct Gmail is an alternative provider runtime. It is deliberately OFF by
+  // default until OAuth credentials, encrypted-token storage, Pub/Sub and the
+  // additive DB migrations are deployed and shadow-smoked.
+  BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  GOOGLE_GMAIL_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_GMAIL_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_GMAIL_PUBSUB_TOPIC: z.string().min(1).optional(),
+  BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64: z.string().min(1).optional(),
+
   BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
@@ -104,6 +116,27 @@ export function requireNylasWebhookSecret() {
     throw new Error('Nylas webhook secret is not configured. Set NYLAS_WEBHOOK_SECRET.');
   }
   return env.NYLAS_WEBHOOK_SECRET;
+}
+
+export function requireGmailDirectRuntimeConfig() {
+  if (!env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
+    throw new Error('Direct Gmail runtime is disabled');
+  }
+  if (
+    !env.GOOGLE_GMAIL_OAUTH_CLIENT_ID
+    || !env.GOOGLE_GMAIL_OAUTH_CLIENT_SECRET
+    || !env.BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64
+  ) {
+    throw new Error(
+      'Direct Gmail runtime is not configured. Set GOOGLE_GMAIL_OAUTH_CLIENT_ID, GOOGLE_GMAIL_OAUTH_CLIENT_SECRET and BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64.',
+    );
+  }
+  return {
+    clientId: env.GOOGLE_GMAIL_OAUTH_CLIENT_ID,
+    clientSecret: env.GOOGLE_GMAIL_OAUTH_CLIENT_SECRET,
+    credentialKeyBase64: env.BUYFLOW_EMAIL_CREDENTIALS_KEY_BASE64,
+    pubsubTopicName: env.GOOGLE_GMAIL_PUBSUB_TOPIC ?? null,
+  };
 }
 
 export function requireOpenAIConfig() {
