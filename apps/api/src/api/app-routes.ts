@@ -147,7 +147,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
           .order('created_at', { ascending: false }),
         supabase
           .from('products')
-          .select('id,purchase_id,name,source_key')
+          .select('id,purchase_id,name,image_url,source_key')
           .in('purchase_id', purchaseIds)
           .order('created_at', { ascending: true }),
       ]);
@@ -174,12 +174,14 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         const shipments = shipmentRows.filter((row) => row.purchase_id === purchase.id);
         const documents = documentRows.filter((row) => row.purchase_id === purchase.id);
         const products = productRows.filter((row) => row.purchase_id === purchase.id);
+        const previewImage = products.find((row) => typeof row.image_url === 'string' && row.image_url.length > 0)?.image_url ?? null;
         return {
           ...publicPurchase(purchase),
           shipments: shipments.map(publicShipment),
           documentCount: documents.length,
           productCount: products.length,
           productPreview: products.slice(0, 2).map((row) => row.name),
+          productPreviewImageUrl: previewImage,
         };
       }),
     };
