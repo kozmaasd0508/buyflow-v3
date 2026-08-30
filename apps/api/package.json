@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "nylas:smoke": "tsx src/scripts/nylas-smoke.ts",
+    "gmail:direct-shadow-smoke": "tsx src/scripts/gmail-direct-shadow-smoke.ts",
     "nylas:audit": "tsx src/scripts/nylas-audit.ts",
     "nylas:protocol-shadow-audit": "tsx src/scripts/nylas-protocol-shadow-audit.ts",
     "nylas:markup-audit": "tsx src/scripts/nylas-markup-audit.ts",
