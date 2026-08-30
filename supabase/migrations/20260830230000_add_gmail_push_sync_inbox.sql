@@ -65,8 +65,7 @@ begin
   on conflict (email_connection_id, history_id)
   do update set
     last_seen_at = now(),
-    updated_at = now()
-  ;
+    updated_at = now();
 
   get diagnostics v_count = row_count;
   return v_count;
@@ -117,6 +116,21 @@ returns void
 language plpgsql
 security definer
 set search_path = public
+as $$;
+-- placeholder deliberately replaced below
+$$;
+
+-- Recreate with an explicit retry schedule so behavior is obvious/auditable and
+-- does not depend on numeric/interval coercion rules.
+create or replace function public.finish_gmail_sync_inbox_event(
+  p_id uuid,
+  p_success boolean,
+  p_error_code text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   if p_success then
@@ -134,12 +148,14 @@ begin
       status = case when attempts >= 8 then 'dead_letter' else 'retry' end,
       next_attempt_at = case
         when attempts >= 8 then next_attempt_at
-        else now() + (
-          least(
-            3600::numeric,
-            30::numeric * power(2::numeric, least(greatest(attempts - 1, 0), 7))
-          ) * interval '1 second'
-        )
+        when attempts <= 1 then now() + interval '30 seconds'
+        when attempts = 2 then now() + interval '1 minute'
+        when attempts = 3 then now() + interval '2 minutes'
+        when attempts = 4 then now() + interval '4 minutes'
+        when attempts = 5 then now() + interval '8 minutes'
+        when attempts = 6 then now() + interval '16 minutes'
+        when attempts = 7 then now() + interval '32 minutes'
+        else now() + interval '1 hour'
       end,
       locked_at = null,
       last_error_code = left(coalesce(p_error_code, 'gmail_sync_failed'), 80),
