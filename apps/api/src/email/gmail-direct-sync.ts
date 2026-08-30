@@ -154,7 +154,7 @@ export async function runDirectGmailInitialSync(input: {
   fetchImpl?: typeof fetch;
 }): Promise<GmailDirectSyncSummary> {
   const { connection, runtime } = await createDirectGmailRuntime(input);
-  const query = input.query?.trim() || env.EMAIL_DISCOVERY_QUERY;
+  const query = input.query?.trim() || env.GMAIL_DIRECT_DISCOVERY_QUERY;
   const read = await runtime.readInitialSync({
     query,
     ...(input.limit !== undefined ? { limit: input.limit } : {}),
