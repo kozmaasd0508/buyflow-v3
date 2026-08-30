@@ -163,7 +163,10 @@ export class GmailRuntimeProvider {
       userId: this.config.userId,
       emailConnectionId: this.config.emailConnectionId,
     });
-    const registration = state?.watch
+    if (!state?.cursor) {
+      throw new Error('Gmail watch requires a committed initial-sync cursor');
+    }
+    const registration = state.watch
       ? await this.provider.renewWatch(state.watch)
       : await this.provider.startWatch();
     await saveGmailWatchRegistration({
