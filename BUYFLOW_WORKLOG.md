@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-30 — Mailgun exact EML source archive gate
+
+- PR #295 stays draft; no production cutover and no live migration.
+- Mailgun normalization now preserves full provider plain text in `bodyText`, including forwarded `.eml` content.
+- The existing Mailgun shadow route can pass exact captured `.eml` / `message/rfc822` bytes to the immutable raw archive; it never reconstructs the outer Mailgun form and calls that raw MIME.
+- Added a second independent gate `BUYFLOW_MAILGUN_SOURCE_PERSIST_ENABLED=false`; source persistence is attempted only when this and `BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED` are both explicitly true.
+- If explicitly enabled persistence fails, the webhook returns 503 so Mailgun can retry rather than silently lose source provenance.
+- Purchase/Shipment/Document writes remain disabled; normal default Mailgun behavior is still shadow-only with no source DB/archive write.
+- CI #1099 on code head `5cedbed5f0a3aef8aef28090f607823adc4cdfdf`: API typecheck/tests/build PASS; mobile typecheck/build PASS.
+- Next: Gmail OAuth/token runtime adapter + separate history/watch cursor persistence, then synthetic/read-only Gmail smoke before any controlled shadow enablement.
+
 ## 2026-08-30 — Source archive + Gmail incremental provider v1
 
 - PR #295 remains draft on `codex/modern-email-source-foundation-v1` -> `codex/v9-real-gmail-identity-shadow`; no production cutover or live migration.
