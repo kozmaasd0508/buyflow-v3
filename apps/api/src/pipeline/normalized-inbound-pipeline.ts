@@ -1,3 +1,4 @@
+import { env } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
   resolveBuyFlowEmailRecipient,
@@ -7,6 +8,13 @@ import type {
   SesSecurityDisposition,
   SesSecuritySignals,
 } from '../email/ses-inbound.js';
+import {
+  archiveNormalizedEmailSourceV1,
+  SupabaseEmailArchiveObjectStore,
+  type ArchivedEmailSourceV1,
+  type EmailArchiveObjectStore,
+  type RawEmailSourceV1,
+} from '../email/source-archive-v1.js';
 import type { NormalizedEmail } from '../email/types.js';
 import {
   normalizedEmailToDeterministicInput,
@@ -48,6 +56,8 @@ export interface NormalizedInboundPersistResult {
   classification?: string | null;
   parserVersion?: string | null;
   deduped?: boolean;
+  sourceArchived?: boolean;
+  traceId?: string;
   purchaseWrites: 0;
   shipmentWrites: 0;
   documentWrites: 0;
@@ -210,11 +220,28 @@ export function planNormalizedInboundEmail(input: {
   };
 }
 
+function sourceArchiveDiagnostic(source: ArchivedEmailSourceV1) {
+  return {
+    schema_version: 1,
+    archived: true,
+    raw_archived: Boolean(source.rawRef),
+    normalizer_version: source.document.normalizerVersion,
+    structured_data_records: source.document.structuredData.length,
+    links: source.document.links.length,
+    authentication: {
+      dkim: source.document.authentication.dkim,
+      spf: source.document.authentication.spf,
+      dmarc: source.document.authentication.dmarc,
+    },
+  };
+}
+
 function sourceInsertPayload(input: {
   email: NormalizedEmail;
   recipient: ResolvedBuyFlowRecipient;
   plan: NormalizedInboundPlan;
   sourceQuery: string;
+  archivedSource?: ArchivedEmailSourceV1 | null;
 }) {
   const now = new Date().toISOString();
   return {
@@ -233,6 +260,19 @@ function sourceInsertPayload(input: {
     validated_at: input.plan.validatedResult ? now : null,
     processed_at: now,
     processing_status: input.plan.processingStatus,
+    ...(input.archivedSource ? {
+      raw_object_key: input.archivedSource.rawRef?.objectKey ?? null,
+      raw_sha256: input.archivedSource.rawRef?.sha256 ?? null,
+      raw_size_bytes: input.archivedSource.rawRef?.sizeBytes ?? null,
+      raw_content_type: input.archivedSource.rawRef?.contentType ?? null,
+      raw_retention_until: input.archivedSource.rawRef?.retainedUntil ?? null,
+      normalized_object_key: input.archivedSource.normalizedRef.objectKey,
+      normalized_sha256: input.archivedSource.normalizedRef.sha256,
+      normalized_size_bytes: input.archivedSource.normalizedRef.sizeBytes,
+      normalized_content_type: input.archivedSource.normalizedRef.contentType,
+      normalizer_version: input.archivedSource.document.normalizerVersion,
+      trace_id: input.archivedSource.traceId,
+    } : {}),
   };
 }
 
@@ -241,6 +281,9 @@ export async function persistNormalizedInboundEmail(input: {
   recipientAddress: string;
   security?: NormalizedInboundSecurity;
   sourceQuery?: string;
+  rawSource?: RawEmailSourceV1;
+  sourceArchiveStore?: EmailArchiveObjectStore;
+  sourceArchiveEnabled?: boolean;
   db?: any;
 }): Promise<NormalizedInboundPersistResult> {
   const db = input.db ?? (getSupabaseAdmin() as any);
@@ -264,8 +307,8 @@ export async function persistNormalizedInboundEmail(input: {
     security: input.security,
   });
 
-  // Strongly proven non-shopping mail is deliberately not persisted. The
-  // BuyFlow address is a shopping inbox, not a general-purpose mailbox.
+  // Strongly proven non-shopping mail is deliberately not persisted or archived.
+  // The BuyFlow address is a shopping inbox, not a general-purpose mailbox.
   // Unknown mail is NOT handled here: it remains REVIEW and is persisted.
   if (plan.status === 'non_commerce_ignored') {
     return {
@@ -274,6 +317,7 @@ export async function persistNormalizedInboundEmail(input: {
       classification: plan.classification,
       parserVersion: null,
       deduped: false,
+      sourceArchived: false,
       purchaseWrites: 0,
       shipmentWrites: 0,
       documentWrites: 0,
@@ -308,6 +352,25 @@ export async function persistNormalizedInboundEmail(input: {
     };
   }
 
+  const sourceArchiveEnabled = input.sourceArchiveEnabled
+    ?? env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED;
+  let archivedSource: ArchivedEmailSourceV1 | null = null;
+  if (sourceArchiveEnabled) {
+    const store = input.sourceArchiveStore
+      ?? new SupabaseEmailArchiveObjectStore(
+        db,
+        env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_BUCKET,
+      );
+    archivedSource = await archiveNormalizedEmailSourceV1({
+      userId: recipient.userId,
+      emailConnectionId: recipient.emailConnectionId,
+      email: input.email,
+      store,
+      ...(input.rawSource ? { rawSource: input.rawSource } : {}),
+    });
+    plan.structuredResult.modern_email_source_v1 = sourceArchiveDiagnostic(archivedSource);
+  }
+
   // The new Purchase Identity Graph runs only as a diagnostic observer here.
   // It may read this user's existing purchase snapshot, but it cannot write to
   // purchases, shipments, documents, or any graph table. Shadow failures are
@@ -325,6 +388,7 @@ export async function persistNormalizedInboundEmail(input: {
     recipient,
     plan,
     sourceQuery: input.sourceQuery ?? `normalized:${input.email.provider}`,
+    archivedSource,
   });
 
   const { data: inserted, error: insertError } = await db
@@ -343,6 +407,8 @@ export async function persistNormalizedInboundEmail(input: {
     classification: plan.classification,
     parserVersion: plan.parserVersion,
     deduped: false,
+    sourceArchived: Boolean(archivedSource),
+    ...(archivedSource ? { traceId: archivedSource.traceId } : {}),
     purchaseWrites: 0,
     shipmentWrites: 0,
     documentWrites: 0,
