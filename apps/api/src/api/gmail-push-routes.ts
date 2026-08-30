@@ -19,6 +19,24 @@ function verifier(): GooglePubSubOidcVerifier {
   return cachedVerifier;
 }
 
+function scheduleDrain(app: FastifyInstance, reason: 'push' | 'startup' | 'recovery') {
+  void drainGmailSyncInbox().then((result) => {
+    if (result.claimed > 0 || result.failed > 0) {
+      app.log.info({
+        scanned: result.scanned,
+        claimed: result.claimed,
+        failed: result.failed,
+        reason,
+      }, 'Gmail sync inbox drain completed');
+    }
+  }).catch((error) => {
+    app.log.error({
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+      reason,
+    }, 'Gmail sync inbox drain failed; durable recovery will retry');
+  });
+}
+
 export async function registerGmailPushRoutes(app: FastifyInstance) {
   app.post('/webhooks/google/gmail', async (request, reply) => {
     if (!env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
@@ -64,13 +82,7 @@ export async function registerGmailPushRoutes(app: FastifyInstance) {
       // Acknowledge only after the wake-up event is durable. The worker resumes
       // from the DB-committed Gmail cursor; Pub/Sub data never becomes email or
       // Purchase evidence directly.
-      setImmediate(() => {
-        void drainGmailSyncInbox().catch((error) => {
-          app.log.error({
-            errorType: error instanceof Error ? error.name : 'UnknownError',
-          }, 'Gmail sync inbox immediate drain failed; durable recovery will retry');
-        });
-      });
+      setImmediate(() => scheduleDrain(app, 'push'));
 
       request.log.info({
         enqueuedConnections,
@@ -84,4 +96,13 @@ export async function registerGmailPushRoutes(app: FastifyInstance) {
       return reply.code(503).send({ ok: false, error: 'gmail_push_persistence_failed' });
     }
   });
+
+  // Pub/Sub is only a wake-up mechanism. The DB inbox is the durability layer,
+  // so recover pending/retry/stale-processing rows even if the process crashed
+  // after acknowledging Google but before immediate processing started.
+  if (env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
+    setImmediate(() => scheduleDrain(app, 'startup'));
+    const timer = setInterval(() => scheduleDrain(app, 'recovery'), 60_000);
+    timer.unref();
+  }
 }
