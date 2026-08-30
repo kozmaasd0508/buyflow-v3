@@ -2,6 +2,19 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-30 — Source archive + Gmail incremental provider v1
+
+- PR #295 remains draft on `codex/modern-email-source-foundation-v1` -> `codex/v9-real-gmail-identity-shadow`; no production cutover or live migration.
+- Added provider-neutral rich normalization before AI: full plain text/HTML, bounded JSON-LD/schema.org records, safe HTTP(S) links, fail-closed DKIM/SPF/DMARC normalization and attachment metadata.
+- Added immutable content-addressed raw + normalized object archive with SHA-256 verification, opaque paths, deterministic trace id and retry conflict verification. Archive feature flag defaults OFF.
+- Extended `source_emails` migration with raw/normalized object hashes/sizes/content types/version/trace metadata and private `buyflow-email-source-v1` bucket; migration is committed only, not applied live.
+- `persistNormalizedInboundEmail(...)` can optionally archive source/provenance while Purchase/Shipment/Document/AI write counters remain zero. Strongly proven non-commerce mail remains unpersisted/unarchived.
+- Added `GmailIncrementalEmailProvider` using Gmail REST directly: full message normalization, exact RAW MIME, attachments, initial `historyId` snapshot boundary, `history.list` replay, fail-closed reset on expired cursor, and Pub/Sub watch/renew/stop. It is not runtime/OAuth wired yet.
+- CI #1094 found one strict TypeScript-only test assertion (`headers` optional); fixed without behavior change.
+- CI #1095 on code head `234cdb2b139dc245cfa0c30b3d8cd5a2a01b2646`: API typecheck/tests/build PASS; mobile typecheck/build PASS.
+- Safety: 0 Purchase/Shipment/Identity production authority change, 0 AI identity authority, 0 live DB/storage migration, no raw customer email committed.
+- Next: connect existing Mailgun `.eml` bytes and Gmail OAuth/runtime adapter behind disabled flags; persist provider cursor/watch state separately; read-only smoke before any cutover.
+
 ## 2026-08-30 — Modern email source foundation v1 started
 
 - New branch `codex/modern-email-source-foundation-v1` was created from the active V9 identity-shadow head `2e05b435a9f4fbc6467477c02fac462004bfa183`; no change was made directly on the V9 branch.
