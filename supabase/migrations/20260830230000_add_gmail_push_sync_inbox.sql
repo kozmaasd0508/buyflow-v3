@@ -116,21 +116,6 @@ returns void
 language plpgsql
 security definer
 set search_path = public
-as $$;
--- placeholder deliberately replaced below
-$$;
-
--- Recreate with an explicit retry schedule so behavior is obvious/auditable and
--- does not depend on numeric/interval coercion rules.
-create or replace function public.finish_gmail_sync_inbox_event(
-  p_id uuid,
-  p_success boolean,
-  p_error_code text default null
-)
-returns void
-language plpgsql
-security definer
-set search_path = public
 as $$
 begin
   if p_success then
