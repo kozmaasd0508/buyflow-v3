@@ -53,10 +53,16 @@ function expiresAt(expiresInSeconds: number | undefined): string {
 }
 
 function normalizeScopes(value: string | undefined): string[] {
-  return [...new Set((value ?? GMAIL_READONLY_SCOPE)
+  return [...new Set((value ?? '')
     .split(/\s+/)
     .map((item) => item.trim())
     .filter(Boolean))];
+}
+
+export function assertGmailReadonlyScope(scopes: string[]): void {
+  if (!scopes.includes(GMAIL_READONLY_SCOPE)) {
+    throw new Error('Google OAuth credential is missing required Gmail readonly scope');
+  }
 }
 
 function requireAccessToken(response: GoogleTokenResponse): GmailOAuthTokens {
@@ -103,7 +109,9 @@ export class GoogleGmailOAuthClient {
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', GMAIL_READONLY_SCOPE);
     url.searchParams.set('access_type', 'offline');
-    url.searchParams.set('include_granted_scopes', 'true');
+    // Do not fold older Google grants into this credential. BuyFlow's direct
+    // Gmail lane deliberately requests only gmail.readonly.
+    url.searchParams.set('include_granted_scopes', 'false');
     url.searchParams.set('prompt', 'consent');
     url.searchParams.set('state', input.state);
     url.searchParams.set('code_challenge', input.codeChallenge);
@@ -132,7 +140,9 @@ export class GoogleGmailOAuthClient {
       body: body.toString(),
     });
     if (!response.ok) throw new Error(`Google OAuth code exchange failed with HTTP ${response.status}`);
-    return requireAccessToken(await response.json() as GoogleTokenResponse);
+    const token = requireAccessToken(await response.json() as GoogleTokenResponse);
+    assertGmailReadonlyScope(token.scopes);
+    return token;
   }
 
   async refreshAccessToken(refreshToken: string): Promise<GmailOAuthTokens> {
