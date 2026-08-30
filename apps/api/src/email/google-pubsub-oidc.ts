@@ -129,7 +129,7 @@ export class GooglePubSubOidcVerifier {
       ? this.cache.keys
       : await this.refreshKeys();
     let key = keys.get(kid);
-    if (!key && this.cache?.expiresAtMs > now) {
+    if (!key && this.cache && this.cache.expiresAtMs > now) {
       // Google may rotate before our cached max-age expires. Refresh once when a
       // signed token references an unknown key id.
       keys = await this.refreshKeys();
@@ -142,17 +142,18 @@ export class GooglePubSubOidcVerifier {
   async verifyAuthorizationHeader(authorization: string | undefined): Promise<VerifiedGooglePushIdentity> {
     const match = authorization?.match(/^Bearer\s+([^\s]+)$/i);
     if (!match?.[1]) throw new Error('Google Pub/Sub OIDC bearer token is missing');
-    const token = match[1];
+    const token = match[1]!;
     if (Buffer.byteLength(token, 'utf8') > MAX_JWT_BYTES) {
       throw new Error('Google Pub/Sub OIDC bearer token is too large');
     }
     const segments = token.split('.');
-    if (segments.length !== 3 || !segments[0] || !segments[1] || !segments[2]) {
+    const [encodedHeader, encodedClaims, encodedSignature] = segments;
+    if (segments.length !== 3 || !encodedHeader || !encodedClaims || !encodedSignature) {
       throw new Error('Google Pub/Sub OIDC bearer token is malformed');
     }
 
-    const header = decodeJsonSegment<JwtHeader>(segments[0], 'header');
-    const claims = decodeJsonSegment<JwtClaims>(segments[1], 'claims');
+    const header = decodeJsonSegment<JwtHeader>(encodedHeader, 'header');
+    const claims = decodeJsonSegment<JwtClaims>(encodedClaims, 'claims');
     if (header.alg !== 'RS256' || !header.kid) {
       throw new Error('Google Pub/Sub OIDC signing algorithm is not allowed');
     }
@@ -160,12 +161,14 @@ export class GooglePubSubOidcVerifier {
     const key = await this.signingKey(header.kid);
     let publicKey;
     try {
-      publicKey = createPublicKey({ key, format: 'jwk' });
+      // The JWKS object is runtime-validated above before being handed to Node's
+      // JWK importer. Node's DOM/crypto JsonWebKey typings differ structurally.
+      publicKey = createPublicKey({ key: key as any, format: 'jwk' });
     } catch {
       throw new Error('Google Pub/Sub OIDC signing key is invalid');
     }
-    const signingInput = Buffer.from(`${segments[0]}.${segments[1]}`, 'ascii');
-    const signature = Buffer.from(segments[2], 'base64url');
+    const signingInput = Buffer.from(`${encodedHeader}.${encodedClaims}`, 'ascii');
+    const signature = Buffer.from(encodedSignature, 'base64url');
     if (!verify('RSA-SHA256', signingInput, publicKey, signature)) {
       throw new Error('Google Pub/Sub OIDC signature is invalid');
     }
