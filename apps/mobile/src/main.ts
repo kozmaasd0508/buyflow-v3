@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { loadPurchase, loadPurchases, type PurchaseDetail, type PurchaseSummary } from './api.js';
+import { renderPurchaseDetailEnhancements } from './purchase-detail-controller.js';
 import { supabase } from './supabase.js';
 import './styles.css';
 
@@ -84,8 +85,14 @@ function stateLabel(value: string | null | undefined): string {
     processing: 'Feldolgozás alatt',
     ordered: 'Megrendelve',
     paid: 'Fizetve',
-    shipped: 'Úton van',
+    shipment_created: 'Csomag létrehozva',
+    shipped: 'Feladva',
+    in_transit: 'Úton van',
+    out_for_delivery: 'Ma érkezhet',
+    ready_for_pickup: 'Átvehető',
     delivered: 'Kézbesítve',
+    delivery_failed: 'Sikertelen kézbesítés',
+    delayed: 'Késik',
     cancelled: 'Törölve',
     refunded: 'Visszatérítve',
     review: 'Ellenőrzés alatt',
@@ -223,13 +230,17 @@ function purchaseCard(purchase: PurchaseSummary, variant: 'purchase' | 'order' =
   const orderNumber = purchase.orderNumber ? `#${purchase.orderNumber}` : 'Rendelési szám nélkül';
   const status = shipment?.status || purchase.currentState;
   const iconName = variant === 'order' ? 'truck' : 'box';
+  const previewImage = safeHttpUrl(purchase.productPreviewImageUrl);
+  const media = previewImage
+    ? `<span class="entity-icon entity-product-image"><img src="${escapeHtml(previewImage)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></span>`
+    : `<span class="entity-icon">${icon(iconName, 24)}</span>`;
   const meta = variant === 'order'
     ? `${shipment?.carrier || 'Futár még nincs'} · ${shipment?.trackingNumber ? 'Tracking elérhető' : 'Trackingre vár'}`
     : `${formatDate(purchase.orderedAt || purchase.createdAt)} · ${purchase.documentCount} dokumentum`;
 
   return `
     <button class="entity-card" type="button" data-purchase-id="${escapeHtml(purchase.id)}">
-      <span class="entity-icon">${icon(iconName, 24)}</span>
+      ${media}
       <span class="entity-main">
         <span class="entity-top">
           <span>
@@ -255,7 +266,10 @@ function latestPurchase(): PurchaseSummary | null {
 function renderHomePage(): string {
   const latest = latestPurchase();
   const delivered = state.purchases.filter((purchase) => purchase.currentState === 'delivered').length;
-  const inTransit = state.purchases.filter((purchase) => ['shipped', 'processing', 'ordered'].includes(purchase.currentState)).length;
+  const inTransit = state.purchases.filter((purchase) => {
+    const status = purchase.shipments[0]?.status || purchase.currentState;
+    return ['shipment_created', 'shipped', 'in_transit', 'out_for_delivery', 'ready_for_pickup'].includes(status);
+  }).length;
   const documents = state.purchases.reduce((sum, purchase) => sum + purchase.documentCount, 0);
   const latestCard = latest
     ? purchaseCard(latest, latest.shipments.length > 0 ? 'order' : 'purchase')
@@ -311,7 +325,7 @@ function renderHomePage(): string {
       </section>
 
       <section class="quick-grid">
-        <button class="quick-card" type="button" data-route="orders">${icon('truck', 20)}<span><strong>Rendelések</strong><small>Csomagok és állapotok</small></span>${icon('chevron', 17)}</button>
+        <button class="quick-card" type="button" data-route="orders">${icon('truck', 20)}<span><strong>Csomagok</strong><small>Követés és aktuális állapotok</small></span>${icon('chevron', 17)}</button>
         <button class="quick-card" type="button" data-route="purchases">${icon('receipt', 20)}<span><strong>Dokumentumok</strong><small>Számlák a vásárlásoknál</small></span>${icon('chevron', 17)}</button>
       </section>
     </section>
@@ -327,11 +341,11 @@ function renderOrdersPage(): string {
   return `
     <section class="page">
       <div class="page-title-row">
-        <div><p class="eyebrow">CSOMAGKÖVETÉS</p><h1>Rendelések</h1><p>Aktuális állapotok és futáradatok egy helyen.</p></div>
+        <div><p class="eyebrow">CSOMAGKÖVETÉS</p><h1>Csomagok</h1><p>Aktuális állapotok és futáradatok egy helyen.</p></div>
         <button class="round-action" type="button" data-action="refresh" aria-label="Frissítés">${icon('refresh', 19)}</button>
       </div>
       ${feedbackHtml()}
-      ${state.loading && rows.length === 0 ? '<div class="loading-card"><div class="spinner small"></div>Rendelések betöltése…</div>' : content}
+      ${state.loading && rows.length === 0 ? '<div class="loading-card"><div class="spinner small"></div>Csomagok betöltése…</div>' : content}
     </section>
   `;
 }
@@ -381,7 +395,7 @@ function pageHtml(): string {
 function bottomNav(): string {
   const items: Array<[Route, string, string]> = [
     ['home', 'home', 'Kezdőlap'],
-    ['orders', 'truck', 'Rendelések'],
+    ['orders', 'truck', 'Csomagok'],
     ['purchases', 'box', 'Vásárlások'],
     ['discovery', 'store', 'Felfedezés'],
     ['flow', 'spark', 'Flow'],
@@ -490,6 +504,8 @@ function renderPurchaseDetail() {
             <div class="order-hero-meta"><strong>${formatMoney(purchase.totalAmount, purchase.currency)}</strong><span>${escapeHtml(formatDate(purchase.orderedAt || purchase.createdAt))}</span></div>
           </article>
 
+          <div id="purchase-detail-enhancements"></div>
+
           <section class="content-section">
             <div class="section-head"><div><p class="eyebrow">RENDELÉS</p><h2>Részletek</h2></div></div>
             <div class="detail-card">
@@ -513,6 +529,8 @@ function renderPurchaseDetail() {
       </main>
     </div>
   `;
+
+  renderPurchaseDetailEnhancements(purchase);
 
   document.querySelector<HTMLButtonElement>('#back-button')?.addEventListener('click', () => {
     state.selectedPurchase = null;
