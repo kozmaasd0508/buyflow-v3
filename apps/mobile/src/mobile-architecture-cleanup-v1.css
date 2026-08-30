@@ -1,0 +1,18 @@
+.entity-icon.entity-product-image {
+  overflow: hidden;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  color: transparent;
+}
+
+.entity-product-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 13px;
+}
+
+#purchase-detail-enhancements {
+  display: contents;
+}
