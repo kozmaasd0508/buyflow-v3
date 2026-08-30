@@ -4,6 +4,7 @@
 
 **Last updated:** 2026-08-30 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
+**Current `main`:** `92461ac103d4e337baa69ef91d09717eeb488d00`  
 **Current architecture base:** `codex/v9-real-gmail-identity-shadow` @ `2e05b435a9f4fbc6467477c02fac462004bfa183`  
 **Architecture PR:** #294 (draft) -> `codex/purchase-identity-v2-lifecycle-chain-gate`  
 **Current extension branch:** `codex/modern-email-source-foundation-v1`  
@@ -18,9 +19,10 @@ BuyFlow remains safety-first and shadow-oriented for the new identity path:
 - lifecycle-only email cannot create a Purchase.
 - automatic identity linking requires machine-readable hard evidence.
 - no raw customer email bodies or identifiers are committed to the repository.
-- the new email-source foundation has no runtime/provider cutover and no production DB migration applied yet.
+- no modern email-source migration has been applied live.
+- no provider runtime cutover has occurred.
 
-## PURCHASE IDENTITY GRAPH V2 — ALREADY IMPLEMENTED IN CODE
+## PURCHASE IDENTITY GRAPH V2 — ALREADY IMPLEMENTED
 
 `apps/api/src/purchase-identity-v2/types.ts` already contains:
 - `CanonicalEvent`
@@ -33,46 +35,47 @@ BuyFlow remains safety-first and shadow-oriented for the new identity path:
 - `CorrelationDecision` (`NEW_PURCHASE`, `LINKED`, `REVIEW`, `PENDING`, `UNLINKED`)
 - merchant identity definitions and explicit parent/child order relations.
 
-Do not recreate these concepts under new parallel names. Extend the existing graph contract.
+Do not recreate these concepts under parallel names. Extend the existing graph contract.
 
-V9 trust boundary in PR #294:
+V9 trust boundary:
 - V9 supplies only primary lifecycle semantics.
 - deterministic Extraction v2 supplies all identity values.
 - invalid/mismatched V9 output fails closed.
 - first merchant email may semantically be lifecycle-like while deterministic root evidence independently authorizes Purchase creation.
 
-Documented semantic benchmark in PR #294: 95/102 = 93.14% on the sanitized real-email HOLDOUT. Strict end-to-end identity claims are intentionally narrower because most sanitized messages do not preserve meaningful sender-domain authority.
+## MODERN EMAIL SOURCE FOUNDATION V1 — IMPLEMENTED ON PR #295
 
-## MODERN EMAIL SOURCE FOUNDATION V1 — STARTED AND FIRST GATE GREEN
-
-New additive files on `codex/modern-email-source-foundation-v1`:
+Core files now include:
 - `apps/api/src/email/document-v1.ts`
-- `apps/api/src/email/document-v1.test.ts`
+- `apps/api/src/email/normalize-document-v1.ts`
+- `apps/api/src/email/authentication-v1.ts`
+- `apps/api/src/email/link-extraction-v1.ts`
+- `apps/api/src/email/structured-markup.ts`
+- `apps/api/src/email/source-archive-v1.ts`
 - `apps/api/src/email/incremental-provider.ts`
 - `supabase/migrations/20260830203000_add_modern_email_source_foundation.sql`
 
-The new `NormalizedEmailDocumentV1` contract adds:
-- `bodyText` + `bodyHtml`
-- complete headers/attachments
-- structured-data records (JSON-LD / schema-style sources)
-- extracted links
-- DKIM/SPF/DMARC verdict slots
-- immutable raw-source object reference + SHA-256
-- normalizer version
-- cross-pipeline `traceId`.
+The stable `NormalizedEmailDocumentV1` path now provides:
+- provider full plain text when available, otherwise deterministic HTML-to-text fallback;
+- body HTML, headers and attachment metadata;
+- bounded JSON-LD/schema.org extraction before AI;
+- safe absolute HTTP(S) link extraction;
+- fail-closed DKIM/SPF/DMARC normalization;
+- immutable raw source reference + SHA-256 when raw bytes are available;
+- immutable normalized JSON archive + SHA-256;
+- opaque content-addressed object keys that do not expose provider message/user/connection ids;
+- deterministic cross-pipeline trace id;
+- retry-safe immutable-object verification.
 
-The legacy `NormalizedEmail` contract is not removed. `upgradeNormalizedEmailToDocumentV1(...)` is a fail-closed compatibility adapter and never invents unavailable evidence.
+Archive runtime wiring exists in `persistNormalizedInboundEmail(...)` but is disabled by default with `BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED=false`.
+When explicitly enabled after infrastructure deployment, it writes only source/provenance metadata; Purchase/Shipment/Document/AI write counters remain zero.
 
-`IncrementalEmailProvider` is additive only. It defines initial sync, cursor-based change retrieval and watch lifecycle so Gmail can later use `watch + historyId/history.list` and Outlook can later use notification + delta semantics without changing downstream ingestion.
-
-The SQL migration only adds metadata columns to `source_emails` for object-storage references/integrity/version/trace. Raw provider/MIME bytes are intentionally not stored inline in Postgres.
-
-One existing V9 regression surfaced during the first CI attempt: flattened one-line messages could contain a real labelled `Fizetési mód: ...` signal while the line-oriented extractor returned no structure. The fix remains fail-closed: only an explicitly labelled non-empty payment/shipping method is accepted as that independent structure signal; hard order identity, merchant authority and non-acceptance checks are unchanged.
+The migration adds raw + normalized object reference/hash/size/content-type/version/trace columns and defines private bucket `buyflow-email-source-v1`. It is committed only and has NOT been applied live.
 
 ## VERIFICATION STATUS
 
-Code/test head verified by GitHub Actions CI run #1090:
-`aa9bdb39508aa408191f9903d97b7bf5d6ffb9b5`
+GitHub Actions CI **#1092** verified code head:
+`1f1ae0023d695f8e3b21bb4ebcde249714d358de`
 
 PASS:
 - API typecheck
@@ -81,20 +84,21 @@ PASS:
 - mobile typecheck
 - mobile web build
 
-The temporary main-targeting CI PR #296 was closed unmerged after verification. Subsequent branch changes are documentation-only (`BUYFLOW_WORKLOG_LATEST.md`, this handoff).
+Temporary main-targeting CI PR #296 was reopened only for verification and closed again without merge.
+Documentation updates followed that verified code head; run the normal exact-head CI gate again after the final handoff/worklog commit before claiming the whole PR head green.
 
 No Supabase migration has been applied live. No production provider/runtime/identity authority was changed.
 
 ## NEXT ACTION
 
-Implement the first real runtime slice behind shadow/read-only behavior:
-1. immutable raw-email object writer (object storage, SHA-256, content type, byte size);
-2. provider-to-`NormalizedEmailDocumentV1` normalizer;
-3. JSON-LD/Schema.org structured-data extraction before AI;
-4. persist only raw/normalized object references and provenance metadata;
-5. keep Purchase/Identity writes disabled in this slice.
+Connect real provider source acquisition to the stable document/archive contract without changing Purchase authority:
+1. inventory each provider's actual available source bytes/body/headers;
+2. wire the safest existing raw source path first (Mailgun forwarded `.eml` already exposes exact bytes in shadow);
+3. keep archive flag off by default and preserve zero Purchase/Identity writes;
+4. add Gmail first-class incremental provider behind `IncrementalEmailProvider` (`watch + historyId/history.list`) after source acquisition contracts are proven;
+5. do not use Nylas/provider snippet as a substitute for raw/full content when richer source is available.
 
-After that, add first-class persisted graph/review/projection tables only by extending the existing Purchase Identity Graph v2 concepts; do not duplicate the already-implemented in-memory types.
+After provider ingestion is stable, persisted graph/review/projection tables must extend the existing Purchase Identity Graph v2 concepts instead of duplicating them.
 
 ## SAFETY RULES TO PRESERVE
 
