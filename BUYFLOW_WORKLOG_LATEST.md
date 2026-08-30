@@ -1,5 +1,39 @@
 # BuyFlow worklog latest
 
+## 2026-08-30 — Modern email source foundation v1: first gate GREEN
+
+Current extension branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 -> `codex/v9-real-gmail-identity-shadow`  
+Exact verified head: `aa9bdb39508aa408191f9903d97b7bf5d6ffb9b5`
+
+Implemented additively:
+- `NormalizedEmailDocumentV1` with text/HTML, structured-data slots, links, authentication verdicts, immutable raw-source reference, normalizer version and trace id;
+- `IncrementalEmailProvider` capability contract for initial sync, cursor changes and watch lifecycle;
+- additive `source_emails` raw/normalized object-reference + SHA-256/retention/version/trace metadata migration;
+- fail-closed compatibility adapter + tests.
+
+The first CI run exposed one pre-existing V9 regression: flattened one-line email text could contain an explicit `Fizetési mód: ...` structure signal while the line-based payment-method extractor returned none. The implementation was fixed conservatively by accepting only an explicitly labelled non-empty payment/shipping method as the independent structure signal; the non-acceptance and hard-order/source gates remain unchanged.
+
+GitHub Actions CI run #1090 on exact head `aa9bdb39508aa408191f9903d97b7bf5d6ffb9b5` is GREEN:
+- API typecheck PASS
+- API tests PASS
+- API build PASS
+- mobile typecheck PASS
+- mobile web build PASS
+
+Temporary main-targeting CI PR #296 was closed unmerged after verification. PR #295 remains the architecture PR against the active V9 branch.
+
+Safety unchanged:
+- no provider runtime cutover
+- no live Supabase migration application
+- no Purchase/Shipment/Identity production authority change
+- no AI identity authority
+- no raw customer email content committed
+
+Next implementation slice: immutable raw-email object writer + provider-to-`NormalizedEmailDocumentV1` normalizer + JSON-LD/Schema.org extraction, still shadow/read-only for Purchase/Identity writes.
+
+---
+
 Current TechnicalEvidence branch: `codex/technical-evidence-shadow-v1`
 
 Development PR: #256 -> `codex/mailgun-inbound-shadow-v3`
