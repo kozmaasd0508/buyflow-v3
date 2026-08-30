@@ -2,6 +2,17 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-08-30 — Modern email source foundation v1 started
+
+- New branch `codex/modern-email-source-foundation-v1` was created from the active V9 identity-shadow head `2e05b435a9f4fbc6467477c02fac462004bfa183`; no change was made directly on the V9 branch.
+- Added `NormalizedEmailDocumentV1` as an additive contract with plain-text + HTML bodies, headers, attachments, structured-data records, extracted links, DKIM/SPF/DMARC verdict slots, immutable raw-source reference, normalizer version and cross-pipeline trace id.
+- Added a backwards-compatible `upgradeNormalizedEmailToDocumentV1(...)` adapter. Missing evidence is kept `null`/`unknown`/empty and is never invented.
+- Added `IncrementalEmailProvider` as a capability contract for durable provider sync. Gmail can map it to `watch + historyId/history.list`; Outlook can later map it to change notifications + delta cursors. Existing `EmailProvider` runtime behavior is unchanged.
+- Added additive migration `20260830203000_add_modern_email_source_foundation.sql` for raw object key, SHA-256, byte size, content type, retention boundary, normalized object key, normalizer version and trace id on `source_emails`. Raw message bytes remain out of Postgres; the migration stores only object references/integrity metadata.
+- Added adapter regression tests covering fail-closed defaults and provenance preservation.
+- Safety: no provider runtime cutover, no Gmail/Outlook write, no Purchase/Shipment/Identity decision change, no AI authority change, no production database migration applied, no production writes.
+- Verification is not yet claimed. Next gate: draft PR -> API typecheck/tests/build -> mobile typecheck/build. After green CI, implement the actual immutable raw-object writer + normalizer behind shadow/read-only wiring.
+
 ## 2026-08-23 — TechnicalEvidence Blind Holdout v1 freeze
 
 - TechnicalEvidence candidate logic is frozen at commit `df221aa42856179c3c1b0b9e94d5d364b4ac7048`, timestamp/cutoff `2026-08-23T21:58:12Z` (`2026-08-23 23:58:12 Europe/Budapest`).
