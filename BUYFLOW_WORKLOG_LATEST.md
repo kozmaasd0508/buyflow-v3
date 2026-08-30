@@ -1,5 +1,57 @@
 # BuyFlow worklog latest
 
+## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
+
+Current extension branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 -> `codex/v9-real-gmail-identity-shadow`
+
+Implemented additively since the previous source-foundation checkpoint:
+- direct Google Gmail OAuth Authorization Code + PKCE runtime behind `BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED=false`;
+- Gmail read-only scope is mandatory and the runtime rejects unexpected extra Gmail scopes;
+- AES-256-GCM encrypted refresh-token storage with AAD binding to user + connection + provider + key version;
+- separate server-only `email_provider_credentials` and `email_sync_states` persistence with RLS and no authenticated-client grants;
+- compare-and-swap Gmail cursor commits so stale workers cannot overwrite a newer `historyId`;
+- broad direct-Gmail discovery (`newer_than:30d -in:spam -in:trash`) followed by a positive-commerce privacy gate instead of copying an entire personal mailbox;
+- unknown personal mail is ignored before persistence; `CATEGORY_PURCHASES`, transactional schema.org markup, deterministic commerce recognition or universal commerce lifecycle semantics can qualify a candidate;
+- Product/Offer-only markup is not enough and promotional mail remains ignored;
+- authenticated Google Pub/Sub wake-up endpoint with local RS256/JWKS verification, exact audience, issuer/time checks and exact configured service-account email;
+- Pub/Sub payload is only a wake-up signal (`emailAddress + historyId`), never commerce/Purchase evidence;
+- durable `gmail_sync_inbox` with dedupe, safe claim, stale-lock recovery, explicit exponential retries and `dead_letter` after 8 failed attempts;
+- 60-second recovery drain for crash-after-Pub/Sub-ack scenarios;
+- worker always resumes from the DB-committed Gmail cursor and advances it only after source handling succeeds.
+
+New controlled smoke command:
+`npm run gmail:direct-shadow-smoke --workspace @buyflow/api`
+
+The smoke is intentionally read-only and privacy-reduced:
+- samples at most 50 direct Gmail messages (default 10);
+- obtains exact RAW MIME for each sampled message;
+- exercises the Gmail commerce privacy gate;
+- exercises `history.list` from the initial captured boundary;
+- prints counts/reasons only, no subjects, bodies, addresses, provider message IDs or history IDs;
+- does not persist `source_emails`;
+- does not write source archive objects;
+- does not commit a Gmail cursor;
+- does not mutate Gmail;
+- Purchase/Shipment/Document writes = 0;
+- AI calls = 0.
+
+Deployment state remains conservative:
+- direct Gmail runtime OFF by default;
+- source archive OFF by default;
+- Mailgun source persistence OFF by default;
+- direct Gmail/source migrations are committed but not applied live here;
+- no Google OAuth secrets, encrypted user tokens, Pub/Sub credentials or raw customer email are committed.
+
+Verification reference before this latest smoke/handoff slice:
+- GitHub Actions CI #1132 on `30bd9baaf64bd5f2660ee223f1d54ed8994a49db` was fully GREEN: API typecheck/tests/build + mobile typecheck/build.
+
+Next gate:
+- run one final exact-head CI for the smoke + handoff/worklog slice;
+- then use a controlled staging/test account to execute the read-only direct-Gmail shadow smoke before enabling any source persistence/archive.
+
+---
+
 ## 2026-08-30 — Modern email source archive + rich normalizer v1 GREEN
 
 Current extension branch: `codex/modern-email-source-foundation-v1`  
