@@ -64,6 +64,17 @@ export interface NormalizedInboundPersistResult {
   aiCalls: 0;
 }
 
+export interface PersistResolvedNormalizedEmailInput {
+  email: NormalizedEmail;
+  recipient: ResolvedBuyFlowRecipient;
+  security?: NormalizedInboundSecurity;
+  sourceQuery?: string;
+  rawSource?: RawEmailSourceV1;
+  sourceArchiveStore?: EmailArchiveObjectStore;
+  sourceArchiveEnabled?: boolean;
+  db?: any;
+}
+
 function securitySnapshot(security: NormalizedInboundSecurity | undefined) {
   if (!security) return undefined;
   return {
@@ -276,40 +287,23 @@ function sourceInsertPayload(input: {
   };
 }
 
-export async function persistNormalizedInboundEmail(input: {
-  email: NormalizedEmail;
-  recipientAddress: string;
-  security?: NormalizedInboundSecurity;
-  sourceQuery?: string;
-  rawSource?: RawEmailSourceV1;
-  sourceArchiveStore?: EmailArchiveObjectStore;
-  sourceArchiveEnabled?: boolean;
-  db?: any;
-}): Promise<NormalizedInboundPersistResult> {
+/**
+ * Persist a normalized message for a connection whose ownership has already
+ * been authenticated by the caller (for example a direct Gmail connection).
+ * This does not grant Purchase/Shipment/Document or AI write authority.
+ */
+export async function persistNormalizedEmailForResolvedRecipient(
+  input: PersistResolvedNormalizedEmailInput,
+): Promise<NormalizedInboundPersistResult> {
   const db = input.db ?? (getSupabaseAdmin() as any);
-  const recipient = await resolveBuyFlowEmailRecipient({
-    db,
-    emailAddress: input.recipientAddress,
-  });
-
-  if (!recipient) {
-    return {
-      status: 'unknown_recipient',
-      purchaseWrites: 0,
-      shipmentWrites: 0,
-      documentWrites: 0,
-      aiCalls: 0,
-    };
-  }
-
+  const recipient = input.recipient;
   const plan = planNormalizedInboundEmail({
     email: input.email,
     security: input.security,
   });
 
   // Strongly proven non-shopping mail is deliberately not persisted or archived.
-  // The BuyFlow address is a shopping inbox, not a general-purpose mailbox.
-  // Unknown mail is NOT handled here: it remains REVIEW and is persisted.
+  // Unknown mail is NOT dropped: it remains REVIEW and is persisted.
   if (plan.status === 'non_commerce_ignored') {
     return {
       status: plan.status,
@@ -371,10 +365,8 @@ export async function persistNormalizedInboundEmail(input: {
     plan.structuredResult.modern_email_source_v1 = sourceArchiveDiagnostic(archivedSource);
   }
 
-  // The new Purchase Identity Graph runs only as a diagnostic observer here.
-  // It may read this user's existing purchase snapshot, but it cannot write to
-  // purchases, shipments, documents, or any graph table. Shadow failures are
-  // contained inside the diagnostic and never block normal inbound ingestion.
+  // Purchase Identity Graph is diagnostic-only in this lane. It may read the
+  // user's snapshot but cannot write purchases, shipments, documents or graph rows.
   if (plan.status === 'review' || plan.status === 'recognized') {
     plan.structuredResult.purchase_identity_shadow_v2 = await runShoppingEmailIdentityShadow({
       db,
@@ -414,4 +406,44 @@ export async function persistNormalizedInboundEmail(input: {
     documentWrites: 0,
     aiCalls: 0,
   };
+}
+
+export async function persistNormalizedInboundEmail(input: {
+  email: NormalizedEmail;
+  recipientAddress: string;
+  security?: NormalizedInboundSecurity;
+  sourceQuery?: string;
+  rawSource?: RawEmailSourceV1;
+  sourceArchiveStore?: EmailArchiveObjectStore;
+  sourceArchiveEnabled?: boolean;
+  db?: any;
+}): Promise<NormalizedInboundPersistResult> {
+  const db = input.db ?? (getSupabaseAdmin() as any);
+  const recipient = await resolveBuyFlowEmailRecipient({
+    db,
+    emailAddress: input.recipientAddress,
+  });
+
+  if (!recipient) {
+    return {
+      status: 'unknown_recipient',
+      purchaseWrites: 0,
+      shipmentWrites: 0,
+      documentWrites: 0,
+      aiCalls: 0,
+    };
+  }
+
+  return persistNormalizedEmailForResolvedRecipient({
+    email: input.email,
+    recipient,
+    ...(input.security ? { security: input.security } : {}),
+    ...(input.sourceQuery ? { sourceQuery: input.sourceQuery } : {}),
+    ...(input.rawSource ? { rawSource: input.rawSource } : {}),
+    ...(input.sourceArchiveStore ? { sourceArchiveStore: input.sourceArchiveStore } : {}),
+    ...(input.sourceArchiveEnabled !== undefined
+      ? { sourceArchiveEnabled: input.sourceArchiveEnabled }
+      : {}),
+    db,
+  });
 }
