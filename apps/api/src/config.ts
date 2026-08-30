@@ -42,6 +42,14 @@ const envSchema = z.object({
     .regex(/^[a-z0-9][a-z0-9._-]*$/)
     .default('buyflow-email-source-v1'),
 
+  // Mailgun may feed the generic source persistence path only after both this
+  // switch and BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED are explicitly enabled.
+  // Default behavior remains the existing read-only Mailgun shadow route.
+  BUYFLOW_MAILGUN_SOURCE_PERSIST_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+
   BUYFLOW_AUTOMATION_MODE: z.enum(['observe', 'write']).default('observe'),
   BUYFLOW_SMOKE_USER_ID: z.string().uuid().optional(),
   BUYFLOW_SMOKE_CONNECTION_ID: z.string().uuid().optional(),
