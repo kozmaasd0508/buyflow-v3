@@ -6,7 +6,8 @@
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current architecture base:** `codex/v9-real-gmail-identity-shadow` @ `2e05b435a9f4fbc6467477c02fac462004bfa183`  
 **Architecture PR:** #294 (draft) -> `codex/purchase-identity-v2-lifecycle-chain-gate`  
-**Current extension branch:** `codex/modern-email-source-foundation-v1`
+**Current extension branch:** `codex/modern-email-source-foundation-v1`  
+**Extension PR:** #295 (draft) -> `codex/v9-real-gmail-identity-shadow`
 
 ## CURRENT STATE
 
@@ -42,7 +43,7 @@ V9 trust boundary in PR #294:
 
 Documented semantic benchmark in PR #294: 95/102 = 93.14% on the sanitized real-email HOLDOUT. Strict end-to-end identity claims are intentionally narrower because most sanitized messages do not preserve meaningful sender-domain authority.
 
-## MODERN EMAIL SOURCE FOUNDATION V1 — STARTED
+## MODERN EMAIL SOURCE FOUNDATION V1 — STARTED AND FIRST GATE GREEN
 
 New additive files on `codex/modern-email-source-foundation-v1`:
 - `apps/api/src/email/document-v1.ts`
@@ -66,23 +67,25 @@ The legacy `NormalizedEmail` contract is not removed. `upgradeNormalizedEmailToD
 
 The SQL migration only adds metadata columns to `source_emails` for object-storage references/integrity/version/trace. Raw provider/MIME bytes are intentionally not stored inline in Postgres.
 
+One existing V9 regression surfaced during the first CI attempt: flattened one-line messages could contain a real labelled `Fizetési mód: ...` signal while the line-oriented extractor returned no structure. The fix remains fail-closed: only an explicitly labelled non-empty payment/shipping method is accepted as that independent structure signal; hard order identity, merchant authority and non-acceptance checks are unchanged.
+
 ## VERIFICATION STATUS
 
-Do **not** claim this new foundation passes yet.
+Code/test head verified by GitHub Actions CI run #1090:
+`aa9bdb39508aa408191f9903d97b7bf5d6ffb9b5`
 
-Current extension branch has not yet completed its required CI gate after the 2026-08-30 changes.
+PASS:
+- API typecheck
+- API tests
+- API build
+- mobile typecheck
+- mobile web build
 
-Required gate before promotion:
-1. draft PR from `codex/modern-email-source-foundation-v1` to `codex/v9-real-gmail-identity-shadow`;
-2. API typecheck;
-3. API tests;
-4. API build;
-5. mobile typecheck;
-6. mobile web build.
+The temporary main-targeting CI PR #296 was closed unmerged after verification. Subsequent branch changes are documentation-only (`BUYFLOW_WORKLOG_LATEST.md`, this handoff).
 
-No Supabase migration should be applied live until the branch is reviewed and CI is green.
+No Supabase migration has been applied live. No production provider/runtime/identity authority was changed.
 
-## NEXT ACTION AFTER GREEN CI
+## NEXT ACTION
 
 Implement the first real runtime slice behind shadow/read-only behavior:
 1. immutable raw-email object writer (object storage, SHA-256, content type, byte size);
