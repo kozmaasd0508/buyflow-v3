@@ -4,6 +4,18 @@ import { parseNormalizedDeterministicEmail } from '../ingestion/normalized-email
 import { evaluateShoppingEmailPurpose } from '../pipeline/shopping-email-purpose-gate.js';
 import { runUniversalCommerceGrammarShadow } from '../pipeline/universal-commerce-grammar-shadow.js';
 
+const TRANSACTIONAL_SCHEMA_TYPES = new Set([
+  'Order',
+  'ParcelDelivery',
+  'Invoice',
+  'OrderAction',
+  'TrackAction',
+  'DeliveryEvent',
+  'ReceiveAction',
+  'ReturnAction',
+  'CancelAction',
+]);
+
 export interface GmailDirectCandidateDecision {
   action: 'observe' | 'ignore';
   reason:
@@ -37,7 +49,7 @@ export function evaluateGmailDirectCandidate(
 
   if (email.bodyHtml) {
     const markup = auditStructuredMarkup(email.bodyHtml);
-    if (markup.commerceTypes.length > 0) {
+    if (markup.commerceTypes.some((type) => TRANSACTIONAL_SCHEMA_TYPES.has(type))) {
       return { action: 'observe', reason: 'structured_commerce_markup' };
     }
   }
