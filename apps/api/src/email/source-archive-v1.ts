@@ -113,6 +113,9 @@ export async function archiveNormalizedEmailSourceV1(input: {
 
   let rawRef: RawEmailReference | null = null;
   if (input.rawSource) {
+    // Validate retention before writing any bytes so invalid metadata cannot
+    // leave an orphaned raw object behind.
+    const retainedUntil = validateRetainedUntil(input.rawSource.retainedUntil);
     const rawBytes = Buffer.from(input.rawSource.bytes);
     const rawSha256 = sha256(rawBytes);
     const contentType = input.rawSource.contentType?.trim() || 'message/rfc822';
@@ -128,7 +131,7 @@ export async function archiveNormalizedEmailSourceV1(input: {
       sha256: rawSha256,
       sizeBytes: rawBytes.byteLength,
       contentType,
-      retainedUntil: validateRetainedUntil(input.rawSource.retainedUntil),
+      retainedUntil,
     };
   }
 
