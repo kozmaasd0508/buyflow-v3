@@ -39,11 +39,12 @@ test('normalizeMailgunInbound maps Mailgun fields into a normalized shadow email
   assert.equal(result.normalizedEmail.from[0]?.name, 'Example Shop');
   assert.equal(result.normalizedEmail.to[0]?.email, 'bf-abc123@buyflow.hu');
   assert.equal(result.normalizedEmail.snippet, 'Your order is confirmed.');
+  assert.equal(result.normalizedEmail.bodyText, 'Your order is confirmed.');
   assert.equal(result.normalizedEmail.bodyHtml, '<p>Your order is confirmed.</p>');
   assert.deepEqual(result.normalizedEmail.folders, ['inbound', 'mailgun-shadow']);
 });
 
-test('normalizeForwardedEml restores original sender, subject, message id and body', async () => {
+test('normalizeForwardedEml restores original sender, subject, message id and full body', async () => {
   const raw = Buffer.from([
     'From: GymBeam <info@service.gymbeam.hu>',
     'To: buyer@example.com',
@@ -64,6 +65,7 @@ test('normalizeForwardedEml restores original sender, subject, message id and bo
   assert.equal(email.from[0]?.name, 'GymBeam');
   assert.equal(email.subject, 'Kozma, a rendelésed feldolgozás alatt van.');
   assert.match(email.snippet ?? '', /3010410391/);
+  assert.match(email.bodyText ?? '', /3010410391/);
   assert.deepEqual(email.folders, ['inbound', 'mailgun-shadow', 'eml-expanded']);
 });
 
