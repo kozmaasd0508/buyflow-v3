@@ -5,120 +5,143 @@ import argparse
 import gc
 import hashlib
 import json
-import math
 import os
-import random
 import time
-from collections import Counter, defaultdict
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+
+from v11_fresh_blind_config import ALLOWED, CASES_PER_EVENT, EXPECTED_FIXTURE_SHA256, MODEL_ID
+from v11_fresh_blind_fixture import build_cases, canonical_jsonl
+from v11_fresh_blind_model import file_sha256, infer, load_model, prompt_for_case, resolve_adapter, strict_prediction
+from v11_fresh_blind_score import score
 
 
-MODEL_ID = os.environ.get("BUYFLOW_LORA_MODEL_ID", "Qwen/Qwen3-8B")
-SEED = 20260831
-CASES_PER_EVENT = 10
-MAX_PROMPT_TOKENS = 700
-MAX_NEW_TOKENS = 48
-EXPECTED_FIXTURE_SHA256 = "5a03856c3a5962860224a809eb9c4f45d28190e2618b534dfc9c4880ac0e9582"
-ALLOWED = [
-    "ORDER_CREATED", "ORDER_PROCESSING", "ORDER_PACKING", "SHIPMENT_CREATED", "SHIPPED", "IN_TRANSIT",
-    "OUT_FOR_DELIVERY", "READY_FOR_PICKUP", "DELIVERED", "DELIVERY_FAILED", "DELAYED", "CANCELLED",
-    "REFUNDED", "PAYMENT", "INVOICE", "RETURN", "WARRANTY", "OTHER",
-]
-LANGS = ["hu", "en", "de", "pl", "fr", "es"]
-INSTRUCTION = (
-    "Classify the latest concrete lifecycle state from this NormalizedEmailDocument. "
-    "The subject may be stale or misleading. Structured keys such as orderNumber and trackingNumber are identifiers, "
-    "not lifecycle states. Prefer explicit current-state evidence in text/HTML/structured data. "
-    "Return JSON only with is_commerce and event_type."
-)
+def main() -> None:
+    parser = argparse.ArgumentParser(description="BuyFlow V11 Fresh Blind v1 evaluator")
+    parser.add_argument("project_root")
+    parser.add_argument("--adapter-dir", default=os.environ.get("BUYFLOW_V11_ADAPTER_DIR"))
+    parser.add_argument("--freeze-only", action="store_true")
+    args = parser.parse_args()
 
-PHRASES: dict[str, dict[str, str]] = {
-    "ORDER_CREATED": {
-        "hu": "A vásárlási kérelmet rögzítettük, és új rendelésként bekerült a rendszerbe.",
-        "en": "We logged this purchase as a new order in our system.",
-        "de": "Der Einkauf wurde als neue Bestellung in unserem System erfasst.",
-        "pl": "Zakup został zapisany w systemie jako nowe zamówienie.",
-        "fr": "Cet achat a été enregistré dans notre système comme une nouvelle commande.",
-        "es": "La compra ha quedado registrada en el sistema como un pedido nuevo.",
-    },
-    "ORDER_PROCESSING": {
-        "hu": "A rendelés nyitva van, jelenleg az adatok és a készlet ellenőrzése zajlik.",
-        "en": "The order remains open while stock and order details are being checked.",
-        "de": "Die Bestellung ist offen; Bestand und Bestelldaten werden derzeit geprüft.",
-        "pl": "Zamówienie jest otwarte; trwa weryfikacja danych i dostępności towaru.",
-        "fr": "La commande reste ouverte pendant la vérification du stock et des informations.",
-        "es": "El pedido sigue abierto mientras se comprueban existencias y datos.",
-    },
-    "ORDER_PACKING": {
-        "hu": "A raktár összekészíti és dobozolja a rendelést; fuvarozói átvétel még nem történt.",
-        "en": "The warehouse is boxing the order; no carrier pickup has happened yet.",
-        "de": "Das Lager verpackt die Bestellung; eine Abholung durch den Versanddienstleister gab es noch nicht.",
-        "pl": "Magazyn pakuje zamówienie; przewoźnik jeszcze go nie odebrał.",
-        "fr": "L'entrepôt emballe la commande; le transporteur ne l'a pas encore collectée.",
-        "es": "El almacén está empaquetando el pedido; el transportista aún no lo ha recogido.",
-    },
-    "SHIPMENT_CREATED": {
-        "hu": "A szállítási címke elkészült, de a futár még nem szkennelte át fizikailag a csomagot.",
-        "en": "A shipping label now exists, but the carrier has not physically scanned the parcel yet.",
-        "de": "Das Versandlabel wurde erstellt, aber der Dienstleister hat das Paket noch nicht physisch gescannt.",
-        "pl": "Etykieta wysyłkowa została utworzona, ale przewoźnik nie zeskanował jeszcze fizycznie paczki.",
-        "fr": "L'étiquette d'expédition existe, mais le transporteur n'a pas encore scanné physiquement le colis.",
-        "es": "La etiqueta de envío ya existe, pero el transportista aún no ha escaneado físicamente el paquete.",
-    },
-    "SHIPPED": {
-        "hu": "A feladási ponton megtörtént az első fizikai átvételi szkennelés a futár hálózatában.",
-        "en": "The carrier recorded the first physical acceptance scan at origin.",
-        "de": "Am Ausgangspunkt wurde der erste physische Annahmescan des Versanddienstleisters erfasst.",
-        "pl": "Przewoźnik zarejestrował pierwszy fizyczny skan przyjęcia w punkcie nadania.",
-        "fr": "Le transporteur a enregistré le premier scan physique de prise en charge au départ.",
-        "es": "El transportista registró el primer escaneo físico de aceptación en origen.",
-    },
-    "IN_TRANSIT": {
-        "hu": "A küldemény elhagyta az elosztóközpontot, és a következő logisztikai állomás felé halad.",
-        "en": "The parcel departed a sorting facility and is moving to the next network location.",
-        "de": "Das Paket hat ein Sortierzentrum verlassen und ist auf dem Weg zum nächsten Netzknoten.",
-        "pl": "Paczka opuściła sortownię i jedzie do kolejnego punktu sieci logistycznej.",
-        "fr": "Le colis a quitté un centre de tri et se dirige vers l'étape logistique suivante.",
-        "es": "El paquete salió de un centro de clasificación y avanza al siguiente punto de la red.",
-    },
-    "OUT_FOR_DELIVERY": {
-        "hu": "A csomagot felrakták a kézbesítő járműre; a futár a címzett felé tart vele.",
-        "en": "The parcel is loaded on the delivery vehicle and the courier is heading to the recipient.",
-        "de": "Das Paket wurde in das Zustellfahrzeug geladen; der Fahrer ist zum Empfänger unterwegs.",
-        "pl": "Paczka jest w samochodzie doręczyciela, który jedzie do odbiorcy.",
-        "fr": "Le colis est chargé dans le véhicule de livraison et le livreur se dirige vers le destinataire.",
-        "es": "El paquete va en el vehículo de reparto y el mensajero se dirige al destinatario.",
-    },
-    "READY_FOR_PICKUP": {
-        "hu": "Az átvételi PIN aktiválódott; a csomag már a kiválasztott automatában vár.",
-        "en": "The pickup PIN is active and the parcel is waiting inside the selected locker.",
-        "de": "Die Abhol-PIN ist aktiv; das Paket liegt bereits im ausgewählten Automaten.",
-        "pl": "Kod odbioru jest aktywny, a paczka czeka już w wybranym automacie.",
-        "fr": "Le code de retrait est actif et le colis attend déjà dans la consigne choisie.",
-        "es": "El PIN de recogida está activo y el paquete ya espera en la taquilla seleccionada.",
-    },
-    "DELIVERED": {
-        "hu": "A címzett átvételét rögzítettük; a kézbesítés lezárult.",
-        "en": "Recipient acceptance was recorded and the delivery is closed.",
-        "de": "Die Annahme durch den Empfänger wurde erfasst; die Zustellung ist abgeschlossen.",
-        "pl": "Odbiór przez adresata został potwierdzony; doręczenie jest zakończone.",
-        "fr": "La réception par le destinataire a été enregistrée; la livraison est terminée.",
-        "es": "Se registró la recepción por el destinatario y la entrega ha finalizado.",
-    },
-    "DELIVERY_FAILED": {
-        "hu": "A mai kézbesítési kísérlet sikertelen volt, ezért új kézbesítési lépés szükséges.",
-        "en": "Today's delivery attempt failed and another delivery action is required.",
-        "de": "Der heutige Zustellversuch ist fehlgeschlagen; ein weiterer Zustellschritt ist erforderlich.",
-        "pl": "Dzisiejsza próba doręczenia nie powiodła się i potrzebne jest kolejne działanie.",
-        "fr": "La tentative de livraison d'aujourd'hui a échoué; une nouvelle action est nécessaire.",
-        "es": "El intento de entrega de hoy falló y será necesaria otra actuación de reparto.",
-    },
-    "DELAYED": {
-        "hu": "A szállítás csúszik, a várható érkezési idő késővbe módosult, de új kézbesítési kísérlet még nem törtérnt.",
-        "en": "Transit is running late and the ETA moved later; no new delivery attempt has occurred.",
-        "de": "Der Transport verspätet sich und die ETA wurde nach hinten verschoben; ein neuer Zustellversuch fand noch nicht statt.",
-        "pl": "Transport jest opóź�iony i termin przesunięto; nie bzło jeszcze kolejnej próby doręczenia.",
-        "fr": "Le transport est en retard et l'heure estimée a été repousqée; aucune nouvelle tentative n'a u lieu.",
-        "es": "El transporte lleva retraso y la hora estimada se ha aplazado; aún no hub
+    root = Path(args.project_root).resolve()
+    cases = build_cases()
+    raw = canonical_jsonl(cases)
+    fixture_sha = hashlib.sha256(raw).hexdigest()
+    if EXPECTED_FIXTURE_SHA256 != "PENDING" and fixture_sha != EXPECTED_FIXTURE_SHA256:
+        raise RuntimeError(f"FRESH_BLIND_FIXTURE_DRIFT: {fixture_sha} != {EXPECTED_FIXTURE_SHA256}")
+
+    out_root = root / "local-data" / "lora-v11" / "fresh-blind-v1"
+    out_root.mkdir(parents=True, exist_ok=True)
+    fixture_path = out_root / "fixtures.locked.jsonl"
+    fixture_path.write_bytes(raw)
+    (out_root / "FIXTURE_SHA256.txt").write_text(fixture_sha + "\n", encoding="utf-8")
+
+    print("# BUYFLOW V11 FRESH BLIND V1")
+    print(f"cases: {len(cases)}")
+    print(f"events: {len(ALLOWED)} x {CASES_PER_EVENT}")
+    print("document_shape: production NormalizedEmailDocumentV1")
+    print("raw_customer_data: False")
+    print("train_eligible: False")
+    print(f"fixture_sha256: {fixture_sha}")
+    print(f"fixture_file: {fixture_path}")
+    if args.freeze_only:
+        print("status: FRESH_BLIND_V1_FROZEN")
+        return
+
+    if EXPECTED_FIXTURE_SHA256 == "PENDING":
+        raise RuntimeError("FRESH_BLIND_FIXTURE_NOT_FROZEN")
+
+    run, adapter, train_metrics = resolve_adapter(root, args.adapter_dir)
+    adapter_sha = file_sha256(adapter / "adapter_model.safetensors")
+    print(f"v11_run: {run}")
+    print(f"adapter_dir: {adapter}")
+    print(f"adapter_sha256: {adapter_sha}")
+    print(f"training_best_validation_loss: {train_metrics.get('best_validation_loss')}")
+
+    import torch
+    print(f"gpu_name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'UNAVAILABLE'}")
+    print("loading_model: Qwen3-8B NF4 + V11 adapter")
+    tokenizer, model = load_model(adapter)
+
+    prompt_tokens: list[int] = []
+    rows: list[dict[str, object]] = []
+    started = time.time()
+    for index, case in enumerate(cases, 1):
+        prompt, token_count = prompt_for_case(tokenizer, case)
+        prompt_tokens.append(token_count)
+        text, latency_ms = infer(tokenizer, model, prompt)
+        prediction, error = strict_prediction(text)
+        rows.append({
+            "case_id": case["case_id"],
+            "expected": case["expected"],
+            "prediction": prediction,
+            "error": error,
+            "latency_ms": round(latency_ms, 1),
+            "prompt_tokens": token_count,
+        })
+        if index % 10 == 0 or index == len(cases):
+            print(f"eval_progress: {index}/{len(cases)}")
+
+    elapsed = time.time() - started
+    result = score(cases, rows)
+    run_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    eval_dir = out_root / "runs" / run_stamp
+    eval_dir.mkdir(parents=True, exist_ok=False)
+
+    predictions_path = eval_dir / "predictions.jsonl"
+    with predictions_path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+    metrics = {
+        "status": "V11_FRESH_BLIND_V1_COMPLETE",
+        "fixture_sha256": fixture_sha,
+        "fixture_file": str(fixture_path),
+        "fixture_cases": len(cases),
+        "production_document_shape": "NormalizedEmailDocumentV1",
+        "adapter_dir": str(adapter),
+        "adapter_sha256": adapter_sha,
+        "training_run": str(run),
+        "model_id": MODEL_ID,
+        "elapsed_seconds": elapsed,
+        "prompt_tokens": {
+            "min": min(prompt_tokens),
+            "max": max(prompt_tokens),
+            "mean": sum(prompt_tokens) / len(prompt_tokens),
+        },
+        "raw_customer_data": False,
+        "train_eligible": False,
+        "frozen_108_read": False,
+        "blind_50_read": False,
+        "real_gmail_holdout_read": False,
+        **result,
+    }
+    metrics_path = eval_dir / "metrics.json"
+    metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (out_root / "LATEST_EVAL.txt").write_text(str(eval_dir) + "\n", encoding="utf-8")
+
+    print("\n# RESULT")
+    print(f"gate: {result['gate']}")
+    print(f"exact: {result['exact_correct']}/{result['total']} ({100 * result['exact_accuracy']:.2f}%)")
+    print(f"commerce: {result['commerce_correct']}/{result['total']} ({100 * result['commerce_accuracy']:.2f}%)")
+    print(f"macro_event_accuracy: {100 * result['macro_event_accuracy']:.2f}%")
+    print(f"invalid_output: {result['invalid_output_count']}")
+    print(f"incoherent_output: {result['incoherent_output_count']}")
+    print(f"unsafe_promotions: {result['unsafe_promotion_count']}")
+    print(f"other_false_commerce: {result['other_false_commerce_count']}")
+    print(f"critical_boundary_errors: {result['critical_boundary_error_count']}")
+    print(f"elapsed_minutes: {elapsed / 60:.2f}")
+    print(f"metrics_file: {metrics_path}")
+    print("per_event:")
+    for event in ALLOWED:
+        event_result = result["per_event"][event]
+        print(f"  {event}: {event_result['correct']}/{event_result['total']} ({100 * event_result['accuracy']:.1f}%)")
+    print("status: V11_FRESH_BLIND_V1_COMPLETE")
+
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+if __name__ == "__main__":
+    main()
