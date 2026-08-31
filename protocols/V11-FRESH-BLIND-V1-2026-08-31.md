@@ -51,7 +51,7 @@ The fixture is generated deterministically after V11 training completed, before 
 - synthetic only: **true**
 - raw customer data: **false**
 - train eligible: **false**
-- fixture SHA-256: `5a03856c3a5962860224a809eb9c4f45d28190e2618b534dfc9c4880ac0e9582`
+- fixture SHA-256: `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
 
 The runner aborts if regenerated fixture bytes no longer match that hash.
 
