@@ -1,8 +1,39 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — V12 teacher + robustness foundation prepared
+## 2026-09-01 — V12 constrained output invalid-only PASS; full-180 gate prepared
 
-Branch: `codex/v12-teacher-robustness-foundation`
+Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+Completed the first V12 Stage 0 constrained-output diagnostic using the unchanged V11 adapter on only the six previously-invalid FULL rows from Input View Holdout v2.
+
+Result:
+- selected cases: `6`
+- all six expected `ORDER_PROCESSING`
+- exact after constrained decoding: `6/6`
+- constrained invalid outputs: `0`
+- unsafe promotions: `0`
+- no training
+- no adapter mutation
+- no frozen fixture mutation
+
+Local report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-invalid-v1.json`
+
+Interpretation:
+- the malformed V11 generative outputs can be eliminated on these rows structurally without retraining;
+- this does not yet justify global adoption because previously-valid rows were not rerun in this first probe.
+
+Prepared the full confirmation gate:
+- `scripts/run-v12-output-constraint-full-v1.ps1`
+- `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`
+- reuses the same runner with `--all` to rerun all 180 FULL holdout rows;
+- measures invalid count, unsafe promotions, exact score, and how many previously-valid baseline predictions change.
+
+Next gate: run full 180 constrained decoding. If invalid remains zero with no safety/accuracy regression, use constrained decoding as the V12 output baseline before teacher-student hard-example generation.
+
+---
+
+## 2026-09-01 — V12 teacher + robustness foundation prepared
 
 Started V12 from the completed V11 input-view/causality evidence rather than blindly adding more templates.
 
@@ -17,16 +48,7 @@ V12 plan:
 - use synthetic/deidentified teacher data by default;
 - after V12 training, freeze a brand-new untouched holdout before judging gains.
 
-Stage 0 implemented:
-- `scripts/v12_constrained_output.py` constrains the existing V11 causal model to only the 18 legal canonical semantic outputs;
-- `scripts/v12-output-constraint-probe-v1.py` reruns only the already-invalid FULL rows from Input View Holdout v2;
-- launcher: `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-PROBE.cmd`;
-- no training, no adapter mutation, no fixture mutation;
-- if this removes malformed outputs, it preserves the existing V11 learned weights and avoids an unnecessary architecture reset.
-
-External teacher direction documented but not activated yet: OpenAI Responses API with strict JSON schema, configurable teacher model (quality target `gpt-5.6-sol`), environment-only API key, provenance/checkpointing, and no raw customer emails by default.
-
-Next gate: run the Stage 0 output-constraint probe locally and preserve `# SUMMARY` before building the teacher corpus generator.
+External teacher direction documented but not activated yet: OpenAI Responses API with strict JSON schema, configurable teacher model, environment-only API key, provenance/checkpointing, and no raw customer emails by default.
 
 ---
 
