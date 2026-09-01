@@ -1,5 +1,41 @@
 # BuyFlow worklog latest
 
+## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
+
+Branch: `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
+
+Completed local GPU A/B using the same locked 180-case Fresh Blind fixture and the same V11 adapter.
+
+Result:
+- full `NormalizedEmailDocumentV1` baseline: `163/180 = 90.56%` exact
+- `BuyFlowSemanticEmailViewV1`: `163/180 = 90.56%` exact
+- semantic macro event accuracy: `90.56%`
+- invalid output: `7 -> 7`
+- unsafe lifecycle promotions: `1 -> 0`
+- critical boundary errors: `10 -> 10`
+- paired semantic-only correct: `2`
+- paired baseline-only correct: `2`
+- net exact gain: `0`
+- recommendation: `NO_CLEAR_ACCURACY_GAIN_REQUIRES_NEW_UNTOUCHED_HOLDOUT`
+
+Interpretation:
+- compact semantic input did not improve headline accuracy on this diagnostic fixture;
+- it removed the single unsafe promotion with no invalid-output regression;
+- this is a useful safety/efficiency signal but not enough to adopt the representation yet;
+- confirm on a newly frozen untouched representation holdout before V12/adoption;
+- no training occurred and the 180 cases remain non-trainable.
+
+Local result:
+`local-data/lora-v11/semantic-view-ab-v1/runs/20260901T180628Z/`
+
+Next:
+1. preserve both first-run result directories unchanged;
+2. do not train on the 180-case fixture;
+3. freeze a new untouched full-vs-semantic representation holdout if we want to settle the input-format question;
+4. separately design V12 hard-example training around ORDER_PROCESSING, SHIPPED, critical lifecycle boundaries and invalid-output elimination.
+
+---
+
 ## 2026-09-01 — V11 SemanticEmailView A/B diagnostic prepared
 
 Branch: `codex/v11-semantic-view-ab-v1`
@@ -36,11 +72,6 @@ Files:
 - `scripts/BuyFlow-V11-SEMANTIC-VIEW-AB.cmd`
 - `protocols/V11-SEMANTIC-VIEW-AB-V1-2026-09-01.md`
 
-Next gate:
-1. run the SemanticEmailView A/B locally;
-2. preserve the result unchanged;
-3. if semantic view wins without safety regression, freeze a new untouched representation holdout before V12/adoption.
-
 ---
 
 ## 2026-08-31 — V11 Fresh Blind v1 frozen runner prepared
@@ -60,15 +91,6 @@ Implemented:
 
 Frozen fixture SHA-256:
 `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
-
-Local preparation verification:
-- all Python runner modules compile;
-- `--freeze-only` regenerates 180 cases and the exact frozen SHA above;
-- packaged ZIP passes archive integrity verification.
-
-Important correction during preparation:
-- an earlier monolithic GitHub runner blob contained invalid UTF-8 and an obsolete fixture hash;
-- it was replaced by a clean modular runner and the protocol hash was corrected before any model inference.
 
 ---
 
