@@ -83,13 +83,10 @@ PR #301. Frozen SHA-256:
 `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`
 
 First completed local GPU result on 180 newly frozen cases:
-
 - **FULL**: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean prompt tokens `404.4`
 - **SEMANTIC**: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean prompt tokens `259.2`
 - **MINIMAL**: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean prompt tokens `178.2`
-- FULL→SEMANTIC paired net `-1`
-- FULL→MINIMAL paired net `-2`
-- SEMANTIC→MINIMAL paired net `-1`
+- paired nets: FULL→SEMANTIC `-1`, FULL→MINIMAL `-2`, SEMANTIC→MINIMAL `-1`
 - runner recommendation: `full`
 
 Local result:
@@ -97,19 +94,39 @@ Local result:
 
 Interpretation:
 - FULL is currently the best accuracy/safety representation on an untouched holdout.
-- SEMANTIC reduces mean prompt tokens by about 36% but loses 1 exact case and has one extra unsafe + one extra critical-boundary error.
-- MINIMAL reduces mean prompt tokens by about 56% but loses 2 exact cases and has one extra unsafe + two extra critical-boundary errors versus FULL.
-- This does **not** justify feeding raw MIME to Qwen. FULL here is the normalized production-shaped document, not raw/base64 MIME.
-- The next optimization target is an evidence-preserving compact view: identify which fields/evidence explain the FULL-only wins, keep those, and remove only demonstrably useless technical noise.
-- The 6 invalid outputs persist across all views, so malformed generative JSON is a separate model/output-architecture issue rather than an input-view issue.
+- SEMANTIC saves about 36% prompt tokens but loses one exact case and worsens unsafe/critical counts.
+- MINIMAL saves about 56% prompt tokens but loses two exact cases and worsens unsafe/critical counts further.
+- FULL means normalized production-shaped `NormalizedEmailDocumentV1`, **not** raw MIME/base64 email.
+- The 6 invalid outputs persist across all views, so malformed generative JSON is a separate output-architecture problem.
 - Do not train on this 180-case holdout.
+
+## INPUT-VIEW ADD-BACK DIAGNOSTIC — PREPARED
+
+On the same already-scored holdout, a diagnostic-only add-back runner now tests only cases where FULL was correct and SEMANTIC was wrong. It starts from the compact SemanticEmailView and adds omitted evidence groups one at a time:
+- raw HTML markup
+- recipients
+- headers/authentication
+- provider/thread/folder metadata
+- raw link details
+- raw attachment details
+- pipeline metadata
+- all omitted groups together
+
+Purpose: find the smallest evidence group that recovers FULL accuracy, so `SemanticEmailViewV2` can preserve useful evidence without carrying every technical field.
+
+Files:
+- `scripts/v11-input-view-addback-v1.py`
+- `scripts/run-v11-input-view-addback-v1.ps1`
+- `scripts/BuyFlow-V11-INPUT-VIEW-ADDBACK.cmd`
+
+This diagnostic does not train, does not modify the frozen fixture, and must not make these rows train-eligible.
 
 ## NEXT ACTION
 
-1. Analyze the paired FULL-only/SEMANTIC-only/MINIMAL-only cases from the preserved `predictions.jsonl` to identify which omitted evidence caused compact-view regressions.
-2. Design a `SemanticEmailViewV2` / evidence-preserving compact representation instead of blindly minimizing fields.
-3. Separately address the 6 invalid outputs (consider constrained/structured decoding or a sequence-classification head for `is_commerce + event_type`).
-4. Then design V12 teacher-student hard-example training around the actual failure families, without training on any frozen holdout row.
+1. Pull the latest `codex/v11-input-view-holdout-v2` into the separate test worktree and run `scripts/BuyFlow-V11-INPUT-VIEW-ADDBACK.cmd`.
+2. Use the add-back result to design an evidence-preserving `SemanticEmailViewV2` rather than blindly minimizing fields.
+3. Separately address the 6 invalid outputs (constrained/structured decoding or sequence-classification head for `is_commerce + event_type`).
+4. Then design V12 teacher-student hard-example training around the actual failure families, without training on frozen holdout rows.
 5. Do not consume BLIND50/frozen108 for tuning yet.
 6. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
 
