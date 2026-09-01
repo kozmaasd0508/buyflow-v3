@@ -23,7 +23,7 @@ function Convert-ToWslPath([string]$p) {
     $full = [System.IO.Path]::GetFullPath($p)
     if ($full -notmatch '^([A-Za-z]):\\(.*)$') { throw "WSL_PATH_UNSUPPORTED: $full" }
     $drive = $Matches[1].ToLowerInvariant()
-    $rest = $Matches[2].Replace('\\','/')
+    $rest = $Matches[2].Replace('\','/')
     return "/mnt/$drive/$rest"
 }
 
