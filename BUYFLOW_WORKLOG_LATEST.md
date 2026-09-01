@@ -1,109 +1,91 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
+## 2026-09-01 — Input-view causality v1 scored
 
-Branch: `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
+Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
 
-Completed local GPU A/B using the same locked 180-case Fresh Blind fixture and the same V11 adapter.
+Causality diagnostic completed on the only FULL-correct / SEMANTIC-wrong holdout case `IVH2-0057` (`IN_TRANSIT` expected, Semantic baseline `OUT_FOR_DELIVERY`).
 
 Result:
-- full `NormalizedEmailDocumentV1` baseline: `163/180 = 90.56%` exact
-- `BuyFlowSemanticEmailViewV1`: `163/180 = 90.56%` exact
-- semantic macro event accuracy: `90.56%`
-- invalid output: `7 -> 7`
-- unsafe lifecycle promotions: `1 -> 0`
-- critical boundary errors: `10 -> 10`
-- paired semantic-only correct: `2`
-- paired baseline-only correct: `2`
-- net exact gain: `0`
-- recommendation: `NO_CLEAR_ACCURACY_GAIN_REQUIRES_NEW_UNTOUCHED_HOLDOUT`
+- semantic recheck: wrong
+- real recipients: correct
+- dummy recipients: correct
+- neutral padding matched to recipients length: correct
+- real headers/auth: correct
+- dummy headers/auth: wrong
+- neutral padding matched to headers/auth length: correct
+- real raw links: correct
+- dummy raw links: correct
+- neutral padding matched to raw-links length: wrong
 
 Interpretation:
-- compact semantic input did not improve headline accuracy on this diagnostic fixture;
-- it removed the single unsafe promotion with no invalid-output regression;
-- this is a useful safety/efficiency signal but not enough to adopt the representation yet;
-- confirm on a newly frozen untouched representation holdout before V12/adoption;
-- no training occurred and the 180 cases remain non-trainable.
+- no single omitted semantic evidence group consistently explains the recovery;
+- dummy and neutral prompt additions can recover the same case;
+- therefore recipients/auth/raw-links must not be added to SemanticEmailViewV2 merely because they flipped this row;
+- V11 generative classification shows prompt-shape/token-position sensitivity at this lifecycle boundary;
+- keep FULL normalized input as current baseline while treating compact-view design as a separate robustness optimization;
+- the 6 invalid outputs from the untouched 180-case holdout remain a separate output-architecture problem.
 
-Local result:
-`local-data/lora-v11/semantic-view-ab-v1/runs/20260901T180628Z/`
+Local report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
 
 Next:
-1. preserve both first-run result directories unchanged;
-2. do not train on the 180-case fixture;
-3. freeze a new untouched full-vs-semantic representation holdout if we want to settle the input-format question;
-4. separately design V12 hard-example training around ORDER_PROCESSING, SHIPPED, critical lifecycle boundaries and invalid-output elimination.
+1. address malformed generative output via constrained/structured decoding or a sequence-classification head;
+2. design V12 teacher-student/hard-example training using new sibling examples, not frozen rows;
+3. include representation-invariance augmentation: harmless metadata padding/dropout, field-order/layout changes and equivalent compact/full views;
+4. freeze a new untouched holdout after V12;
+5. keep BLIND50/frozen108 untouched for tuning.
 
 ---
 
-## 2026-09-01 — V11 SemanticEmailView A/B diagnostic prepared
+## 2026-09-01 — Input-view add-back scored; causality diagnostic prepared
 
-Branch: `codex/v11-semantic-view-ab-v1`
+Local add-back v1 completed on the only FULL-correct / SEMANTIC-wrong holdout case:
+- `IVH2-0057`
+- expected `IN_TRANSIT`
+- Semantic predicted `OUT_FOR_DELIVERY`
+- raw_html: `0/1` recovered, +6 tokens
+- recipients: `1/1`, +23
+- headers_auth: `1/1`, +51
+- provider_meta: `0/1`, +33
+- raw_links: `1/1`, +37
+- raw_attachments: `0/1`, +4
+- pipeline_meta: `0/1`, +36
+- all: `1/1`, +190
 
-First V11 Fresh Blind v1 result from the user's local GPU run:
-- gate: FAIL
-- exact: 163/180 = 90.56%
-- commerce: 173/180 = 96.11%
-- macro event accuracy: 90.56%
-- invalid output: 7
-- unsafe lifecycle promotions: 1
-- OTHER -> commerce false positives: 0
-- critical boundary errors: 10
-- weakest groups: ORDER_PROCESSING 4/10, SHIPPED 5/10, OUT_FOR_DELIVERY 8/10, CANCELLED 8/10
-
-The frozen fixture remains unchanged and must not be trained on.
-
-Implemented a diagnostic input-representation A/B test:
-- new deterministic `BuyFlowSemanticEmailViewV1` projection;
-- retains sender, subject/snippet, received time, body text, visible HTML text, structured schema payloads, links and attachment metadata;
-- drops provider/thread ids, recipient bookkeeping, raw headers/auth bookkeeping, folders, rawRef, normalizer version and trace id;
-- same classifier instruction and same V11 adapter;
-- reuses the preserved first Fresh Blind `predictions.jsonl` as the baseline, so only the semantic side needs GPU inference;
-- strict existing scorer reused for exact, macro, invalid, unsafe, OTHER false-commerce and critical-boundary metrics;
-- adds paired baseline-only vs semantic-only wins per case/event;
-- diagnostic only: even a win requires a newly frozen untouched holdout before adoption;
-- per-case partial JSONL checkpointing and automatic resume prevent loss if the terminal is closed;
-- no training, no Purchase/Identity/Gmail/DB writes, no frozen108/BLIND50/real Gmail holdout reads.
-
-Files:
-- `scripts/v11_semantic_view_v1.py`
-- `scripts/v11-semantic-view-ab-v1.py`
-- `scripts/run-v11-semantic-view-ab-v1.ps1`
-- `scripts/BuyFlow-V11-SEMANTIC-VIEW-AB.cmd`
-- `protocols/V11-SEMANTIC-VIEW-AB-V1-2026-09-01.md`
+Because semantically unrelated groups independently flipped the row, a causality diagnostic was added instead of treating those fields as lifecycle evidence.
 
 ---
 
-## 2026-08-31 — V11 Fresh Blind v1 frozen runner prepared
+## 2026-09-01 — V11 untouched input-view holdout v2 scored
 
-Branch: `codex/v11-fresh-blind-v1`
+First untouched 180-case score:
+- FULL: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean tokens `404.4`
+- SEMANTIC: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean tokens `259.2`
+- MINIMAL: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean tokens `178.2`
 
-Implemented:
-- froze a post-training V11 fresh blind protocol before inference;
-- created 180 synthetic cases covering all 18 lifecycle labels, 10 per label;
-- languages: hu/en/de/pl/fr/es;
-- evaluates the actual production `NormalizedEmailDocumentV1` top-level representation rather than the simplified V11 synthetic training object;
-- includes stale/misleading subject and snippet traps, HTML-only current state, structured identifier traps, quoted old states, future-state negatives, marketing noise and non-commerce Product/Offer traps;
-- critical boundary scoring includes processing/packing, packing/shipment-created, shipment-created/shipped, shipped/in-transit, transit/out-for-delivery, out-for-delivery/delivered, pickup/delivered, delayed/delivery-failed, return/refund and payment/invoice;
-- exact strict JSON output validation and unsafe-promotion counting;
-- runner refuses V11 training evidence unless `frozen_108_trained`, `blind_50_trained`, `locked_test_read` and `locked_test_trained` are all false;
-- no Purchase/Identity/Gmail/DB writes and no training behavior.
+Frozen SHA: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. No training; holdout remains non-trainable.
 
-Frozen fixture SHA-256:
-`6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
+---
+
+## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
+
+On the earlier locked Fresh Blind fixture: FULL `163/180`, SEMANTIC `163/180`; invalid `7 -> 7`; unsafe `1 -> 0`; critical `10 -> 10`; net paired gain `0`. Useful signal but not enough to choose representation.
+
+---
+
+## 2026-08-31 — V11 Fresh Blind v1
+
+First score: exact `163/180 = 90.56%`, commerce `173/180 = 96.11%`, invalid `7`, unsafe `1`, critical `10`, gate `FAIL`. Frozen rows remain non-trainable.
 
 ---
 
 ## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
 
-Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft)
-
-Direct Gmail OAuth/PKCE, encrypted refresh-token storage, incremental history/watch runtime, authenticated Pub/Sub wake-up handling and read-only Gmail shadow smoke are implemented behind disabled-by-default flags. No direct Gmail production cutover or live source migration has occurred.
+Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft). Direct Gmail/OAuth/history/watch/Pub/Sub/read-only shadow foundation implemented behind disabled-by-default flags; no live provider cutover claimed.
 
 ---
 
 ## 2026-08-31 — Mobile Architecture Cleanup v1
 
-Branch: `codex/mobile-architecture-cleanup-v1` / PR #297 (draft)
-
-Purchase-detail status/timeline/product rendering was consolidated, three legacy MutationObservers removed, stored product image preview added, shipment-facing UI renamed to **Csomagok**. Exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286/1286 API tests. Browser visual smoke remains pending.
+Branch: `codex/mobile-architecture-cleanup-v1` / PR #297 (draft). Exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286/1286 API tests; browser visual smoke remains pending.

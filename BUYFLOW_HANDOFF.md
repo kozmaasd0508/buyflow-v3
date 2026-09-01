@@ -9,99 +9,103 @@
 **Modern email source:** `codex/modern-email-source-foundation-v1` / PR #295 (draft)  
 **Mobile cleanup:** `codex/mobile-architecture-cleanup-v1` / PR #297 (draft)  
 **V11 fresh blind:** `codex/v11-fresh-blind-v1` / PR #299 (draft)  
-**V11 SemanticEmailView diagnostic:** `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
+**V11 semantic input diagnostic:** PR #300  
+**V11 untouched input-view holdout + diagnostics:** `codex/v11-input-view-holdout-v2` / PR #301 (draft)
 
 ## SAFETY CONTRACT
 
-- AI/Qwen may classify commerce/lifecycle semantics only; it never grants hard identity/link authority.
+- Qwen may classify commerce/lifecycle semantics only; it never grants hard identity/link authority.
 - Lifecycle-only mail cannot create a Purchase.
 - Hard conflicts remain REVIEW/PENDING; false merge / false Purchase-create tolerance is zero.
-- Direct Gmail runtime, source archive and Mailgun source persistence remain OFF by default.
-- No modern email-source/direct-Gmail migration has been applied live from this development flow.
+- Direct Gmail runtime/source archive/Mailgun source persistence remain OFF by default.
 - No raw customer email content is committed to Git.
+- Frozen evaluation rows remain non-trainable.
 
-## MODERN EMAIL SOURCE + DIRECT GMAIL FOUNDATION
+## MODERN EMAIL SOURCE / MOBILE
 
-PR #295 contains `NormalizedEmailDocumentV1`, structured-data extraction, immutable raw/normalized archive design, direct Gmail REST + history/watch support, OAuth Authorization Code + PKCE, AES-256-GCM refresh-token storage, authenticated Pub/Sub wake-up handling, durable sync inbox and a read-only direct-Gmail shadow smoke. Live Google staging/shadow setup is still pending; do not claim provider cutover.
+PR #295 contains production `NormalizedEmailDocumentV1`, structured-data extraction, source archive design, direct Gmail REST/history/watch/OAuth/PKCE, authenticated Pub/Sub and read-only shadow smoke. No live provider cutover/migration is claimed.
 
-## MOBILE CLEANUP
+PR #297 contains mobile purchase-detail cleanup; exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 / 1286 API tests. Browser visual smoke remains pending.
 
-PR #297 consolidated purchase-detail status/timeline/product rendering, removed three legacy MutationObservers, added stored product-image preview support, renamed shipment-facing UI to **Csomagok**, and passed CI #1139 on code head `b90670c9c7e4654537c060f99733b6d56ddb8553`. Browser visual smoke is still required before merge/APK.
-
-## QWEN V11 TRAINING — COMPLETE
+## QWEN V11 TRAINING
 
 Completed local Qwen3-8B QLoRA run:
 `local-data/lora-v11/runs/20260830T194827Z-qwen3-8b-buyflow-v11-normalized-semantic`
 
-Evidence from the completed training:
-- TRAIN 5760 / VALIDATION 576
-- 18 event types, multilingual
-- optimizer steps 1440 / 1440
-- best validation loss about `0.000015`
-- adapter saved under `best/`
-- `frozen_108_trained=false`
-- `blind_50_trained=false`
-- final trainer status `LORA_V11_NORMALIZED_SEMANTIC_TRAIN_COMPLETE`
+Evidence: 5760 train / 576 validation, 18 labels, multilingual, 1440/1440 optimizer steps, best in-family validation loss about `0.000015`, adapter saved, protected holdouts not trained/read. Do not treat the very low in-family validation loss as real-world proof.
 
-Do not treat the very low in-family validation loss as proof of real generalization.
+## FRESH BLIND V1 — SCORED / FAIL
 
-## V11 FRESH BLIND V1 — SCORED / FAIL
+Frozen SHA: `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
 
-Frozen fixture SHA-256:
-`6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
+First score: exact `163/180 = 90.56%`, commerce `173/180 = 96.11%`, invalid `7`, unsafe `1`, critical-boundary errors `10`, gate `FAIL`. Weakest groups included ORDER_PROCESSING and SHIPPED. Do not train on these rows.
 
-First completed GPU result supplied from the user's local machine:
-- exact: `163/180 = 90.56%`
-- commerce: `173/180 = 96.11%`
-- macro event accuracy: `90.56%`
-- invalid output: `7`
-- incoherent output: `0`
-- unsafe lifecycle promotions: `1`
-- OTHER -> commerce false positives: `0`
-- critical boundary errors: `10`
-- gate: `FAIL`
+## INPUT VIEW HOLDOUT V2 — SCORED
 
-Weakest event groups:
-- `ORDER_PROCESSING`: `4/10`
-- `SHIPPED`: `5/10`
-- `OUT_FOR_DELIVERY`: `8/10`
-- `CANCELLED`: `8/10`
+PR #301. Frozen SHA: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`
 
-The first result lives locally under:
-`local-data/lora-v11/fresh-blind-v1/runs/20260831T172252Z/`
+First untouched 180-case result:
+- FULL: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean prompt tokens `404.4`
+- SEMANTIC: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean tokens `259.2`
+- MINIMAL: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean tokens `178.2`
 
-Freeze rule remains active: do not patch this fixture and do not train on these 180 cases.
+FULL here is normalized `NormalizedEmailDocumentV1`, not raw MIME/base64. The 6 invalid outputs across all views are a separate output-architecture issue.
 
-## V11 SEMANTIC EMAIL VIEW A/B V1 — SCORED / DIAGNOSTIC
+Local metrics:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/metrics.json`
 
-PR #300 compares the same V11 adapter and same locked 180 cases using the full `NormalizedEmailDocumentV1` baseline versus compact `BuyFlowSemanticEmailViewV1` input. It is diagnostic only; no training occurred.
+## ADD-BACK V1 — SCORED
 
-Local GPU A/B result:
-- baseline exact: `163/180 = 90.56%`
-- semantic exact: `163/180 = 90.56%`
-- semantic macro event accuracy: `90.56%`
-- invalid output: `7 -> 7`
-- unsafe lifecycle promotions: `1 -> 0`
-- critical boundary errors: `10 -> 10`
-- paired wins: semantic-only `2`, baseline-only `2`, net `0`
-- recommendation: `NO_CLEAR_ACCURACY_GAIN_REQUIRES_NEW_UNTOUCHED_HOLDOUT`
+Only one holdout case was FULL-correct and SEMANTIC-wrong: `IVH2-0057`, expected `IN_TRANSIT`, Semantic predicted `OUT_FOR_DELIVERY`.
+
+Starting from Semantic view:
+- raw HTML: did not recover
+- recipients: recovered
+- headers/authentication: recovered
+- provider metadata: did not recover
+- raw links: recovered
+- raw attachments: did not recover
+- pipeline metadata: did not recover
+- all omitted fields: recovered
+
+Because semantically unrelated groups independently flipped the same single case, this was not enough to infer useful lifecycle evidence. A causality diagnostic was required.
+
+Local add-back report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-addback-v1.json`
+
+## CAUSALITY DIAGNOSTIC V1 — SCORED
+
+Same candidate `IVH2-0057`; semantic recheck stayed wrong (`OUT_FOR_DELIVERY`). Results:
+- real recipients: correct
+- dummy recipients: correct
+- neutral padding matched to recipients token length: correct
+- real headers/auth: correct
+- dummy headers/auth: wrong
+- neutral padding matched to headers/auth token length: correct
+- real raw links: correct
+- dummy raw links: correct
+- neutral padding matched to raw-links token length: wrong
 
 Interpretation:
-- trimming technical input did **not** improve headline exact accuracy on this already-used diagnostic fixture;
-- it did remove the one unsafe lifecycle promotion without increasing invalid outputs;
-- this is a safety/efficiency signal, not proof that SemanticEmailView is globally better;
-- do not adopt or train around this 180-case result without a newly frozen untouched representation holdout.
+- there is **no consistent semantic evidence signal** explaining the recovery;
+- dummy or neutral additions can also flip the prediction;
+- do not add recipients/auth/links to a compact view just because they recovered this one row;
+- V11's generative classifier is measurably sensitive to prompt structure/token placement around this boundary;
+- FULL remains the safest current baseline, but this does not prove every FULL technical field is useful;
+- compact-input design must be validated on multiple new cases, not tuned around `IVH2-0057`.
 
-Semantic A/B result lives locally under:
-`local-data/lora-v11/semantic-view-ab-v1/runs/20260901T180628Z/`
+Local causality report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
 
 ## NEXT ACTION
 
-1. Preserve both first-run result directories unchanged.
-2. Do **not** train on the 180-case Fresh Blind fixture.
-3. Before V12, decide between two controlled next experiments: a newly frozen untouched representation holdout for full-vs-semantic input, and a hard-example V12 design targeting `ORDER_PROCESSING`, `SHIPPED`, critical boundaries and invalid-output elimination.
-4. Do **not** consume BLIND50/frozen108 for tuning unless explicitly choosing them as evaluation gates.
-5. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
+1. Keep FULL normalized input as the current V11 baseline; do not adopt a field add-back from the single causality case.
+2. Separately eliminate the 6 invalid generative outputs using constrained/structured decoding or test a sequence-classification head for `is_commerce + event_type`.
+3. Design V12 teacher-student hard-example training around failure families such as ORDER_PROCESSING/SHIPPED and critical lifecycle boundaries, using newly generated sibling examples, never frozen holdout rows.
+4. Add representation-robustness augmentation for V12: field order changes, harmless metadata padding/dropout, equivalent compact/full layouts, so the label is invariant to prompt shape.
+5. After V12, freeze a new untouched holdout before evaluating representation and model gains.
+6. Do not consume BLIND50/frozen108 for tuning yet.
+7. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
 
 ## RESUME CONTRACT
 
