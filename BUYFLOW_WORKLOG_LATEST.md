@@ -1,5 +1,20 @@
 # BuyFlow worklog latest
 
+## 2026-09-01 — V12 full constrained launcher WSL-path bug fixed
+
+Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+The first attempt to run the full 180 constrained-output confirmation failed before model inference. WSL received a collapsed path like `/mnt/c/Userskozma...` because `run-v12-output-constraint-full-v1.ps1` attempted to replace a double-backslash sequence instead of ordinary single Windows path separators.
+
+Fix:
+- `scripts/run-v12-output-constraint-full-v1.ps1`
+- corrected the path conversion to match the already-working invalid-only launcher;
+- commit `fc9e843d0b34d682d705cc649660c84ceb83001f`.
+
+No evaluation result was produced by the failed launch, no frozen fixture changed, and no training occurred. Next action is simply to fetch the fixed branch and rerun `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`.
+
+---
+
 ## 2026-09-01 — V12 constrained output invalid-only PASS; full-180 gate prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
