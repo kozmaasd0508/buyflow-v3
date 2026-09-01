@@ -1,5 +1,43 @@
 # BuyFlow worklog latest
 
+## 2026-09-01 — V11 untouched input-view holdout v2 frozen
+
+Branch: `codex/v11-input-view-holdout-v2`
+
+Prepared a clean confirmation test for the email-representation question before V12.
+
+New frozen holdout:
+- 180 previously unused synthetic cases
+- 18 lifecycle labels × 10
+- hu/en/de/pl/fr/es
+- new seed `20260901`
+- new merchant/carrier names, wording and perturbation layout
+- production-shaped `NormalizedEmailDocumentV1` source document
+- fixture SHA-256: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`
+
+A/B/C views on the same cases and unchanged V11 adapter:
+- FULL: complete `NormalizedEmailDocumentV1`
+- SEMANTIC: `BuyFlowSemanticEmailViewV1`
+- MINIMAL: sender domain + subject + body text + visible HTML text + selected identifiers + attachment name/type
+
+Controls and outputs:
+- same instruction, decoding, label set and strict scorer for all views
+- exact/macro/commerce, invalid, incoherent, unsafe, OTHER false-commerce and critical-boundary metrics
+- prompt-token min/max/mean/total for cost comparison
+- paired wins for FULL↔SEMANTIC, FULL↔MINIMAL and SEMANTIC↔MINIMAL
+- per-case checkpointing and automatic resume
+- no training and do not train on these 180 after scoring
+- old Fresh Blind rows are not reused as evaluation rows
+- frozen108 / BLIND50 / real Gmail holdout remain unread
+- no Purchase/Identity/Gmail/DB writes
+
+Launcher:
+`scripts/BuyFlow-V11-INPUT-VIEW-HOLDOUT-V2.cmd`
+
+Next: run locally from a separate `buyflow-v3` worktree, preserve first metrics unchanged, then choose V12 input representation from accuracy + safety + prompt-token cost.
+
+---
+
 ## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
 
 Branch: `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
@@ -28,12 +66,6 @@ Interpretation:
 Local result:
 `local-data/lora-v11/semantic-view-ab-v1/runs/20260901T180628Z/`
 
-Next:
-1. preserve both first-run result directories unchanged;
-2. do not train on the 180-case fixture;
-3. freeze a new untouched full-vs-semantic representation holdout if we want to settle the input-format question;
-4. separately design V12 hard-example training around ORDER_PROCESSING, SHIPPED, critical lifecycle boundaries and invalid-output elimination.
-
 ---
 
 ## 2026-09-01 — V11 SemanticEmailView A/B diagnostic prepared
@@ -53,24 +85,7 @@ First V11 Fresh Blind v1 result from the user's local GPU run:
 
 The frozen fixture remains unchanged and must not be trained on.
 
-Implemented a diagnostic input-representation A/B test:
-- new deterministic `BuyFlowSemanticEmailViewV1` projection;
-- retains sender, subject/snippet, received time, body text, visible HTML text, structured schema payloads, links and attachment metadata;
-- drops provider/thread ids, recipient bookkeeping, raw headers/auth bookkeeping, folders, rawRef, normalizer version and trace id;
-- same classifier instruction and same V11 adapter;
-- reuses the preserved first Fresh Blind `predictions.jsonl` as the baseline, so only the semantic side needs GPU inference;
-- strict existing scorer reused for exact, macro, invalid, unsafe, OTHER false-commerce and critical-boundary metrics;
-- adds paired baseline-only vs semantic-only wins per case/event;
-- diagnostic only: even a win requires a newly frozen untouched holdout before adoption;
-- per-case partial JSONL checkpointing and automatic resume prevent loss if the terminal is closed;
-- no training, no Purchase/Identity/Gmail/DB writes, no frozen108/BLIND50/real Gmail holdout reads.
-
-Files:
-- `scripts/v11_semantic_view_v1.py`
-- `scripts/v11-semantic-view-ab-v1.py`
-- `scripts/run-v11-semantic-view-ab-v1.ps1`
-- `scripts/BuyFlow-V11-SEMANTIC-VIEW-AB.cmd`
-- `protocols/V11-SEMANTIC-VIEW-AB-V1-2026-09-01.md`
+Implemented a diagnostic input-representation A/B test with `BuyFlowSemanticEmailViewV1`, same adapter/instruction, preserved baseline reuse, strict scorer, paired wins and per-case resume. No training or protected holdout reads.
 
 ---
 
@@ -78,18 +93,7 @@ Files:
 
 Branch: `codex/v11-fresh-blind-v1`
 
-Implemented:
-- froze a post-training V11 fresh blind protocol before inference;
-- created 180 synthetic cases covering all 18 lifecycle labels, 10 per label;
-- languages: hu/en/de/pl/fr/es;
-- evaluates the actual production `NormalizedEmailDocumentV1` top-level representation rather than the simplified V11 synthetic training object;
-- includes stale/misleading subject and snippet traps, HTML-only current state, structured identifier traps, quoted old states, future-state negatives, marketing noise and non-commerce Product/Offer traps;
-- critical boundary scoring includes processing/packing, packing/shipment-created, shipment-created/shipped, shipped/in-transit, transit/out-for-delivery, out-for-delivery/delivered, pickup/delivered, delayed/delivery-failed, return/refund and payment/invoice;
-- exact strict JSON output validation and unsafe-promotion counting;
-- runner refuses V11 training evidence unless `frozen_108_trained`, `blind_50_trained`, `locked_test_read` and `locked_test_trained` are all false;
-- no Purchase/Identity/Gmail/DB writes and no training behavior.
-
-Frozen fixture SHA-256:
+Frozen 180-case post-training V11 fresh blind protocol covering all 18 lifecycle labels, six languages and critical boundary/noise traps. Frozen SHA-256:
 `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
 
 ---
