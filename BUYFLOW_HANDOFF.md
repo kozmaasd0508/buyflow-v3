@@ -24,9 +24,9 @@
 
 Completed local Qwen3-8B V11 QLoRA: 5760 TRAIN / 576 validation, 18 labels, multilingual, 1440/1440 optimizer steps, best in-family validation loss about `0.000015`. Protected holdouts were not trained/read.
 
-Fresh Blind v1 first score (frozen SHA `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`): exact `163/180`, invalid `7`, unsafe `1`, critical-boundary errors `10`, gate `FAIL`.
+Fresh Blind v1 first score: exact `163/180`, invalid `7`, unsafe `1`, critical-boundary errors `10`, gate `FAIL`.
 
-Untouched Input View Holdout v2 (frozen SHA `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`):
+Untouched Input View Holdout v2:
 - FULL normalized: `170/180`, invalid `6`, unsafe `1`, critical `4`, mean tokens `404.4`
 - SEMANTIC: `169/180`, invalid `6`, unsafe `2`, critical `5`, mean tokens `259.2`
 - MINIMAL: `168/180`, invalid `6`, unsafe `2`, critical `6`, mean tokens `178.2`
@@ -35,64 +35,72 @@ FULL means production-shaped `NormalizedEmailDocumentV1`, not raw MIME/base64. A
 
 ## V12 STAGE 0 — CONSTRAINED OUTPUT PASSED DEVELOPMENT GATE
 
-The existing V11 adapter was rerun with a decoder that permits only the 18 legal canonical outputs.
+The unchanged V11 adapter was rerun with a decoder that permits only the 18 legal canonical outputs.
 
-Invalid-only probe:
-- 6 previously-invalid rows
-- exact `6/6`
-- invalid `0`
-- unsafe `0`
+Invalid-only probe: 6/6 exact, invalid 0, unsafe 0.
 
-Full 180 confirmation on the same frozen Input View Holdout v2:
+Full 180 confirmation on frozen Input View Holdout v2:
 - exact `176/180`
 - constrained invalid output `0`
 - unsafe promotions `1`
 - `changed_from_valid_baseline = 0`
-- no training, no adapter mutation, no fixture mutation
+- no training, adapter mutation or fixture mutation
 
-The constrained decoder recovered all six formerly-invalid ORDER_PROCESSING rows and did not change any previously-valid baseline prediction. Four semantic errors remain:
-- ORDER_PROCESSING -> ORDER_PACKING
-- REFUNDED -> RETURN
-- PAYMENT -> INVOICE
-- OUT_FOR_DELIVERY -> DELIVERED (unsafe)
+Four semantic errors remain: ORDER_PROCESSING→ORDER_PACKING, REFUNDED→RETURN, PAYMENT→INVOICE, OUT_FOR_DELIVERY→DELIVERED (unsafe).
 
-Local reports:
-- `local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-invalid-v1.json`
-- `local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-all-v1.json`
+Treat constrained semantic decoding as the V12 development output baseline. The frozen 180 remains evaluation-only and non-trainable; a new untouched post-V12 holdout is still required.
 
-Treat constrained semantic decoding as the V12 development output baseline. This frozen 180 remains evaluation-only and non-trainable. A new untouched post-V12 holdout is still required before production adoption claims.
+## V12 STAGE 1 — STUDENT HARD-CASE MINE SCORED
 
-## V12 STAGE 1 — STUDENT HARD-CASE MINING READY
+First local run on 144 new synthetic/deidentified cases:
+- candidate SHA-256: `05d0ca898b2ccf5f75897d2930a500f960e29b1591a0ec1bb0c8996accae08fa`
+- V11 student + constrained decoder: `142/144` exact vs seed
+- disagreements: `2`
+- unsafe: `0`
+- teacher review queue: `14` = 2 disagreements + 12 agreement audits
 
-Protocol: `protocols/V12-STAGE1-STUDENT-MINE-V1-2026-09-01.md`
+Family results:
+- `order_processing_vs_packing`: `22/24`, 2 disagreements
+- `out_for_delivery_vs_delivered`: `24/24`
+- `payment_vs_invoice`: `24/24`
+- `return_vs_refunded`: `24/24`
+- `shipment_created_vs_shipped`: `24/24`
+- `shipped_vs_in_transit`: `24/24`
 
-Prepared a new 144-case synthetic/deidentified pilot around six hard boundary families:
-- ORDER_PROCESSING vs ORDER_PACKING
-- SHIPMENT_CREATED vs SHIPPED
-- SHIPPED vs IN_TRANSIT
-- OUT_FOR_DELIVERY vs DELIVERED
-- RETURN vs REFUNDED
-- PAYMENT vs INVOICE
+Local run:
+`local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
 
-Coverage: hu/en/de/pl/fr/es, both sides of every boundary, two representation variants per label/language. No Fresh Blind/Input View Holdout row is copied.
+The 144 cases are new TRAIN-candidate material, not evaluation holdouts. No external teacher was called and no training occurred.
 
-The unchanged V11 student + constrained decoder classifies all 144 first. Only student disagreements plus a small agreement-audit sample are written to a local teacher-review queue. This reduces future strong-teacher calls and preserves provenance.
+## V12 STAGE 1B — OPENAI TEACHER REVIEW READY
+
+Protocol: `protocols/V12-STAGE1-OPENAI-TEACHER-REVIEW-V1-2026-09-01.md`
+
+Prepared an independent strong-teacher review of only the 14-case queue. Default teacher: `gpt-5.6-sol` via Responses API with strict JSON-schema output.
+
+Important controls:
+- teacher does NOT see seed label or student prediction before classifying;
+- only rows explicitly marked synthetic + deidentified may be sent;
+- `store=false`;
+- API key from `OPENAI_API_KEY` only and never written to files;
+- checkpoint/resume per case;
+- teacher event, confidence, evidence sufficiency, response id and token usage are recorded;
+- a row is approved only if teacher matches seed + evidence is sufficient + confidence HIGH;
+- approved means source for later augmentation, NOT immediate TRAIN eligibility;
+- no Purchase/Identity/Gmail/DB writes.
 
 Files:
-- `scripts/v12_hard_candidates_v1.py`
-- `scripts/v12-student-mine-candidates-v1.py`
-- `scripts/run-v12-student-mine-v1.ps1`
-- `scripts/BuyFlow-V12-STUDENT-MINE.cmd`
-
-No external teacher API is called yet. No training occurs in Stage 1 mining.
+- `scripts/v12-teacher-review-openai-v1.py`
+- `scripts/run-v12-teacher-review-openai-v1.ps1`
+- `scripts/BuyFlow-V12-TEACHER-REVIEW.cmd`
 
 ## NEXT ACTION
 
-1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate test worktree.
-2. Run `scripts/BuyFlow-V12-STUDENT-MINE.cmd`.
-3. Preserve the first `# SUMMARY`, candidate hash, family disagreement counts and local teacher-review queue.
-4. Then connect a strong teacher only to the disagreement queue + agreement audit sample, with synthetic/deidentified inputs and explicit provenance.
-5. After teacher approval, generate representation-invariance siblings and only then build V12 TRAIN/validation splits.
+1. Pull latest `codex/v12-teacher-robustness-foundation` into the separate test worktree.
+2. Set `OPENAI_API_KEY` only in the user's local PowerShell environment; never paste it into chat or Git.
+3. Run `scripts/BuyFlow-V12-TEACHER-REVIEW.cmd` on the 14-case synthetic queue.
+4. Preserve the first `# SUMMARY` and inspect any teacher-vs-seed conflict before generating training data.
+5. If the two student disagreements are independently confirmed as seed-correct, generate new sibling examples from that failure family and add representation-invariance variants.
 6. Never train on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
 7. Qwen remains semantic-only; Zero-Trust Purchase Identity Graph remains authoritative.
 
