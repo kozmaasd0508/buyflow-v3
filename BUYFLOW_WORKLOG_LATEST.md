@@ -1,5 +1,42 @@
 # BuyFlow worklog latest
 
+## 2026-09-01 — Input-view add-back diagnostic prepared
+
+Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
+
+After the untouched input-view holdout showed FULL > SEMANTIC > MINIMAL on accuracy/safety, added a diagnostic-only field add-back experiment.
+
+Purpose:
+- inspect only holdout cases where FULL was exact and SEMANTIC was not;
+- start from `BuyFlowSemanticEmailViewV1`;
+- add omitted evidence groups one at a time to identify what actually recovers the correct prediction;
+- avoid adopting the full technical document if only one small evidence group matters.
+
+Add-back groups:
+- raw HTML markup
+- recipients
+- headers/authentication
+- provider/thread/folder metadata
+- raw links
+- raw attachment details
+- pipeline metadata
+- all omitted groups together
+
+Files:
+- `scripts/v11-input-view-addback-v1.py`
+- `scripts/run-v11-input-view-addback-v1.ps1`
+- `scripts/BuyFlow-V11-INPUT-VIEW-ADDBACK.cmd`
+
+Safety:
+- no training
+- no fixture mutation
+- no Purchase/Identity/Gmail/DB writes
+- frozen holdout rows remain non-trainable
+
+Next: run the add-back diagnostic locally from the separate test worktree and use the smallest successful evidence group to shape `SemanticEmailViewV2`.
+
+---
+
 ## 2026-09-01 — V11 untouched input-view holdout v2 scored
 
 Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
@@ -25,13 +62,6 @@ Interpretation:
 - The correct next optimization is not blind minimization: inspect paired FULL-only wins and preserve the missing evidence in a compact `SemanticEmailViewV2`.
 - The same `6` invalid outputs in all three views indicate a separate generative-output problem; input trimming did not fix it.
 - No training occurred; this frozen holdout remains non-trainable.
-
-Next:
-1. analyze preserved paired predictions and source documents for FULL-only/compact-only wins;
-2. identify the minimum evidence set needed to retain FULL accuracy/safety;
-3. prototype evidence-preserving compact view;
-4. separately test structured/constrained output or classification-head architecture for invalid-output elimination;
-5. only then design V12 teacher-student/hard-example training on newly generated sibling cases, never the holdout rows.
 
 ---
 
