@@ -1,5 +1,35 @@
 # BuyFlow worklog latest
 
+## 2026-09-01 — V12 teacher + robustness foundation prepared
+
+Branch: `codex/v12-teacher-robustness-foundation`
+
+Started V12 from the completed V11 input-view/causality evidence rather than blindly adding more templates.
+
+Prepared protocol:
+`protocols/V12-TEACHER-ROBUSTNESS-FOUNDATION-2026-09-01.md`
+
+V12 plan:
+- first eliminate malformed generative output structurally;
+- then generate new teacher-reviewed hard-example siblings around actual failure families;
+- add representation-invariance augmentation (field order, harmless metadata padding/dropout, equivalent layouts);
+- never train on frozen Fresh Blind/Input View Holdout rows;
+- use synthetic/deidentified teacher data by default;
+- after V12 training, freeze a brand-new untouched holdout before judging gains.
+
+Stage 0 implemented:
+- `scripts/v12_constrained_output.py` constrains the existing V11 causal model to only the 18 legal canonical semantic outputs;
+- `scripts/v12-output-constraint-probe-v1.py` reruns only the already-invalid FULL rows from Input View Holdout v2;
+- launcher: `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-PROBE.cmd`;
+- no training, no adapter mutation, no fixture mutation;
+- if this removes malformed outputs, it preserves the existing V11 learned weights and avoids an unnecessary architecture reset.
+
+External teacher direction documented but not activated yet: OpenAI Responses API with strict JSON schema, configurable teacher model (quality target `gpt-5.6-sol`), environment-only API key, provenance/checkpointing, and no raw customer emails by default.
+
+Next gate: run the Stage 0 output-constraint probe locally and preserve `# SUMMARY` before building the teacher corpus generator.
+
+---
+
 ## 2026-09-01 — Input-view causality v1 scored
 
 Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
@@ -21,39 +51,13 @@ Result:
 Interpretation:
 - no single omitted semantic evidence group consistently explains the recovery;
 - dummy and neutral prompt additions can recover the same case;
-- therefore recipients/auth/raw-links must not be added to SemanticEmailViewV2 merely because they flipped this row;
-- V11 generative classification shows prompt-shape/token-position sensitivity at this lifecycle boundary;
-- keep FULL normalized input as current baseline while treating compact-view design as a separate robustness optimization;
-- the 6 invalid outputs from the untouched 180-case holdout remain a separate output-architecture problem.
+- do not add recipients/auth/raw-links merely because they flipped one row;
+- V11 generative classification shows prompt-shape/token-position sensitivity;
+- keep FULL normalized input as current baseline;
+- the 6 invalid outputs remain a separate output-architecture problem.
 
 Local report:
 `local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
-
-Next:
-1. address malformed generative output via constrained/structured decoding or a sequence-classification head;
-2. design V12 teacher-student/hard-example training using new sibling examples, not frozen rows;
-3. include representation-invariance augmentation: harmless metadata padding/dropout, field-order/layout changes and equivalent compact/full views;
-4. freeze a new untouched holdout after V12;
-5. keep BLIND50/frozen108 untouched for tuning.
-
----
-
-## 2026-09-01 — Input-view add-back scored; causality diagnostic prepared
-
-Local add-back v1 completed on the only FULL-correct / SEMANTIC-wrong holdout case:
-- `IVH2-0057`
-- expected `IN_TRANSIT`
-- Semantic predicted `OUT_FOR_DELIVERY`
-- raw_html: `0/1` recovered, +6 tokens
-- recipients: `1/1`, +23
-- headers_auth: `1/1`, +51
-- provider_meta: `0/1`, +33
-- raw_links: `1/1`, +37
-- raw_attachments: `0/1`, +4
-- pipeline_meta: `0/1`, +36
-- all: `1/1`, +190
-
-Because semantically unrelated groups independently flipped the row, a causality diagnostic was added instead of treating those fields as lifecycle evidence.
 
 ---
 
@@ -70,7 +74,7 @@ Frozen SHA: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. 
 
 ## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
 
-On the earlier locked Fresh Blind fixture: FULL `163/180`, SEMANTIC `163/180`; invalid `7 -> 7`; unsafe `1 -> 0`; critical `10 -> 10`; net paired gain `0`. Useful signal but not enough to choose representation.
+On the earlier locked Fresh Blind fixture: FULL `163/180`, SEMANTIC `163/180`; invalid `7 -> 7`; unsafe `1 -> 0`; critical `10 -> 10`; net paired gain `0`.
 
 ---
 
@@ -82,7 +86,7 @@ First score: exact `163/180 = 90.56%`, commerce `173/180 = 96.11%`, invalid `7`,
 
 ## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
 
-Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft). Direct Gmail/OAuth/history/watch/Pub/Sub/read-only shadow foundation implemented behind disabled-by-default flags; no live provider cutover claimed.
+Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft). No live provider cutover claimed.
 
 ---
 
