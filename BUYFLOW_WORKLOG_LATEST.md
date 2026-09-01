@@ -1,127 +1,79 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — Input-view add-back diagnostic prepared
+## 2026-09-01 — Input-view add-back scored; causality diagnostic prepared
 
 Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
 
-After the untouched input-view holdout showed FULL > SEMANTIC > MINIMAL on accuracy/safety, added a diagnostic-only field add-back experiment.
+Local add-back v1 completed on the only FULL-correct / SEMANTIC-wrong holdout case:
+- case `IVH2-0057`
+- expected `IN_TRANSIT`
+- Semantic predicted `OUT_FOR_DELIVERY`
+- raw_html: `0/1` recovered, +6 tokens
+- recipients: `1/1`, +23
+- headers_auth: `1/1`, +51
+- provider_meta: `0/1`, +33
+- raw_links: `1/1`, +37
+- raw_attachments: `0/1`, +4
+- pipeline_meta: `0/1`, +36
+- all: `1/1`, +190
 
-Purpose:
-- inspect only holdout cases where FULL was exact and SEMANTIC was not;
-- start from `BuyFlowSemanticEmailViewV1`;
-- add omitted evidence groups one at a time to identify what actually recovers the correct prediction;
-- avoid adopting the full technical document if only one small evidence group matters.
+Interpretation caution:
+- recipients, authentication headers and raw links are semantically unrelated as direct evidence for `IN_TRANSIT` versus `OUT_FOR_DELIVERY`, yet all three independently flip the single case to correct;
+- therefore the add-back result does not justify adding those fields to the compact view;
+- likely alternative explanation is prompt-shape/token-position sensitivity of the V11 generative classifier.
 
-Add-back groups:
-- raw HTML markup
-- recipients
-- headers/authentication
-- provider/thread/folder metadata
-- raw links
-- raw attachment details
-- pipeline metadata
-- all omitted groups together
+Prepared `Input View Causality v1` to distinguish evidence from formatting sensitivity. It compares, on the same already-used candidate case:
+- real recipients / headers-auth / raw-links;
+- dummy versions with neutral values but similar structure;
+- neutral padding targeted to similar prompt lengths;
+- semantic baseline recheck.
 
 Files:
-- `scripts/v11-input-view-addback-v1.py`
-- `scripts/run-v11-input-view-addback-v1.ps1`
-- `scripts/BuyFlow-V11-INPUT-VIEW-ADDBACK.cmd`
+- `scripts/v11-input-view-causality-v1.py`
+- `scripts/run-v11-input-view-causality-v1.ps1`
+- `scripts/BuyFlow-V11-INPUT-VIEW-CAUSALITY.cmd`
 
-Safety:
-- no training
-- no fixture mutation
-- no Purchase/Identity/Gmail/DB writes
-- frozen holdout rows remain non-trainable
+Safety: diagnostic only, no training, no fixture mutation, frozen rows remain non-trainable.
 
-Next: run the add-back diagnostic locally from the separate test worktree and use the smallest successful evidence group to shape `SemanticEmailViewV2`.
+Next: run causality diagnostic. If dummy/neutral variants also recover the case, classify the add-back effect as representation sensitivity rather than useful lifecycle evidence.
+
+---
+
+## 2026-09-01 — Input-view add-back diagnostic prepared
+
+After the untouched input-view holdout showed FULL > SEMANTIC > MINIMAL on accuracy/safety, added a diagnostic-only field add-back experiment over FULL-correct / SEMANTIC-wrong rows. No training or fixture mutation.
 
 ---
 
 ## 2026-09-01 — V11 untouched input-view holdout v2 scored
 
-Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
+First untouched 180-case score:
+- FULL: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean tokens `404.4`
+- SEMANTIC: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean tokens `259.2`
+- MINIMAL: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean tokens `178.2`
 
-First completed local GPU result on the newly frozen untouched 180-case holdout:
-
-- FULL: `170/180 = 94.44%` exact, invalid `6`, unsafe `1`, critical `4`, mean prompt tokens `404.4`
-- SEMANTIC: `169/180 = 93.89%` exact, invalid `6`, unsafe `2`, critical `5`, mean prompt tokens `259.2`
-- MINIMAL: `168/180 = 93.33%` exact, invalid `6`, unsafe `2`, critical `6`, mean prompt tokens `178.2`
-- FULL→SEMANTIC paired net: `-1`
-- FULL→MINIMAL paired net: `-2`
-- SEMANTIC→MINIMAL paired net: `-1`
-- runner recommendation: `full`
-
-Local metrics:
-`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/metrics.json`
-
-Interpretation:
-- FULL wins accuracy and safety on the fresh untouched holdout.
-- SEMANTIC saves about 36% mean prompt tokens but loses one exact case and worsens unsafe/critical counts.
-- MINIMAL saves about 56% mean prompt tokens but loses two exact cases and worsens unsafe/critical counts further.
-- FULL here means normalized production-shaped `NormalizedEmailDocumentV1`, not raw MIME/base64 email.
-- The correct next optimization is not blind minimization: inspect paired FULL-only wins and preserve the missing evidence in a compact `SemanticEmailViewV2`.
-- The same `6` invalid outputs in all three views indicate a separate generative-output problem; input trimming did not fix it.
-- No training occurred; this frozen holdout remains non-trainable.
-
----
-
-## 2026-09-01 — V11 untouched input-view holdout v2 frozen
-
-Prepared a clean confirmation test for the email-representation question before V12.
-
-Frozen holdout:
-- 180 previously unused synthetic cases
-- 18 lifecycle labels × 10
-- hu/en/de/pl/fr/es
-- fixture SHA-256 `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`
-- FULL vs SEMANTIC vs MINIMAL on same unchanged V11 adapter
-- same instruction, decoding, label set and scorer
-- prompt-token cost + paired wins
-- checkpoint/resume
-- no training or protected holdout reads
+Frozen SHA: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. No training; holdout remains non-trainable.
 
 ---
 
 ## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
 
-Branch: `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
-
-Result on the already-used Fresh Blind fixture:
-- FULL `163/180 = 90.56%`
-- SEMANTIC `163/180 = 90.56%`
-- invalid `7 -> 7`
-- unsafe `1 -> 0`
-- critical `10 -> 10`
-- paired semantic-only `2`, full-only `2`, net `0`
-
-Useful safety signal but insufficient to choose the representation; prompted the fresh untouched v2 holdout.
+On the earlier locked Fresh Blind fixture: FULL `163/180`, SEMANTIC `163/180`; invalid `7 -> 7`; unsafe `1 -> 0`; critical `10 -> 10`; net paired gain `0`. Useful signal but not enough to choose representation.
 
 ---
 
 ## 2026-08-31 — V11 Fresh Blind v1
 
-Frozen 180-case post-training evaluation across 18 labels and six languages. First score:
-- exact `163/180 = 90.56%`
-- commerce `173/180 = 96.11%`
-- invalid `7`
-- unsafe `1`
-- critical boundary errors `10`
-- gate `FAIL`
-
-Do not train on these rows.
+First score: exact `163/180 = 90.56%`, commerce `173/180 = 96.11%`, invalid `7`, unsafe `1`, critical `10`, gate `FAIL`. Frozen rows remain non-trainable.
 
 ---
 
 ## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
 
-Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft)
-
-Direct Gmail OAuth/PKCE, encrypted refresh-token storage, incremental history/watch runtime, authenticated Pub/Sub wake-up handling and read-only Gmail shadow smoke are implemented behind disabled-by-default flags. No direct Gmail production cutover or live source migration has occurred.
+Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft). Direct Gmail/OAuth/history/watch/Pub/Sub/read-only shadow foundation implemented behind disabled-by-default flags; no live provider cutover claimed.
 
 ---
 
 ## 2026-08-31 — Mobile Architecture Cleanup v1
 
-Branch: `codex/mobile-architecture-cleanup-v1` / PR #297 (draft)
-
-Purchase-detail status/timeline/product rendering was consolidated, three legacy MutationObservers removed, stored product image preview added, shipment-facing UI renamed to **Csomagok**. Exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286/1286 API tests. Browser visual smoke remains pending.
+Branch: `codex/mobile-architecture-cleanup-v1` / PR #297 (draft). Exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286/1286 API tests; browser visual smoke remains pending.
