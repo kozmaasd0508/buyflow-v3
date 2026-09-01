@@ -10,7 +10,7 @@
 **Mobile cleanup:** `codex/mobile-architecture-cleanup-v1` / PR #297 (draft)  
 **V11 fresh blind:** `codex/v11-fresh-blind-v1` / PR #299 (draft)  
 **V11 SemanticEmailView diagnostic:** `codex/v11-semantic-view-ab-v1` / PR #300 (draft)  
-**V11 untouched input-view holdout:** `codex/v11-input-view-holdout-v2`
+**V11 untouched input-view holdout:** `codex/v11-input-view-holdout-v2` / PR #301 (draft)
 
 ## SAFETY CONTRACT
 
@@ -34,91 +34,82 @@ PR #297 consolidated purchase-detail status/timeline/product rendering, removed 
 Completed local Qwen3-8B QLoRA run:
 `local-data/lora-v11/runs/20260830T194827Z-qwen3-8b-buyflow-v11-normalized-semantic`
 
-Evidence from the completed training:
+Evidence:
 - TRAIN 5760 / VALIDATION 576
 - 18 event types, multilingual
 - optimizer steps 1440 / 1440
 - best validation loss about `0.000015`
 - adapter saved under `best/`
-- `frozen_108_trained=false`
-- `blind_50_trained=false`
-- final trainer status `LORA_V11_NORMALIZED_SEMANTIC_TRAIN_COMPLETE`
+- protected holdouts were not trained/read
+- trainer status `LORA_V11_NORMALIZED_SEMANTIC_TRAIN_COMPLETE`
 
 Do not treat the very low in-family validation loss as proof of real generalization.
 
 ## V11 FRESH BLIND V1 — SCORED / FAIL
 
-Frozen fixture SHA-256:
+Frozen SHA-256:
 `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
 
 First completed GPU result:
-- exact: `163/180 = 90.56%`
-- commerce: `173/180 = 96.11%`
-- macro event accuracy: `90.56%`
-- invalid output: `7`
-- unsafe lifecycle promotions: `1`
-- OTHER -> commerce false positives: `0`
-- critical boundary errors: `10`
-- gate: `FAIL`
+- exact `163/180 = 90.56%`
+- commerce `173/180 = 96.11%`
+- macro `90.56%`
+- invalid `7`
+- unsafe promotions `1`
+- critical boundary errors `10`
+- gate `FAIL`
 
-Weakest event groups: `ORDER_PROCESSING 4/10`, `SHIPPED 5/10`, `OUT_FOR_DELIVERY 8/10`, `CANCELLED 8/10`.
+Weakest groups: `ORDER_PROCESSING 4/10`, `SHIPPED 5/10`, `OUT_FOR_DELIVERY 8/10`, `CANCELLED 8/10`.
 
-First result lives locally under:
-`local-data/lora-v11/fresh-blind-v1/runs/20260831T172252Z/`
-
-Freeze rule remains active: do not patch or train on these 180 cases.
+Do not patch or train on these 180 cases.
 
 ## V11 SEMANTIC EMAIL VIEW A/B V1 — SCORED / DIAGNOSTIC
 
-PR #300 compares the same V11 adapter and same locked 180 cases using the full document versus `BuyFlowSemanticEmailViewV1`.
+PR #300 reused the locked Fresh Blind cases only as a diagnostic representation comparison.
 
 Result:
-- full exact: `163/180 = 90.56%`
-- semantic exact: `163/180 = 90.56%`
-- invalid: `7 -> 7`
-- unsafe promotions: `1 -> 0`
-- critical boundary errors: `10 -> 10`
-- paired wins: semantic-only `2`, full-only `2`, net `0`
-- recommendation: `NO_CLEAR_ACCURACY_GAIN_REQUIRES_NEW_UNTOUCHED_HOLDOUT`
+- FULL `163/180 = 90.56%`
+- SEMANTIC `163/180 = 90.56%`
+- invalid `7 -> 7`
+- unsafe `1 -> 0`
+- critical `10 -> 10`
+- paired semantic-only `2`, full-only `2`, net `0`
 
-This showed a safety signal but no clean accuracy gain. Do not use the old 180 to choose the final representation.
+This was not enough to choose a representation, so a fresh untouched holdout was frozen.
 
-## V11 INPUT VIEW HOLDOUT V2 — FROZEN / NOT YET SCORED
+## V11 INPUT VIEW HOLDOUT V2 — SCORED
 
-Branch: `codex/v11-input-view-holdout-v2`
+PR #301. Frozen SHA-256:
+`8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`
 
-Purpose: settle the representation question on a new untouched fixture by comparing three views with the unchanged V11 adapter:
-- `FULL` — full production-shaped `NormalizedEmailDocumentV1`
-- `SEMANTIC` — `BuyFlowSemanticEmailViewV1`
-- `MINIMAL` — sender domain, subject, body text, visible HTML text, selected structured identifiers, attachment name/type
+First completed local GPU result on 180 newly frozen cases:
 
-Frozen contract:
-- 180 new cases, 18 events × 10
-- hu/en/de/pl/fr/es
-- new seed, wording, merchants, carriers and perturbation layout
-- fixture SHA-256: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`
-- same V11 adapter, same instruction, same decoding and scorer across all three views
-- records exact/macro/safety/critical-boundary metrics plus prompt-token cost and paired wins
-- per-case checkpoint + resume
-- no training
-- no Fresh Blind rows reused
-- frozen108 / BLIND50 / real Gmail holdout remain unread
-- do not train on this fixture after scoring
+- **FULL**: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean prompt tokens `404.4`
+- **SEMANTIC**: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean prompt tokens `259.2`
+- **MINIMAL**: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean prompt tokens `178.2`
+- FULL→SEMANTIC paired net `-1`
+- FULL→MINIMAL paired net `-2`
+- SEMANTIC→MINIMAL paired net `-1`
+- runner recommendation: `full`
 
-Files:
-- `scripts/v11_input_view_holdout_v2_fixture.py`
-- `scripts/v11_input_views_v2.py`
-- `scripts/v11-input-view-holdout-v2.py`
-- `scripts/run-v11-input-view-holdout-v2.ps1`
-- `scripts/BuyFlow-V11-INPUT-VIEW-HOLDOUT-V2.cmd`
-- `protocols/V11-INPUT-VIEW-HOLDOUT-V2-2026-09-01.md`
+Local result:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/metrics.json`
+
+Interpretation:
+- FULL is currently the best accuracy/safety representation on an untouched holdout.
+- SEMANTIC reduces mean prompt tokens by about 36% but loses 1 exact case and has one extra unsafe + one extra critical-boundary error.
+- MINIMAL reduces mean prompt tokens by about 56% but loses 2 exact cases and has one extra unsafe + two extra critical-boundary errors versus FULL.
+- This does **not** justify feeding raw MIME to Qwen. FULL here is the normalized production-shaped document, not raw/base64 MIME.
+- The next optimization target is an evidence-preserving compact view: identify which fields/evidence explain the FULL-only wins, keep those, and remove only demonstrably useless technical noise.
+- The 6 invalid outputs persist across all views, so malformed generative JSON is a separate model/output-architecture issue rather than an input-view issue.
+- Do not train on this 180-case holdout.
 
 ## NEXT ACTION
 
-1. Fetch `codex/v11-input-view-holdout-v2` into a separate worktree because the local main project folder points at `buyflow-app` and contains unrelated local changes.
-2. Run `scripts/BuyFlow-V11-INPUT-VIEW-HOLDOUT-V2.cmd`.
-3. Preserve the first `metrics.json` unchanged and compare FULL vs SEMANTIC vs MINIMAL, especially exact accuracy, unsafe promotions, invalid outputs, critical boundaries and mean prompt tokens.
-4. Only after this result choose the V12 input representation.
+1. Analyze the paired FULL-only/SEMANTIC-only/MINIMAL-only cases from the preserved `predictions.jsonl` to identify which omitted evidence caused compact-view regressions.
+2. Design a `SemanticEmailViewV2` / evidence-preserving compact representation instead of blindly minimizing fields.
+3. Separately address the 6 invalid outputs (consider constrained/structured decoding or a sequence-classification head for `is_commerce + event_type`).
+4. Then design V12 teacher-student hard-example training around the actual failure families, without training on any frozen holdout row.
 5. Do not consume BLIND50/frozen108 for tuning yet.
 6. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
 
