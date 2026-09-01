@@ -1,132 +1,84 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — V12 full constrained launcher WSL-path bug fixed
+## 2026-09-01 — V12 full constrained-output confirmation scored; Stage 1 mining prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-The first attempt to run the full 180 constrained-output confirmation failed before model inference. WSL received a collapsed path like `/mnt/c/Userskozma...` because `run-v12-output-constraint-full-v1.ps1` attempted to replace a double-backslash sequence instead of ordinary single Windows path separators.
+The repaired full-180 constrained run completed on the unchanged V11 adapter and the frozen Input View Holdout v2.
 
-Fix:
-- `scripts/run-v12-output-constraint-full-v1.ps1`
-- corrected the path conversion to match the already-working invalid-only launcher;
-- commit `fc9e843d0b34d682d705cc649660c84ceb83001f`.
+Result:
+- selected cases: `180`
+- exact: `176/180`
+- constrained invalid outputs: `0`
+- unsafe promotions: `1`
+- changed from previously-valid baseline: `0`
+- no training / adapter mutation / fixture mutation
 
-No evaluation result was produced by the failed launch, no frozen fixture changed, and no training occurred. Next action is simply to fetch the fixed branch and rerun `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`.
+All six previously-invalid ORDER_PROCESSING rows became exact. The four remaining semantic errors were:
+- ORDER_PROCESSING -> ORDER_PACKING
+- REFUNDED -> RETURN
+- PAYMENT -> INVOICE
+- OUT_FOR_DELIVERY -> DELIVERED (unsafe)
+
+Interpretation:
+- constrained decoding removes malformed output without perturbing any previously-valid baseline prediction on this diagnostic set;
+- use constrained semantic decoding as the V12 development output baseline;
+- the frozen 180 remains non-trainable and does not replace a fresh post-V12 holdout.
+
+Local report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-all-v1.json`
+
+Prepared V12 Stage 1 student hard-case mining:
+- 144 new synthetic/deidentified candidates;
+- 6 boundary families × 6 languages × both labels × 2 representation variants;
+- no frozen holdout row copied;
+- V11 student runs first with constrained output;
+- teacher queue contains every student disagreement plus one agreement audit per family+target label;
+- no external teacher API and no training yet.
+
+Files:
+- `scripts/v12_hard_candidates_v1.py`
+- `scripts/v12-student-mine-candidates-v1.py`
+- `scripts/run-v12-student-mine-v1.ps1`
+- `scripts/BuyFlow-V12-STUDENT-MINE.cmd`
+- `protocols/V12-STAGE1-STUDENT-MINE-V1-2026-09-01.md`
+
+Next: run `BuyFlow-V12-STUDENT-MINE.cmd`, preserve the first summary and family disagreement counts, then teacher-review only the disagreement queue + agreement audit sample.
 
 ---
 
-## 2026-09-01 — V12 constrained output invalid-only PASS; full-180 gate prepared
+## 2026-09-01 — V12 full constrained launcher WSL-path bug fixed
 
-Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+The first attempt to run the full 180 constrained-output confirmation failed before model inference because WSL received a collapsed Windows path. `run-v12-output-constraint-full-v1.ps1` was corrected to replace ordinary single path separators. No model result was produced by the failed launch.
 
-Completed the first V12 Stage 0 constrained-output diagnostic using the unchanged V11 adapter on only the six previously-invalid FULL rows from Input View Holdout v2.
+---
 
-Result:
-- selected cases: `6`
-- all six expected `ORDER_PROCESSING`
-- exact after constrained decoding: `6/6`
-- constrained invalid outputs: `0`
-- unsafe promotions: `0`
-- no training
-- no adapter mutation
-- no frozen fixture mutation
+## 2026-09-01 — V12 constrained output invalid-only PASS
 
-Local report:
-`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-invalid-v1.json`
-
-Interpretation:
-- the malformed V11 generative outputs can be eliminated on these rows structurally without retraining;
-- this does not yet justify global adoption because previously-valid rows were not rerun in this first probe.
-
-Prepared the full confirmation gate:
-- `scripts/run-v12-output-constraint-full-v1.ps1`
-- `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`
-- reuses the same runner with `--all` to rerun all 180 FULL holdout rows;
-- measures invalid count, unsafe promotions, exact score, and how many previously-valid baseline predictions change.
-
-Next gate: run full 180 constrained decoding. If invalid remains zero with no safety/accuracy regression, use constrained decoding as the V12 output baseline before teacher-student hard-example generation.
+Six previously-invalid FULL rows were rerun with constrained output on unchanged V11 weights: `6/6` exact, invalid `0`, unsafe `0`. This established the reason to run the full-180 confirmation.
 
 ---
 
 ## 2026-09-01 — V12 teacher + robustness foundation prepared
 
-Started V12 from the completed V11 input-view/causality evidence rather than blindly adding more templates.
+Protocol: `protocols/V12-TEACHER-ROBUSTNESS-FOUNDATION-2026-09-01.md`.
 
-Prepared protocol:
-`protocols/V12-TEACHER-ROBUSTNESS-FOUNDATION-2026-09-01.md`
-
-V12 plan:
-- first eliminate malformed generative output structurally;
-- then generate new teacher-reviewed hard-example siblings around actual failure families;
-- add representation-invariance augmentation (field order, harmless metadata padding/dropout, equivalent layouts);
-- never train on frozen Fresh Blind/Input View Holdout rows;
-- use synthetic/deidentified teacher data by default;
-- after V12 training, freeze a brand-new untouched holdout before judging gains.
-
-External teacher direction documented but not activated yet: OpenAI Responses API with strict JSON schema, configurable teacher model, environment-only API key, provenance/checkpointing, and no raw customer emails by default.
+Direction: constrained output first, then new teacher-reviewed hard-example siblings, representation-invariance augmentation, V12 training only on approved new data, and a brand-new untouched holdout after training.
 
 ---
 
 ## 2026-09-01 — Input-view causality v1 scored
 
-Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
-
-Causality diagnostic completed on the only FULL-correct / SEMANTIC-wrong holdout case `IVH2-0057` (`IN_TRANSIT` expected, Semantic baseline `OUT_FOR_DELIVERY`).
-
-Result:
-- semantic recheck: wrong
-- real recipients: correct
-- dummy recipients: correct
-- neutral padding matched to recipients length: correct
-- real headers/auth: correct
-- dummy headers/auth: wrong
-- neutral padding matched to headers/auth length: correct
-- real raw links: correct
-- dummy raw links: correct
-- neutral padding matched to raw-links length: wrong
-
-Interpretation:
-- no single omitted semantic evidence group consistently explains the recovery;
-- dummy and neutral prompt additions can recover the same case;
-- do not add recipients/auth/raw-links merely because they flipped one row;
-- V11 generative classification shows prompt-shape/token-position sensitivity;
-- keep FULL normalized input as current baseline;
-- the 6 invalid outputs remain a separate output-architecture problem.
-
-Local report:
-`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
+Causality testing on `IVH2-0057` showed dummy/neutral prompt additions could flip the same lifecycle decision. Do not treat recipients/auth/raw-links as useful lifecycle evidence based on one row. Keep FULL normalized input as V11 baseline and train representation robustness separately.
 
 ---
 
 ## 2026-09-01 — V11 untouched input-view holdout v2 scored
 
-First untouched 180-case score:
-- FULL: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean tokens `404.4`
-- SEMANTIC: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean tokens `259.2`
-- MINIMAL: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean tokens `178.2`
-
-Frozen SHA: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. No training; holdout remains non-trainable.
+FULL `170/180`, SEMANTIC `169/180`, MINIMAL `168/180`; frozen SHA `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. No training; holdout remains non-trainable.
 
 ---
 
-## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
+## 2026-08-31 — Direct Gmail / mobile status
 
-On the earlier locked Fresh Blind fixture: FULL `163/180`, SEMANTIC `163/180`; invalid `7 -> 7`; unsafe `1 -> 0`; critical `10 -> 10`; net paired gain `0`.
-
----
-
-## 2026-08-31 — V11 Fresh Blind v1
-
-First score: exact `163/180 = 90.56%`, commerce `173/180 = 96.11%`, invalid `7`, unsafe `1`, critical `10`, gate `FAIL`. Frozen rows remain non-trainable.
-
----
-
-## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
-
-Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft). No live provider cutover claimed.
-
----
-
-## 2026-08-31 — Mobile Architecture Cleanup v1
-
-Branch: `codex/mobile-architecture-cleanup-v1` / PR #297 (draft). Exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286/1286 API tests; browser visual smoke remains pending.
+Direct Gmail/OAuth/history/watch/Pub/Sub foundation remains behind disabled-by-default flags with no live provider cutover. Mobile cleanup code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 / 1286 API tests; browser visual smoke remains pending.
