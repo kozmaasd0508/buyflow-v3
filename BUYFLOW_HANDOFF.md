@@ -74,15 +74,15 @@ Local report:
 
 Interpretation: malformed generative output can be eliminated on these six rows without retraining. This is strong but not yet a global adoption proof because only previously-invalid rows were rerun.
 
-## V12 STAGE 0B — FULL 180 CONSTRAINT CONFIRMATION READY
+## V12 STAGE 0B — FULL 180 CONSTRAINT CONFIRMATION
 
-The same runner already supports `--all`. Added launchers:
+The same runner supports `--all` and has launchers:
 - `scripts/run-v12-output-constraint-full-v1.ps1`
 - `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`
 
-This reruns all 180 FULL holdout cases with the constrained decoder and compares against the preserved valid baseline predictions.
+First launch attempt failed before model inference because the PowerShell WSL-path converter replaced double backslashes instead of normal single Windows path separators. No holdout row was rerun and no model result was produced. The launcher was fixed in commit `fc9e843d0b34d682d705cc649660c84ceb83001f` to use the same single-backslash conversion as the already-working probe launcher.
 
-Adoption gate:
+Adoption gate remains:
 - constrained invalid outputs = `0`
 - no increase in unsafe promotions
 - no harmful changes to previously-valid predictions
@@ -93,8 +93,8 @@ This is still diagnostic only; the frozen holdout remains non-trainable.
 ## NEXT ACTION
 
 1. Pull latest `codex/v12-teacher-robustness-foundation` in the existing separate test worktree.
-2. Run `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`.
-3. Preserve the first full-180 `# SUMMARY` and JSON report unchanged.
+2. Rerun `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd` after the WSL-path fix.
+3. Preserve the first successful full-180 `# SUMMARY` and JSON report unchanged.
 4. If the full constrained run is clean, treat constrained semantic decoding as the V12 output baseline and build the teacher-student hard-example corpus + representation-invariance generator next.
 5. Do not train on Fresh Blind v1 or Input View Holdout v2 rows.
 6. Keep frozen108 and BLIND50 untouched for tuning.
