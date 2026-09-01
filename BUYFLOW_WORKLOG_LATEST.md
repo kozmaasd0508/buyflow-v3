@@ -1,11 +1,47 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — Input-view add-back scored; causality diagnostic prepared
+## 2026-09-01 — Input-view causality v1 scored
 
 Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
 
+Causality diagnostic completed on the only FULL-correct / SEMANTIC-wrong holdout case `IVH2-0057` (`IN_TRANSIT` expected, Semantic baseline `OUT_FOR_DELIVERY`).
+
+Result:
+- semantic recheck: wrong
+- real recipients: correct
+- dummy recipients: correct
+- neutral padding matched to recipients length: correct
+- real headers/auth: correct
+- dummy headers/auth: wrong
+- neutral padding matched to headers/auth length: correct
+- real raw links: correct
+- dummy raw links: correct
+- neutral padding matched to raw-links length: wrong
+
+Interpretation:
+- no single omitted semantic evidence group consistently explains the recovery;
+- dummy and neutral prompt additions can recover the same case;
+- therefore recipients/auth/raw-links must not be added to SemanticEmailViewV2 merely because they flipped this row;
+- V11 generative classification shows prompt-shape/token-position sensitivity at this lifecycle boundary;
+- keep FULL normalized input as current baseline while treating compact-view design as a separate robustness optimization;
+- the 6 invalid outputs from the untouched 180-case holdout remain a separate output-architecture problem.
+
+Local report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
+
+Next:
+1. address malformed generative output via constrained/structured decoding or a sequence-classification head;
+2. design V12 teacher-student/hard-example training using new sibling examples, not frozen rows;
+3. include representation-invariance augmentation: harmless metadata padding/dropout, field-order/layout changes and equivalent compact/full views;
+4. freeze a new untouched holdout after V12;
+5. keep BLIND50/frozen108 untouched for tuning.
+
+---
+
+## 2026-09-01 — Input-view add-back scored; causality diagnostic prepared
+
 Local add-back v1 completed on the only FULL-correct / SEMANTIC-wrong holdout case:
-- case `IVH2-0057`
+- `IVH2-0057`
 - expected `IN_TRANSIT`
 - Semantic predicted `OUT_FOR_DELIVERY`
 - raw_html: `0/1` recovered, +6 tokens
@@ -17,31 +53,7 @@ Local add-back v1 completed on the only FULL-correct / SEMANTIC-wrong holdout ca
 - pipeline_meta: `0/1`, +36
 - all: `1/1`, +190
 
-Interpretation caution:
-- recipients, authentication headers and raw links are semantically unrelated as direct evidence for `IN_TRANSIT` versus `OUT_FOR_DELIVERY`, yet all three independently flip the single case to correct;
-- therefore the add-back result does not justify adding those fields to the compact view;
-- likely alternative explanation is prompt-shape/token-position sensitivity of the V11 generative classifier.
-
-Prepared `Input View Causality v1` to distinguish evidence from formatting sensitivity. It compares, on the same already-used candidate case:
-- real recipients / headers-auth / raw-links;
-- dummy versions with neutral values but similar structure;
-- neutral padding targeted to similar prompt lengths;
-- semantic baseline recheck.
-
-Files:
-- `scripts/v11-input-view-causality-v1.py`
-- `scripts/run-v11-input-view-causality-v1.ps1`
-- `scripts/BuyFlow-V11-INPUT-VIEW-CAUSALITY.cmd`
-
-Safety: diagnostic only, no training, no fixture mutation, frozen rows remain non-trainable.
-
-Next: run causality diagnostic. If dummy/neutral variants also recover the case, classify the add-back effect as representation sensitivity rather than useful lifecycle evidence.
-
----
-
-## 2026-09-01 — Input-view add-back diagnostic prepared
-
-After the untouched input-view holdout showed FULL > SEMANTIC > MINIMAL on accuracy/safety, added a diagnostic-only field add-back experiment over FULL-correct / SEMANTIC-wrong rows. No training or fixture mutation.
+Because semantically unrelated groups independently flipped the row, a causality diagnostic was added instead of treating those fields as lifecycle evidence.
 
 ---
 
