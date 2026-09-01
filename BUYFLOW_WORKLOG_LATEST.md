@@ -1,67 +1,58 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — V12 full constrained-output confirmation scored; Stage 1 mining prepared
+## 2026-09-01 — V12 student hard-case mine scored; independent Sol teacher review prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-The repaired full-180 constrained run completed on the unchanged V11 adapter and the frozen Input View Holdout v2.
+Completed the first V12 Stage 1 student mine on 144 new synthetic/deidentified hard-boundary cases using the unchanged V11 adapter plus constrained output.
 
 Result:
-- selected cases: `180`
-- exact: `176/180`
-- constrained invalid outputs: `0`
-- unsafe promotions: `1`
-- changed from previously-valid baseline: `0`
-- no training / adapter mutation / fixture mutation
+- candidate SHA-256: `05d0ca898b2ccf5f75897d2930a500f960e29b1591a0ec1bb0c8996accae08fa`
+- student exact vs seed: `142/144`
+- disagreements: `2`
+- unsafe: `0`
+- teacher queue: `14` = 2 disagreements + 12 agreement audits
+- `order_processing_vs_packing`: `22/24`, 2 disagreements
+- every other pilot family: `24/24`
+- no teacher API call and no training in this run
 
-All six previously-invalid ORDER_PROCESSING rows became exact. The four remaining semantic errors were:
-- ORDER_PROCESSING -> ORDER_PACKING
-- REFUNDED -> RETURN
-- PAYMENT -> INVOICE
-- OUT_FOR_DELIVERY -> DELIVERED (unsafe)
+Local run:
+`local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
 
-Interpretation:
-- constrained decoding removes malformed output without perturbing any previously-valid baseline prediction on this diagnostic set;
-- use constrained semantic decoding as the V12 development output baseline;
-- the frozen 180 remains non-trainable and does not replace a fresh post-V12 holdout.
+Prepared the next independent teacher gate:
+- `scripts/v12-teacher-review-openai-v1.py`
+- `scripts/run-v12-teacher-review-openai-v1.ps1`
+- `scripts/BuyFlow-V12-TEACHER-REVIEW.cmd`
+- `protocols/V12-STAGE1-OPENAI-TEACHER-REVIEW-V1-2026-09-01.md`
 
-Local report:
-`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-all-v1.json`
+Teacher contract:
+- default `gpt-5.6-sol` through Responses API;
+- strict JSON-schema output;
+- teacher receives only case id, boundary family, language hint and synthetic/deidentified document;
+- seed expected label and Qwen prediction are deliberately hidden from the teacher until after independent classification;
+- `store=false`;
+- `OPENAI_API_KEY` environment-only, never persisted;
+- checkpoint/resume per case;
+- only seed-match + evidence sufficient + HIGH confidence is approved for later augmentation;
+- even approved rows remain `train_eligible=false` until the later corpus-build stage.
 
-Prepared V12 Stage 1 student hard-case mining:
-- 144 new synthetic/deidentified candidates;
-- 6 boundary families × 6 languages × both labels × 2 representation variants;
-- no frozen holdout row copied;
-- V11 student runs first with constrained output;
-- teacher queue contains every student disagreement plus one agreement audit per family+target label;
-- no external teacher API and no training yet.
-
-Files:
-- `scripts/v12_hard_candidates_v1.py`
-- `scripts/v12-student-mine-candidates-v1.py`
-- `scripts/run-v12-student-mine-v1.ps1`
-- `scripts/BuyFlow-V12-STUDENT-MINE.cmd`
-- `protocols/V12-STAGE1-STUDENT-MINE-V1-2026-09-01.md`
-
-Next: run `BuyFlow-V12-STUDENT-MINE.cmd`, preserve the first summary and family disagreement counts, then teacher-review only the disagreement queue + agreement audit sample.
+Next: run the 14-case teacher review, preserve first summary and inspect any teacher-vs-seed conflict before creating representation-invariance siblings or V12 training data.
 
 ---
 
-## 2026-09-01 — V12 full constrained launcher WSL-path bug fixed
+## 2026-09-01 — V12 full constrained-output confirmation scored
 
-The first attempt to run the full 180 constrained-output confirmation failed before model inference because WSL received a collapsed Windows path. `run-v12-output-constraint-full-v1.ps1` was corrected to replace ordinary single path separators. No model result was produced by the failed launch.
+Full 180 constrained run on unchanged V11 adapter: `176/180` exact, invalid `0`, unsafe `1`, changed-from-valid-baseline `0`. All six formerly-invalid ORDER_PROCESSING rows became exact. Four real semantic errors remained. Frozen holdout remains non-trainable.
 
 ---
 
 ## 2026-09-01 — V12 constrained output invalid-only PASS
 
-Six previously-invalid FULL rows were rerun with constrained output on unchanged V11 weights: `6/6` exact, invalid `0`, unsafe `0`. This established the reason to run the full-180 confirmation.
+Six previously-invalid FULL rows were rerun with constrained output on unchanged V11 weights: `6/6` exact, invalid `0`, unsafe `0`.
 
 ---
 
 ## 2026-09-01 — V12 teacher + robustness foundation prepared
-
-Protocol: `protocols/V12-TEACHER-ROBUSTNESS-FOUNDATION-2026-09-01.md`.
 
 Direction: constrained output first, then new teacher-reviewed hard-example siblings, representation-invariance augmentation, V12 training only on approved new data, and a brand-new untouched holdout after training.
 
@@ -69,7 +60,7 @@ Direction: constrained output first, then new teacher-reviewed hard-example sibl
 
 ## 2026-09-01 — Input-view causality v1 scored
 
-Causality testing on `IVH2-0057` showed dummy/neutral prompt additions could flip the same lifecycle decision. Do not treat recipients/auth/raw-links as useful lifecycle evidence based on one row. Keep FULL normalized input as V11 baseline and train representation robustness separately.
+Causality testing showed dummy/neutral prompt additions could flip the same lifecycle decision. Do not treat random technical fields as lifecycle evidence based on one row. Keep FULL normalized input as V11 baseline and train representation robustness separately.
 
 ---
 
