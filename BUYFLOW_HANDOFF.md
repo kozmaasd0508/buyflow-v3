@@ -9,7 +9,7 @@
 **Mobile cleanup:** PR #297 (draft)  
 **V11 Fresh Blind:** PR #299  
 **V11 representation diagnostics:** PR #300 / PR #301  
-**V12 robustness foundation:** `codex/v12-teacher-robustness-foundation`
+**V12 robustness foundation:** `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
 ## SAFETY CONTRACT
 
@@ -41,9 +41,9 @@ FULL means production-shaped `NormalizedEmailDocumentV1`, not raw MIME/base64.
 
 The add-back + causality diagnostics on `IVH2-0057` showed prompt-shape/token-position sensitivity: real, dummy and neutral additions could independently flip the prediction. Therefore do not add random technical fields to a compact view based on one row. Keep FULL normalized input as the current V11 baseline.
 
-## V12 TEACHER + ROBUSTNESS FOUNDATION — PREPARED
+## V12 TEACHER + ROBUSTNESS FOUNDATION
 
-Branch: `codex/v12-teacher-robustness-foundation`
+Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
 Protocol:
 `protocols/V12-TEACHER-ROBUSTNESS-FOUNDATION-2026-09-01.md`
@@ -55,28 +55,47 @@ V12 direction:
 4. train V12 only on newly approved/deidentified data;
 5. freeze a completely new untouched holdout after training.
 
-Teacher design: synthetic/deidentified by default. If an external OpenAI teacher is used, use the Responses API with strict JSON-schema output, configurable model (high-quality target `gpt-5.6-sol`), environment-only API key, checkpoint/resume and provenance. No raw customer email goes to an external teacher by default.
+Teacher design: synthetic/deidentified by default. If an external OpenAI teacher is used, use the Responses API with strict JSON-schema output, configurable teacher model, environment-only API key, checkpoint/resume and provenance. No raw customer email goes to an external teacher by default.
 
-## V12 STAGE 0 — OUTPUT CONSTRAINT PROBE READY
+## V12 STAGE 0 — INVALID-ONLY CONSTRAINED DECODING SCORED
 
-The 6 invalid outputs persisted across FULL/SEMANTIC/MINIMAL, so they are not an input-view problem.
+The 6 invalid FULL outputs from Input View Holdout v2 were rerun with the existing V11 weights unchanged and a constrained decoder that permits only the 18 legal canonical outputs.
 
-Prepared a constrained decoder that permits only the 18 legal canonical outputs while keeping the existing V11 adapter unchanged.
+Result:
+- selected invalid cases: `6`
+- exact correct after constrained decoding: `6/6`
+- constrained invalid output: `0`
+- unsafe promotions: `0`
+- all six were expected `ORDER_PROCESSING`
+- no training, no adapter mutation, no fixture mutation
 
-Files:
-- `scripts/v12_constrained_output.py`
-- `scripts/v12-output-constraint-probe-v1.py`
-- `scripts/run-v12-output-constraint-probe-v1.ps1`
-- `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-PROBE.cmd`
+Local report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/v12-output-constraint-invalid-v1.json`
 
-First probe runs only the already-invalid FULL rows from the scored Input View Holdout v2. It does not train and does not mutate the fixture. If useful, later confirm the constrained decoder on a newly frozen holdout before adoption.
+Interpretation: malformed generative output can be eliminated on these six rows without retraining. This is strong but not yet a global adoption proof because only previously-invalid rows were rerun.
+
+## V12 STAGE 0B — FULL 180 CONSTRAINT CONFIRMATION READY
+
+The same runner already supports `--all`. Added launchers:
+- `scripts/run-v12-output-constraint-full-v1.ps1`
+- `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`
+
+This reruns all 180 FULL holdout cases with the constrained decoder and compares against the preserved valid baseline predictions.
+
+Adoption gate:
+- constrained invalid outputs = `0`
+- no increase in unsafe promotions
+- no harmful changes to previously-valid predictions
+- exact accuracy should improve or at minimum not regress materially
+
+This is still diagnostic only; the frozen holdout remains non-trainable.
 
 ## NEXT ACTION
 
-1. Fetch `codex/v12-teacher-robustness-foundation` into the existing separate test worktree.
-2. Run `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-PROBE.cmd`.
-3. Preserve the `# SUMMARY` result.
-4. If constrained output is sound, build the teacher-student hard-example corpus + representation-invariance generator next.
+1. Pull latest `codex/v12-teacher-robustness-foundation` in the existing separate test worktree.
+2. Run `scripts/BuyFlow-V12-OUTPUT-CONSTRAINT-FULL.cmd`.
+3. Preserve the first full-180 `# SUMMARY` and JSON report unchanged.
+4. If the full constrained run is clean, treat constrained semantic decoding as the V12 output baseline and build the teacher-student hard-example corpus + representation-invariance generator next.
 5. Do not train on Fresh Blind v1 or Input View Holdout v2 rows.
 6. Keep frozen108 and BLIND50 untouched for tuning.
 7. Qwen remains semantic-only; Zero-Trust Purchase Identity Graph remains authoritative.
