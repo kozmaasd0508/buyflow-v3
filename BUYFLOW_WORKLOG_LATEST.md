@@ -1,5 +1,79 @@
 # BuyFlow worklog latest
 
+## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
+
+Branch: `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
+
+Completed local GPU A/B using the same locked 180-case Fresh Blind fixture and the same V11 adapter.
+
+Result:
+- full `NormalizedEmailDocumentV1` baseline: `163/180 = 90.56%` exact
+- `BuyFlowSemanticEmailViewV1`: `163/180 = 90.56%` exact
+- semantic macro event accuracy: `90.56%`
+- invalid output: `7 -> 7`
+- unsafe lifecycle promotions: `1 -> 0`
+- critical boundary errors: `10 -> 10`
+- paired semantic-only correct: `2`
+- paired baseline-only correct: `2`
+- net exact gain: `0`
+- recommendation: `NO_CLEAR_ACCURACY_GAIN_REQUIRES_NEW_UNTOUCHED_HOLDOUT`
+
+Interpretation:
+- compact semantic input did not improve headline accuracy on this diagnostic fixture;
+- it removed the single unsafe promotion with no invalid-output regression;
+- this is a useful safety/efficiency signal but not enough to adopt the representation yet;
+- confirm on a newly frozen untouched representation holdout before V12/adoption;
+- no training occurred and the 180 cases remain non-trainable.
+
+Local result:
+`local-data/lora-v11/semantic-view-ab-v1/runs/20260901T180628Z/`
+
+Next:
+1. preserve both first-run result directories unchanged;
+2. do not train on the 180-case fixture;
+3. freeze a new untouched full-vs-semantic representation holdout if we want to settle the input-format question;
+4. separately design V12 hard-example training around ORDER_PROCESSING, SHIPPED, critical lifecycle boundaries and invalid-output elimination.
+
+---
+
+## 2026-09-01 — V11 SemanticEmailView A/B diagnostic prepared
+
+Branch: `codex/v11-semantic-view-ab-v1`
+
+First V11 Fresh Blind v1 result from the user's local GPU run:
+- gate: FAIL
+- exact: 163/180 = 90.56%
+- commerce: 173/180 = 96.11%
+- macro event accuracy: 90.56%
+- invalid output: 7
+- unsafe lifecycle promotions: 1
+- OTHER -> commerce false positives: 0
+- critical boundary errors: 10
+- weakest groups: ORDER_PROCESSING 4/10, SHIPPED 5/10, OUT_FOR_DELIVERY 8/10, CANCELLED 8/10
+
+The frozen fixture remains unchanged and must not be trained on.
+
+Implemented a diagnostic input-representation A/B test:
+- new deterministic `BuyFlowSemanticEmailViewV1` projection;
+- retains sender, subject/snippet, received time, body text, visible HTML text, structured schema payloads, links and attachment metadata;
+- drops provider/thread ids, recipient bookkeeping, raw headers/auth bookkeeping, folders, rawRef, normalizer version and trace id;
+- same classifier instruction and same V11 adapter;
+- reuses the preserved first Fresh Blind `predictions.jsonl` as the baseline, so only the semantic side needs GPU inference;
+- strict existing scorer reused for exact, macro, invalid, unsafe, OTHER false-commerce and critical-boundary metrics;
+- adds paired baseline-only vs semantic-only wins per case/event;
+- diagnostic only: even a win requires a newly frozen untouched holdout before adoption;
+- per-case partial JSONL checkpointing and automatic resume prevent loss if the terminal is closed;
+- no training, no Purchase/Identity/Gmail/DB writes, no frozen108/BLIND50/real Gmail holdout reads.
+
+Files:
+- `scripts/v11_semantic_view_v1.py`
+- `scripts/v11-semantic-view-ab-v1.py`
+- `scripts/run-v11-semantic-view-ab-v1.ps1`
+- `scripts/BuyFlow-V11-SEMANTIC-VIEW-AB.cmd`
+- `protocols/V11-SEMANTIC-VIEW-AB-V1-2026-09-01.md`
+
+---
+
 ## 2026-08-31 — V11 Fresh Blind v1 frozen runner prepared
 
 Branch: `codex/v11-fresh-blind-v1`
@@ -17,25 +91,6 @@ Implemented:
 
 Frozen fixture SHA-256:
 `6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`
-
-Local preparation verification:
-- all Python runner modules compile;
-- `--freeze-only` regenerates 180 cases and the exact frozen SHA above;
-- packaged ZIP passes archive integrity verification.
-
-Important correction during preparation:
-- an earlier monolithic GitHub runner blob contained invalid UTF-8 and an obsolete fixture hash;
-- it was replaced by a clean modular runner and the protocol hash was corrected before any model inference.
-
-Current state:
-- V11 training is complete and the `best` adapter exists on the user's machine;
-- **Fresh Blind v1 has not yet been scored** because the adapter/GPU runtime is local to the user machine;
-- first result must be preserved unchanged and the fixture must not be patched after scoring.
-
-Next gate:
-1. run `scripts/BuyFlow-V11-FRESH-BLIND.cmd` locally;
-2. preserve first `metrics.json`;
-3. only after that decide whether to open frozen108, BLIND50 and real Gmail holdout evaluation.
 
 ---
 
