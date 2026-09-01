@@ -54,7 +54,7 @@ FULL here is normalized `NormalizedEmailDocumentV1`, not raw MIME/base64. The 6 
 Local metrics:
 `local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/metrics.json`
 
-## ADD-BACK V1 — SCORED / IMPORTANT CAUTION
+## ADD-BACK V1 — SCORED
 
 Only one holdout case was FULL-correct and SEMANTIC-wrong: `IVH2-0057`, expected `IN_TRANSIT`, Semantic predicted `OUT_FOR_DELIVERY`.
 
@@ -68,33 +68,44 @@ Starting from Semantic view:
 - pipeline metadata: did not recover
 - all omitted fields: recovered
 
-Because three semantically unrelated groups (`recipients`, `headers/auth`, `raw links`) independently flipped the same single case to correct, do **not** infer that these fields are lifecycle evidence. The stronger hypothesis is prompt-shape/token-position sensitivity in the V11 generative classifier.
+Because semantically unrelated groups independently flipped the same single case, this was not enough to infer useful lifecycle evidence. A causality diagnostic was required.
 
 Local add-back report:
 `local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-addback-v1.json`
 
-## CAUSALITY DIAGNOSTIC V1 — PREPARED
+## CAUSALITY DIAGNOSTIC V1 — SCORED
 
-New diagnostic files on PR #301:
-- `scripts/v11-input-view-causality-v1.py`
-- `scripts/run-v11-input-view-causality-v1.ps1`
-- `scripts/BuyFlow-V11-INPUT-VIEW-CAUSALITY.cmd`
+Same candidate `IVH2-0057`; semantic recheck stayed wrong (`OUT_FOR_DELIVERY`). Results:
+- real recipients: correct
+- dummy recipients: correct
+- neutral padding matched to recipients token length: correct
+- real headers/auth: correct
+- dummy headers/auth: wrong
+- neutral padding matched to headers/auth token length: correct
+- real raw links: correct
+- dummy raw links: correct
+- neutral padding matched to raw-links token length: wrong
 
-It tests the same already-used FULL-only case with:
-- real recipients / headers-auth / raw-links add-backs;
-- dummy versions with similar structure but neutral values;
-- neutral padding targeted to similar prompt lengths.
+Interpretation:
+- there is **no consistent semantic evidence signal** explaining the recovery;
+- dummy or neutral additions can also flip the prediction;
+- do not add recipients/auth/links to a compact view just because they recovered this one row;
+- V11's generative classifier is measurably sensitive to prompt structure/token placement around this boundary;
+- FULL remains the safest current baseline, but this does not prove every FULL technical field is useful;
+- compact-input design must be validated on multiple new cases, not tuned around `IVH2-0057`.
 
-Purpose: separate useful email evidence from mere prompt/token-position effects. Diagnostic only; no training and no fixture mutation.
+Local causality report:
+`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
 
 ## NEXT ACTION
 
-1. Pull latest `codex/v11-input-view-holdout-v2` in the separate test worktree and run `scripts/BuyFlow-V11-INPUT-VIEW-CAUSALITY.cmd`.
-2. If dummy/neutral variants also recover `IVH2-0057`, treat the add-back effect as representation sensitivity and do not add recipients/auth/links to SemanticViewV2 just because they flipped one case.
-3. Separately address the 6 invalid outputs using constrained/structured decoding or a sequence-classification head.
-4. Then design V12 teacher-student hard-example training from failure families, never frozen rows.
-5. Do not consume BLIND50/frozen108 for tuning yet.
-6. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
+1. Keep FULL normalized input as the current V11 baseline; do not adopt a field add-back from the single causality case.
+2. Separately eliminate the 6 invalid generative outputs using constrained/structured decoding or test a sequence-classification head for `is_commerce + event_type`.
+3. Design V12 teacher-student hard-example training around failure families such as ORDER_PROCESSING/SHIPPED and critical lifecycle boundaries, using newly generated sibling examples, never frozen holdout rows.
+4. Add representation-robustness augmentation for V12: field order changes, harmless metadata padding/dropout, equivalent compact/full layouts, so the label is invariant to prompt shape.
+5. After V12, freeze a new untouched holdout before evaluating representation and model gains.
+6. Do not consume BLIND50/frozen108 for tuning yet.
+7. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
 
 ## RESUME CONTRACT
 
