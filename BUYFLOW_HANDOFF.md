@@ -9,7 +9,7 @@
 **Modern email source:** `codex/modern-email-source-foundation-v1` / PR #295 (draft)  
 **Mobile cleanup:** `codex/mobile-architecture-cleanup-v1` / PR #297 (draft)  
 **V11 fresh blind:** `codex/v11-fresh-blind-v1` / PR #299 (draft)  
-**V11 SemanticEmailView diagnostic:** `codex/v11-semantic-view-ab-v1`
+**V11 SemanticEmailView diagnostic:** `codex/v11-semantic-view-ab-v1` / PR #300 (draft)
 
 ## SAFETY CONTRACT
 
@@ -72,37 +72,35 @@ The first result lives locally under:
 
 Freeze rule remains active: do not patch this fixture and do not train on these 180 cases.
 
-## V11 SEMANTIC EMAIL VIEW A/B V1 — PREPARED, NOT YET RUN
+## V11 SEMANTIC EMAIL VIEW A/B V1 — SCORED / DIAGNOSTIC
 
-Branch: `codex/v11-semantic-view-ab-v1`
+PR #300 compares the same V11 adapter and same locked 180 cases using the full `NormalizedEmailDocumentV1` baseline versus compact `BuyFlowSemanticEmailViewV1` input. It is diagnostic only; no training occurred.
 
-Purpose: isolate whether Qwen performs better when lifecycle classification receives a compact semantic projection instead of the full technical `NormalizedEmailDocumentV1` object.
+Local GPU A/B result:
+- baseline exact: `163/180 = 90.56%`
+- semantic exact: `163/180 = 90.56%`
+- semantic macro event accuracy: `90.56%`
+- invalid output: `7 -> 7`
+- unsafe lifecycle promotions: `1 -> 0`
+- critical boundary errors: `10 -> 10`
+- paired wins: semantic-only `2`, baseline-only `2`, net `0`
+- recommendation: `NO_CLEAR_ACCURACY_GAIN_REQUIRES_NEW_UNTOUCHED_HOLDOUT`
 
-`BuyFlowSemanticEmailViewV1` retains sender, subject/snippet, received time, body text, visible HTML text, structured schema payloads, links and attachment metadata. It omits provider/thread ids, recipient bookkeeping, raw headers/auth bookkeeping, folders, rawRef, normalizer version and trace id.
+Interpretation:
+- trimming technical input did **not** improve headline exact accuracy on this already-used diagnostic fixture;
+- it did remove the one unsafe lifecycle promotion without increasing invalid outputs;
+- this is a safety/efficiency signal, not proof that SemanticEmailView is globally better;
+- do not adopt or train around this 180-case result without a newly frozen untouched representation holdout.
 
-Important controls:
-- same V11 adapter
-- same classifier instruction
-- same immutable 180-case fixture
-- previous Fresh Blind predictions reused as baseline, so only the semantic side needs GPU inference
-- no training
-- frozen108 / BLIND50 / real Gmail holdout remain unread
-- diagnostic only; even a win requires a new untouched holdout before adoption
-- per-case checkpointing + automatic resume prevents losing completed work when the terminal closes
-
-Files:
-- `scripts/BuyFlow-V11-SEMANTIC-VIEW-AB.cmd`
-- `scripts/run-v11-semantic-view-ab-v1.ps1`
-- `scripts/v11-semantic-view-ab-v1.py`
-- `scripts/v11_semantic_view_v1.py`
-- `protocols/V11-SEMANTIC-VIEW-AB-V1-2026-09-01.md`
+Semantic A/B result lives locally under:
+`local-data/lora-v11/semantic-view-ab-v1/runs/20260901T180628Z/`
 
 ## NEXT ACTION
 
-1. Pull/switch to `codex/v11-semantic-view-ab-v1` on the local BuyFlow checkout.
-2. Run `scripts/BuyFlow-V11-SEMANTIC-VIEW-AB.cmd`.
-3. Preserve the resulting `metrics.json` and compare semantic vs baseline paired wins, invalid outputs, unsafe promotions and critical boundary errors.
-4. Do **not** open BLIND50/frozen108 for model tuning yet; first decide whether the semantic view deserves a new untouched holdout.
+1. Preserve both first-run result directories unchanged.
+2. Do **not** train on the 180-case Fresh Blind fixture.
+3. Before V12, decide between two controlled next experiments: a newly frozen untouched representation holdout for full-vs-semantic input, and a hard-example V12 design targeting `ORDER_PROCESSING`, `SHIPPED`, critical boundaries and invalid-output elimination.
+4. Do **not** consume BLIND50/frozen108 for tuning unless explicitly choosing them as evaluation gates.
 5. Qwen remains semantic-only; Purchase Identity Graph remains authoritative for identity/linking.
 
 ## RESUME CONTRACT
