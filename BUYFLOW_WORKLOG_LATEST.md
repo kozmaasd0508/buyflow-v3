@@ -1,5 +1,62 @@
 # BuyFlow worklog latest
 
+## 2026-09-02 — DocVault content/ownership audit PASS
+
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+DocVault invoice/document storage, ownership, dedupe/content identity and private PDF access were reviewed end-to-end.
+
+Real findings fixed:
+- an existing invoice row could have its stored PDF/hash silently replaced by a later different PDF with the same Purchase + invoice number;
+- attachment storage used a provider-identity path with `upsert: true`, so changed bytes after an interrupted retry could overwrite the old object before DB verification;
+- `documents.user_id` is required by the base schema while legacy controlled document insert paths did not populate it directly;
+- admin-client document reads were Purchase-scoped but not independently filtered by `documents.user_id` before signed URL creation.
+
+Remediation:
+- invoice attachment storage paths now include the full PDF SHA-256;
+- changed bytes for an already-known attachment identity fail closed to REVIEW before overwrite;
+- malformed SHA values cannot produce a storage path;
+- prepared DB migration enforces document owner = Purchase owner and validates source ownership;
+- already-existing cross-user document rows cause the migration to stop for explicit review instead of silent repair;
+- hashed document physical identity is immutable;
+- a body-only invoice placeholder may be upgraded once to a physical PDF;
+- same invoice + different PDF SHA-256 is a hard conflict, not replacement;
+- new attachment-backed document inserts explicitly include `user_id` + `source_email_id`;
+- document list/detail reads now independently require `documents.user_id = authenticated user.id` before signed URL creation;
+- private PDF signed URL TTL remains 60 seconds and detail responses remain `Cache-Control: no-store`.
+
+Prepared migration only:
+`supabase/migrations/20260902162000_harden_docvault_content_identity.sql`
+
+The migration was **not applied** to staging or production.
+
+Final verified behavior head:
+`e77a226f403c6d5141e91d32d277bc99ce91ac21`
+
+Final GitHub Actions CI #1184 / run `33652929490`: **PASS**.
+- EventMind Python runtime syntax PASS;
+- EventMind PowerShell launcher syntax PASS;
+- API typecheck PASS;
+- API tests PASS;
+- API build PASS;
+- mobile typecheck PASS;
+- mobile web build PASS.
+
+Temporary verification PR #307 was closed unmerged.
+
+Verdict:
+- **DocVault code/document safety audit: PASS**;
+- PDF content identity/overwrite protection: **PASS**;
+- document ownership/read scoping: **PASS**;
+- production database migration: **NOT APPLIED / BLOCKED** pending controlled staging migration + document smoke.
+
+Protocol: `protocols/DOCVAULT-AUDIT-2026-09-02.md`.
+
+Next module audit: **Core**.
+
+---
+
 ## 2026-09-02 — JourneyGraph state audit PASS
 
 Branch: `codex/modern-email-source-foundation-v1`  
