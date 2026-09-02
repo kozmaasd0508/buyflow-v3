@@ -1,8 +1,42 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — Human teacher review complete; V12 hard-sibling corpus prepared
+## 2026-09-02 — V12 hard-sibling corpus gate PASS; pre-train V11 baseline prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+The first deterministic hard-sibling/representation-robustness corpus build completed locally after the manual human-teacher verdict.
+
+Result:
+- status `V12_HARD_SIBLINGS_V2_CORPUS_READY`
+- rows `216`
+- TRAIN `144`
+- VALIDATION `72`
+- languages `hu,en,de,pl,fr,es`
+- events `ORDER_PROCESSING,ORDER_PACKING`
+- representation variants `6`
+- semantic-group split overlap `0`
+- frozen/stage1 row reuse `False`
+- privacy gate `PASS_SYNTHETIC_DEIDENTIFIED`
+- SHA-256 `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`
+- training started `False`
+
+Local corpus:
+`local-data/lora-v12/hard-siblings-v2/`
+
+The generator produced new sibling rows only; it does not copy `V12C1-0002`, `V12C1-0018`, any Input View Holdout row, Fresh Blind row, frozen108, or BLIND50.
+
+Before changing weights, prepared a pre-train V11 baseline on only the 72 sibling VALIDATION rows:
+- `scripts/v12-hard-siblings-baseline-v2.py`
+- `scripts/run-v12-hard-siblings-baseline-v2.ps1`
+- `scripts/BuyFlow-V12-HARD-SIBLINGS-BASELINE.cmd`
+
+The runner verifies the corpus SHA, uses unchanged V11 + constrained output, records accuracy by label/language/representation variant and wrong transitions, does not train, does not mutate the corpus, and does not read frozen holdouts.
+
+Next: run the 72-case baseline and preserve the first result. Then construct the V12 training merge with V11 replay/retention anchors plus the 144 new hard-sibling TRAIN rows. Do not fine-tune on the two-class hard corpus alone because retention of the other 16 lifecycle classes must be protected.
+
+---
+
+## 2026-09-02 — Human teacher review complete; V12 hard-sibling corpus prepared
 
 The 14-row Stage 1 synthetic/deidentified teacher queue was reviewed manually in-chat rather than through an external API.
 
@@ -18,29 +52,9 @@ Confirmed student errors:
 - `V12C1-0002`: expected ORDER_PROCESSING, student ORDER_PACKING
 - `V12C1-0018`: expected ORDER_PROCESSING, student ORDER_PACKING
 
-Both have the same underlying failure: stale/misleading subject claims packing, while the current body explicitly says processing and explicitly says packing has not started. This occurred in Hungarian and French, indicating a general evidence-priority problem rather than one-language wording noise.
+Both share the same failure: stale/misleading subject claims packing while the current body explicitly says processing and that packing has not started.
 
-Recorded protocol:
-`protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`
-
-Prepared Stage 2 corpus generator instead of copying the two error rows:
-- `scripts/v12-hard-siblings-v2.py`
-- `scripts/run-v12-hard-siblings-v2.ps1`
-- `scripts/BuyFlow-V12-HARD-SIBLINGS-V2.cmd`
-
-Planned first corpus gate:
-- 216 new synthetic/deidentified rows
-- 144 TRAIN candidates / 72 VALIDATION
-- hu/en/de/pl/fr/es
-- ORDER_PROCESSING and ORDER_PACKING balanced
-- validation separated by wording family, not just row hash
-- six representation variants: clean, misleading subject, HTML body, stale snippet, quoted old state, metadata/order shift
-- no `IVH2-` / `V12C1-` / old candidate row reuse
-- no frozen fixture hash reuse
-- semantic-group train/validation overlap must be zero
-- no training in this step
-
-Next: run `BuyFlow-V12-HARD-SIBLINGS-V2.cmd`, preserve corpus SHA and validation summary, then build the V12 training merge only if corpus gate passes.
+Recorded protocol: `protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`.
 
 ---
 
@@ -54,8 +68,7 @@ First V12 Stage 1 mine on 144 new synthetic/deidentified cases with unchanged V1
 - `order_processing_vs_packing` `22/24`
 - all other pilot families `24/24`
 
-Local run:
-`local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
+Local run: `local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`.
 
 ---
 
