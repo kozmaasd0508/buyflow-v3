@@ -1,8 +1,32 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 continuation QLoRA COMPLETE; post-train exact evaluator prepared
+## 2026-09-02 — V12 post-train evaluator first attempt failed before model load; resolver fixed
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+First local post-train evaluation attempt failed before model loading/inference with:
+`V12_EXACT_ADAPTER_DISCOVERY:0`.
+
+Root cause was a status-contract mismatch inside the evaluator:
+- trainer persisted metrics status `LORA_V12_RETENTION_ROBUSTNESS_TRAIN_COMPLETE`;
+- evaluator discovery incorrectly required `V12_TRAINING_COMPLETE`, which is only the human-facing final console status.
+
+No model, corpus or holdout was read or modified by this failed evaluation.
+
+Fix:
+- added `scripts/v12-hard-siblings-posttrain-resolved-v2.py`;
+- launcher now uses the trainer-written `local-data/lora-v12/LATEST.txt` pointer instead of directory scanning;
+- requires the real persisted training metrics status;
+- verifies exact V12 best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`;
+- verifies the same SHA recorded in training metrics;
+- verifies recorded parent V11 SHA and re-hashes the current V11 parent weights to prove they remain unchanged;
+- rechecks frozen/holdout/locked-test safety flags and 18-label retention before inference.
+
+Next: pull latest branch and rerun `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`.
+
+---
+
+## 2026-09-02 — V12 continuation QLoRA COMPLETE; post-train exact evaluator prepared
 
 Local Stage 3 continuation training completed successfully:
 - status `V12_TRAINING_COMPLETE`
@@ -36,20 +60,7 @@ Best adapter:
 
 Training itself PASS. Validation loss is not treated as proof of behavioral improvement.
 
-Prepared the exact post-training before/after gate:
-- `scripts/v12-hard-siblings-posttrain-v1.py`
-- `scripts/run-v12-hard-siblings-posttrain-v1.ps1`
-- `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`
-
-The evaluator:
-- requires exact V12 best adapter SHA `5addcbce...f630`;
-- uses the same fixed 72 hard-sibling validation rows and exact corpus SHA;
-- uses constrained output;
-- does not train or mutate the corpus;
-- does not read frozen holdouts;
-- reports delta against the fixed V11 baseline `70/72`.
-
-Next: run `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`. Only after this exact score should we claim whether the target ORDER_PROCESSING/ORDER_PACKING boundary improved. Then run a separate all-18-label retention check before a brand-new untouched V12 holdout.
+Prepared the exact post-training before/after gate. V11 fixed baseline remains `70/72`.
 
 ---
 
