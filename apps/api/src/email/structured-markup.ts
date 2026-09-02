@@ -27,6 +27,8 @@ const COMMERCE_TYPES = new Set([
 
 const JSON_LD_SCRIPT_REGEX = /<script\b[^>]*type\s*=\s*(?:["']application\/ld\+json["']|application\/ld\+json)[^>]*>([\s\S]*?)<\/script\s*>/gi;
 const ITEM_TYPE_REGEX = /\bitemtype\s*=\s*(?:["']([^"']+)["']|([^\s>]+))/gi;
+const MAX_AUDIT_NODES = 10_000;
+const MAX_AUDIT_DEPTH = 32;
 
 function normalizeType(value: unknown): string[] {
   if (typeof value === 'string') {
@@ -37,27 +39,50 @@ function normalizeType(value: unknown): string[] {
   return [];
 }
 
-function collectJsonLdTypes(value: unknown, output: Set<string>, seen: Set<object>) {
+function collectJsonLdTypes(value: unknown, output: Set<string>) {
   if (!value || typeof value !== 'object') return;
-  if (seen.has(value as object)) return;
-  seen.add(value as object);
+  const seen = new Set<object>();
+  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  let visited = 0;
 
-  if (Array.isArray(value)) {
-    for (const item of value) collectJsonLdTypes(item, output, seen);
-    return;
+  while (stack.length > 0 && visited < MAX_AUDIT_NODES) {
+    const current = stack.pop();
+    if (!current || current.depth > MAX_AUDIT_DEPTH) continue;
+    const node = current.value;
+    if (!node || typeof node !== 'object') continue;
+    if (seen.has(node as object)) continue;
+    seen.add(node as object);
+    visited += 1;
+
+    if (Array.isArray(node)) {
+      for (let index = node.length - 1; index >= 0; index -= 1) {
+        stack.push({ value: node[index], depth: current.depth + 1 });
+      }
+      continue;
+    }
+
+    const record = node as Record<string, unknown>;
+    for (const type of normalizeType(record['@type'])) output.add(type);
+    for (const nested of Object.values(record)) {
+      if (nested && typeof nested === 'object') {
+        stack.push({ value: nested, depth: current.depth + 1 });
+      }
+    }
   }
-
-  const record = value as Record<string, unknown>;
-  for (const type of normalizeType(record['@type'])) output.add(type);
-  for (const nested of Object.values(record)) collectJsonLdTypes(nested, output, seen);
 }
 
 function decodeBasicHtmlEntities(value: string): string {
   return value
+    .replace(/&#x([0-9a-f]{1,6});?/gi, (_match, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+    })
+    .replace(/&#([0-9]{1,7});?/g, (_match, decimal: string) => {
+      const code = Number.parseInt(decimal, 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+    })
     .replace(/&quot;/gi, '"')
-    .replace(/&#34;/g, '"')
     .replace(/&apos;/gi, "'")
-    .replace(/&#39;/g, "'")
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>');
@@ -82,6 +107,7 @@ function topLevelJsonLdNodes(value: unknown): unknown[] {
  * Extracts bounded, parseable structured-data records before any AI stage.
  * Malformed/oversized JSON-LD is ignored here and remains visible through
  * auditStructuredMarkup() counters. Raw HTML is never copied into the record.
+ * Microdata itemtype records are schema hints only, never field-level evidence.
  */
 export function extractStructuredDataRecords(
   html: string,
@@ -133,7 +159,7 @@ export function extractStructuredDataRecords(
       records.push({
         kind: 'microdata',
         schemaType,
-        payload: { itemType: part },
+        payload: { itemType: part, fieldEvidence: false },
         source: 'body_html',
       });
     }
@@ -154,7 +180,7 @@ export function auditStructuredMarkup(html: string): StructuredMarkupAudit {
     if (!raw) continue;
     try {
       const parsed = JSON.parse(raw) as unknown;
-      collectJsonLdTypes(parsed, jsonLdTypes, new Set<object>());
+      collectJsonLdTypes(parsed, jsonLdTypes);
     } catch {
       jsonLdParseErrors += 1;
     }
