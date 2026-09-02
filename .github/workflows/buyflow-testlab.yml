@@ -44,6 +44,11 @@ jobs:
           clean: true
           fetch-depth: 1
 
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Resolve requested suite
         shell: cmd
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\testlab\resolve-suite.ps1
@@ -58,7 +63,7 @@ jobs:
 
       - name: Install repository dependencies
         shell: cmd
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund
 
       - name: Run BuyFlow TestLab
         shell: cmd
