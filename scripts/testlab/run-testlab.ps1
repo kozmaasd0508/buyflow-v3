@@ -8,6 +8,7 @@ Set-StrictMode -Version Latest
 
 $repoRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modelRoot=if($env:BUYFLOW_V11_MODEL_ROOT){$env:BUYFLOW_V11_MODEL_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation'}
+$privateRoot=if($env:BUYFLOW_TESTLAB_PRIVATE_ROOT){$env:BUYFLOW_TESTLAB_PRIVATE_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\.testlab-private'}
 New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 
 $stages=New-Object System.Collections.Generic.List[object]
@@ -71,10 +72,13 @@ if($Suite -in @('full','identity')){
 }
 
 if($Suite -in @('full','eventmind')){
-  $secretNames=@('BUYFLOW_TESTLAB_GMAIL_CLIENT_ID','BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET','BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN','BUYFLOW_TESTLAB_REAL120_IDS_B64')
+  $secretNames=@('BUYFLOW_TESTLAB_GMAIL_CLIENT_ID','BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET','BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN')
   $missingSecrets=@($secretNames | Where-Object {[string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))})
+  $real120Ids=Join-Path $privateRoot 'real120-ids.json'
   if($missingSecrets.Count -gt 0){
     Add-Stage 'eventmind-real120' 'BLOCKED' ('GitHub TestLab secrets not configured: ' + ($missingSecrets -join ', ')) 0
+  } elseif(-not (Test-Path -LiteralPath $real120Ids)){
+    Add-Stage 'eventmind-real120' 'BLOCKED' ('local frozen id set not found: ' + $real120Ids) 0
   } elseif(-not (Test-Path -LiteralPath (Join-Path $modelRoot 'local-data\lora-v11\LATEST.txt'))){
     Add-Stage 'eventmind-real120' 'BLOCKED' 'local V11 model not found on runner' 0
   } else {
