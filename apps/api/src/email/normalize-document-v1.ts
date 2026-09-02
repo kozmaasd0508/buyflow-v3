@@ -164,8 +164,8 @@ export function normalizeEmailDocumentV1(
 
 /**
  * Re-materializes the MailLens semantic view as the legacy NormalizedEmail
- * contract so existing deterministic/shadow stages cannot accidentally read a
- * different body than the archived MailLens document.
+ * contract. Raw HTML remains in the MailLens document/archive but is omitted
+ * here so legacy semantic stages cannot accidentally bypass hidden/quote rules.
  */
 export function mailLensSemanticEmailV1(
   email: NormalizedEmail,
@@ -184,7 +184,6 @@ export function mailLensSemanticEmailV1(
     receivedAt: document.receivedAt,
     ...(document.snippet ? { snippet: document.snippet } : {}),
     ...(document.semanticText ? { bodyText: document.semanticText } : {}),
-    ...(document.bodyHtml ? { bodyHtml: document.bodyHtml } : {}),
     headers: document.headers,
     folders: document.folders,
     attachments: document.attachments,
