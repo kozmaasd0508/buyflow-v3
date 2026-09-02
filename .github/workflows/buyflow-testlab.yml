@@ -32,9 +32,10 @@ jobs:
     runs-on: [self-hosted, Windows, X64, buyflow-testlab]
     timeout-minutes: 120
     env:
-      BUYFLOW_TESTLAB_PRIVATE_ROOT: ${{ env.USERPROFILE }}\Desktop\buyflow\.testlab-private
-      BUYFLOW_V11_MODEL_ROOT: ${{ env.USERPROFILE }}\Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation
-      BUYFLOW_N8N_USER_FOLDER: ${{ env.USERPROFILE }}\Desktop\buyflow\.n8n-local-ai-data
+      BUYFLOW_TESTLAB_GMAIL_CLIENT_ID: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_CLIENT_ID }}
+      BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET }}
+      BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN }}
+      BUYFLOW_TESTLAB_REAL120_IDS_B64: ${{ secrets.BUYFLOW_TESTLAB_REAL120_IDS_B64 }}
 
     steps:
       - name: Checkout exact TestLab commit
