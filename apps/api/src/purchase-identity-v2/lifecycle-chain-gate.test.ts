@@ -21,6 +21,14 @@ const PROVENANCE: EvidenceProvenance[] = [{
   extractorVersion: '1',
   confidence: 1,
   qualifiers: ['synthetic', 'holdout', 'not-training-data'],
+}, {
+  field: 'sender_authority',
+  source: 'provider_adapter',
+  parserVersion: 'lifecycle-chain-gate-v1',
+  extractorId: 'frozen-chain-fixture',
+  extractorVersion: '1',
+  confidence: 1,
+  qualifiers: ['trusted_sender_authority', 'synthetic', 'holdout', 'not-training-data'],
 }];
 
 type Alias = string;
