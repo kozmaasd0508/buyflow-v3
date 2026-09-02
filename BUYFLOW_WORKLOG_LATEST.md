@@ -1,9 +1,43 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — EventMind V11 runtime + fresh gate prepared and CI GREEN
+## 2026-09-02 — EventMind V11 fresh local GPU gate PASS
 
 Branch: `codex/modern-email-source-foundation-v1`  
 Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+The first untouched local GPU run of the new MailLens/EventMind V11 representation gate completed successfully.
+
+Frozen fixture:
+- 90 cases;
+- all 18 fixed EventMind labels represented;
+- fixture SHA-256: `4d70c774b332edbc7aabe19d754f51ac2e47762c3d17cc018f25d4786d91fd0e`.
+
+Pinned real V11 adapter SHA-256:
+`462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+
+First preserved result:
+- Exact: **90/90 (100.00%)**;
+- Macro event: **100.00%**;
+- Invalid: **0**;
+- Unsafe promotions: **0**;
+- Gate: **PASS**.
+
+Local result directory:
+`local-data/eventmind-v11-representation-gate/runs/20260902T150955Z`
+
+The fixture must never be used for training after this evaluation.
+
+Interpretation:
+- EventMind MailLens/input/identity boundary: **PASS**;
+- V11 runtime safety: **PASS**;
+- fresh V11 representation/runtime gate: **PASS**;
+- production EventMind remains **OFF/BLOCKED** because this synthetic gate is not full real-mailbox generalization proof and upstream MailGate/RawVault production smokes are still pending.
+
+Next module audit: **TrustLink**.
+
+---
+
+## 2026-09-02 — EventMind V11 runtime + fresh gate prepared and CI GREEN
 
 After the EventMind MailLens/identity boundary passed, the actual V11 runtime path was hardened.
 
@@ -43,32 +77,10 @@ Gate PASS rules:
 - exact >=90%;
 - macro event >=85%.
 
-One-click user action:
-`scripts/BuyFlow-EVENTMIND-V11-GATE.cmd`
+Final exact branch verification before local gate:
+`af99492f4e852250b5a8fb05f1167336dd50c419`
 
-It creates the fixture, starts the real local V11 adapter in WSL, verifies actual adapter SHA + Qwen3-8B + thinking OFF + deterministic mode, runs the 90-case gate, prints PASS/FAIL and stops the model server. It does not train the model and does not enable production EventMind.
-
-Verified branch head including runtime/gate preparation:
-`3d03313750f842de89e439738eae6709cb41ff71`
-
-Temporary CI-only PR #304 / GitHub Actions CI #1165 / run `33635558885`:
-- EventMind Python runtime syntax PASS;
-- EventMind PowerShell launcher syntax PASS;
-- API typecheck PASS;
-- API tests PASS;
-- API build PASS;
-- mobile typecheck PASS;
-- mobile web build PASS.
-
-Current verdict:
-- **EventMind MailLens/identity boundary: PASS**
-- **V11 runtime safety code: PASS**
-- **Fresh V11 representation gate: PREPARED / NOT RUN ON LOCAL GPU**
-- **Production EventMind: BLOCKED**
-
-Important: a synthetic 90-case PASS is runtime/representation evidence, not complete real-mailbox generalization proof.
-
-Next: run the one-click local V11 gate and preserve its first result unchanged. Do not train on the fixture. If the EventMind evidence is clean, continue with **TrustLink**.
+Temporary CI-only PR #304 / GitHub Actions CI #1167 / run `33635810471` passed Python/PowerShell syntax, API typecheck/tests/build, and mobile typecheck/build. PR #304 was closed unmerged.
 
 ---
 
@@ -99,7 +111,7 @@ CI #1151 / run `33631564933`: API typecheck/tests/build + mobile typecheck/build
 Immutable source archive, SHA-256/opaque keys, durable pre-write manifest, explicit retention, crash/orphan/account-deletion cleanup, raw-hash conflict detection and DB immutability added.
 
 Behavior head:
-`9480e6d4e8d5c3e0a771b43671503cda593971c2`
+`9480e6d4e8d5c3e0a771b43671503cda593971c2`.
 
 Production RawVault remains BLOCKED pending controlled staging migration + retention/storage smoke.
 
