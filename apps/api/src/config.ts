@@ -41,6 +41,10 @@ const envSchema = z.object({
     .max(128)
     .regex(/^[a-z0-9][a-z0-9._-]*$/)
     .default('buyflow-email-source-v1'),
+  // No retention duration is guessed. Archive writes fail closed until both
+  // policies are explicitly configured in the deployment environment.
+  BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS: z.coerce.number().int().positive().max(3650).optional(),
+  BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS: z.coerce.number().int().positive().max(3650).optional(),
 
   // Mailgun may feed the generic source persistence path only after both this
   // switch and BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED are explicitly enabled.
@@ -93,6 +97,21 @@ export function requireSupabaseAdminConfig() {
   return {
     url: env.SUPABASE_URL,
     secretKey,
+  };
+}
+
+export function requireEmailSourceArchiveRetentionConfig() {
+  if (
+    !env.BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS
+    || !env.BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS
+  ) {
+    throw new Error(
+      'Email source archive retention is not configured. Set BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS and BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS before enabling archive writes.',
+    );
+  }
+  return {
+    rawDays: env.BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS,
+    normalizedDays: env.BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS,
   };
 }
 
