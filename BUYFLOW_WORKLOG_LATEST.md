@@ -1,49 +1,54 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 hard-sibling post-train: 71/72; all-18 retention compare prepared
+## 2026-09-02 — V12 all-18 retention PASS: 288/288 for V11 and V12
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-Exact V12 post-training evaluation completed on the same fixed 72 hard-sibling validation rows with constrained output:
+Exact development retention comparison completed on the 288 `V11_REPLAY_VALIDATION` rows only, with constrained output and no training/corpus mutation/protected holdout read.
+
+Result:
+- V11 `288/288 = 100.00%`
+- V12 `288/288 = 100.00%`
+- delta exact `+0`
+- invalid V11 `0`
+- invalid V12 `0`
+- all 18 labels: V11 `16/16`, V12 `16/16`
+- V11 wrong transitions: none
+- V12 wrong transitions: none
+- V11 adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+- V12 adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
+- development validation SHA `d2c6a2d60c9739d81c0afda7e051c558578e93933ee72e2f82fd66ba27bfbfd6`
+- elapsed `22.25 min`
+
+Local metrics:
+`local-data/lora-v12/retention-replay-v1/retention-compare/runs/20260902T103814Z/metrics.json`
+
+Interpretation: clean retention PASS. No measurable forgetting appeared across any of the 18 labels on this development retention set. Because both V11 and V12 are perfect here, this is not broad improvement evidence.
+
+The earlier fixed hard-sibling development comparison remains:
+- V11 `70/72`
+- V12 `71/72`
+- ORDER_PROCESSING `34/36 -> 36/36`
+- ORDER_PACKING `36/36 -> 35/36`
+- one V12 stale-snippet reverse error `ORDER_PACKING -> ORDER_PROCESSING`.
+
+Protocol:
+`protocols/V12-STAGE3C-ALL18-RETENTION-RESULT-2026-09-02.md`
+
+Next: do not tune again on these development sets. Build a brand-new SHA-locked post-V12 untouched holdout with entirely new rows/wording/representation families across all 18 labels, then compare unchanged V11 vs exact V12 once. After the V12 final gate is closed, begin the full BuyFlow module-by-module audit.
+
+---
+
+## 2026-09-02 — V12 hard-sibling post-train: 71/72
+
+Exact V12 post-training evaluation on the same fixed 72 hard-sibling validation rows:
 - V11 baseline `70/72 = 97.22%`
 - V12 `71/72 = 98.61%`
 - delta `+1`
 - invalid `0`
-- wrong `1`
 - ORDER_PROCESSING `34/36 -> 36/36`
 - ORDER_PACKING `36/36 -> 35/36`
-- clean_plain `12/12`
-- html_body `12/12`
-- metadata_order_shift `12/12`
-- misleading_subject `12/12`
-- quoted_old_state `12/12`
-- stale_snippet `11/12`
-- only V12 wrong transition: `ORDER_PACKING -> ORDER_PROCESSING` x1
-- V12 adapter SHA verified `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
-- parent V11 SHA verified `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
-- training `False`
-- corpus mutation `False`
-- frozen holdouts read `False`
-
-Local metrics:
-`local-data/lora-v12/hard-siblings-v2/posttrain-v12/runs/20260902T101119Z/metrics.json`
-
-Interpretation: V12 fixes both previously observed ORDER_PROCESSING->ORDER_PACKING hard-sibling errors but introduces one reverse stale-snippet error. Net exact improvement is +1 on this development set; this is not broad proof and not a reason to tune again yet.
-
-Prepared next gate:
-- `scripts/v12-retention-compare-v1.py`
-- `scripts/run-v12-retention-compare-v1.ps1`
-- `scripts/BuyFlow-V12-RETENTION-COMPARE.cmd`
-
-The new gate compares exact unchanged V11 vs V12 on the 288 `V11_REPLAY_VALIDATION` rows only: 18 labels x 16 rows, constrained output, exact adapter/hash/safety checks, no training, no corpus mutation, and no protected holdout read. This is development retention evidence, not a new untouched holdout.
-
-Next: run `scripts/BuyFlow-V12-RETENTION-COMPARE.cmd`, inspect overall + per-label deltas and wrong transitions, then only if retention is acceptable create a brand-new untouched V12 post-training holdout.
-
----
-
-## 2026-09-02 — V12 post-train evaluator first attempt failed before model load; resolver fixed
-
-First local post-train evaluation attempt failed before model loading/inference with `V12_EXACT_ADAPTER_DISCOVERY:0` because the evaluator checked the human-facing console completion label instead of the persisted metrics status. The resolver was fixed to use `LATEST.txt`, exact adapter SHA, persisted status and parent SHA. No model/corpus/holdout mutation occurred.
+- only V12 wrong transition `ORDER_PACKING -> ORDER_PROCESSING` x1 on `stale_snippet`.
 
 ---
 
@@ -64,18 +69,6 @@ Local Stage 3 continuation training completed successfully:
 ## 2026-09-02 — V12 retention replay PASS
 
 Canonical V11 corpus signature passed. Built merged retention corpus: 1152 V11 replay + 144 hard TRAIN = 1296; 288 V11 replay + 72 hard validation = 360; all 18 labels retained; exact overlap 0; frozen holdouts read False.
-
----
-
-## 2026-09-02 — V12 hard-sibling baseline
-
-Unchanged V11 + constrained decoder on 72 hard-sibling validation rows: `70/72 = 97.22%`, invalid 0. ORDER_PACKING 36/36, ORDER_PROCESSING 34/36; only wrong transition ORDER_PROCESSING→ORDER_PACKING x2.
-
----
-
-## 2026-09-02 — Human teacher + hard siblings
-
-14-row human teacher review approved all seed labels; both student disagreements were true ORDER_PROCESSING→ORDER_PACKING errors. Built 216 new synthetic/deidentified hard siblings: 144 TRAIN + 72 validation, six languages, six representation variants, no frozen/stage1 row reuse.
 
 ---
 
