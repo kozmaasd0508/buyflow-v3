@@ -144,7 +144,7 @@ def score_model(name: str, adapter: Path, rows: list[dict[str, Any]], out_file: 
                     "latency_ms": round(latency_ms, 1),
                 }
                 scored.append(item)
-                handle.write(json.dumps(item, ensure_ascii=False, separators=(",", ",",)) + "\n")
+                handle.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
                 if index % 32 == 0 or index == len(rows):
