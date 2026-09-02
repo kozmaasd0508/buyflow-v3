@@ -79,7 +79,7 @@ Initial boundary behavior head: `1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`.
 
 CI #1152 / run `33632992124` PASS. Temporary PR #303 closed unmerged.
 
-### V11 runtime safety — IMPLEMENTED, STILL OFF
+### V11 runtime safety — PASS, STILL OFF
 
 Added a pinned local V11 runtime:
 - `apps/api/src/ai/eventmind-v11-runtime.ts`
@@ -97,8 +97,17 @@ Safety behavior:
 - unavailable/OOM/timeout/HTTP/malformed/metadata mismatch/invalid model output all fail closed;
 - no identity authority is granted on any failure.
 
-Runtime safety behavior head before documentation commits:
-`a3539e08927b9d6013c0b15ff6b4222df8c26211`.
+Verified branch head including runtime/gate preparation:
+`3d03313750f842de89e439738eae6709cb41ff71`
+
+GitHub Actions CI #1165 / run `33635558885`:
+- EventMind Python runtime syntax PASS;
+- EventMind PowerShell launcher syntax PASS;
+- API typecheck PASS;
+- API tests PASS;
+- API build PASS;
+- mobile typecheck PASS;
+- mobile web build PASS.
 
 ### Fresh MailLens/EventMind V11 gate — PREPARED, NOT GPU-RUN YET
 
@@ -133,7 +142,7 @@ Protocol: `protocols/EVENTMIND-AUDIT-2026-09-02.md`.
 
 Current status:
 - **EventMind identity/input boundary: PASS**
-- **EventMind V11 runtime safety code: PASS once exact final branch CI is recorded**
+- **EventMind V11 runtime safety code: PASS**
 - **Fresh V11 model gate: PREPARED / NOT RUN ON LOCAL GPU**
 - **Production EventMind: BLOCKED**
 
