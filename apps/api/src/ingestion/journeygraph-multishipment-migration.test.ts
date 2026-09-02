@@ -21,6 +21,11 @@ test('JourneyGraph migration uses the final parcel delivery time for whole-Purch
   assert.match(migration, /when v_delivered_timestamp_count <> v_shipment_count then null/);
 });
 
+test('JourneyGraph migration preserves the earliest known whole-Purchase shipment start', () => {
+  assert.match(migration, /min\(shipped_at\)/);
+  assert.match(migration, /else least\(shipped_at, v_aggregate_shipped_at\)/);
+});
+
 test('JourneyGraph controlled shipment function keeps its privileged surface locked down', () => {
   assert.match(migration, /security definer/);
   assert.match(migration, /set search_path = ''/);
