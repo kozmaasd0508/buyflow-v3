@@ -100,16 +100,7 @@ Safety behavior:
 Final exact branch verification before local GPU gate:
 `af99492f4e852250b5a8fb05f1167336dd50c419`
 
-GitHub Actions CI #1167 / run `33635810471`:
-- EventMind Python runtime syntax PASS;
-- EventMind PowerShell launcher syntax PASS;
-- API typecheck PASS;
-- API tests PASS;
-- API build PASS;
-- mobile typecheck PASS;
-- mobile web build PASS.
-
-Temporary PR #304 was closed unmerged.
+GitHub Actions CI #1167 / run `33635810471`: Python/PowerShell syntax, API typecheck/tests/build and mobile typecheck/build all PASS. Temporary PR #304 was closed unmerged.
 
 ### Fresh MailLens/EventMind V11 gate — PASS
 
@@ -143,6 +134,36 @@ Current status:
 - **Fresh V11 model gate: PASS — 90/90**
 - **Production EventMind: BLOCKED / OFF**
 
+## TRUSTLINK
+
+Code / zero-trust audit: **PASS**.
+
+Existing deterministic safety was confirmed: identity keys are user+namespace scoped, unscoped matches are review-only, multiple hard candidates become REVIEW, hard extraction conflicts become PENDING, lifecycle-only messages cannot create Purchase, and current graph orchestration stays shadow-only with `productionWrites: 0`.
+
+One real gap was found and fixed: the visible email `From:` / sender domain was too strong for future merchant-scoped promotion even though it can be spoofed.
+
+Merchant-scoped CREATE_PURCHASE and hard order/parent-child/invoice-via-merchant promotion now require explicit trusted sender authority provenance:
+- `field=sender_authority`
+- `source=provider_adapter`
+- qualifier `trusted_sender_authority`
+
+Raw/header-origin authentication cannot satisfy the gate. Current real source adapters do not yet emit this trusted authority marker, therefore merchant-scoped production promotion remains **BLOCKED by default**.
+
+First CI #1168 intentionally exposed an old synthetic lifecycle fixture that lacked the new trusted authority. The safety rule was not weakened; the synthetic safe-merchant fixture was corrected.
+
+Final verified TrustLink code head:
+`dcbd2e5a95b00d1b7c67ce845329d9b8164cc8ba`
+
+GitHub Actions CI #1169 / run `33648405215`: Python/PowerShell syntax, API typecheck/tests/build and mobile typecheck/build all **PASS**.
+
+Protocol: `protocols/TRUSTLINK-AUDIT-2026-09-02.md`.
+
+Current status:
+- **TrustLink deterministic correlation: PASS**
+- **Sender-authority gap: REMEDIATED**
+- **Production TrustLink writes: OFF / BLOCKED**
+- **Real trusted provider-authentication provenance: NOT WIRED YET**
+
 ## DEPLOYMENT STATE
 
 Still conservative:
@@ -150,6 +171,7 @@ Still conservative:
 - source archive OFF;
 - Mailgun source persistence OFF;
 - EventMind V11 runtime OFF;
+- TrustLink production writes OFF;
 - no live migration applied from this flow;
 - no provider cutover;
 - no AI identity authority;
@@ -158,10 +180,10 @@ Still conservative:
 ## NEXT ACTION
 
 1. Preserve the EventMind first gate result unchanged and never train on that fixture.
-2. Keep PR #295 draft and all live/source/AI flags OFF.
-3. Continue the module audit with **TrustLink**.
+2. Keep PR #295 draft and all live/source/AI/write flags OFF.
+3. Continue the module audit with **JourneyGraph**.
 4. MailGate/RawVault production smokes are still required before source cutover.
-5. Do not enable production EventMind based only on this synthetic gate.
+5. Trusted provider-authentication provenance must be implemented and separately verified before merchant-scoped TrustLink promotion can be enabled.
 6. Do not promote V12.
 
 ## RESUME CONTRACT
