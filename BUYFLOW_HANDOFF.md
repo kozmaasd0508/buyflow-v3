@@ -98,7 +98,8 @@ Retention gate:
 
 Local Qwen3-8B continuation QLoRA completed successfully from the unchanged V11 best adapter.
 
-- status `V12_TRAINING_COMPLETE`
+- console status `V12_TRAINING_COMPLETE`
+- persisted metrics status `LORA_V12_RETENTION_ROBUSTNESS_TRAIN_COMPLETE`
 - parent V11 adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
 - parent V11 unchanged `True`
 - TRAIN `1296`
@@ -126,15 +127,27 @@ Protocol:
 
 Important: the lower validation loss is not enough to claim behavioral improvement.
 
-Prepared exact post-training evaluator:
-- `scripts/v12-hard-siblings-posttrain-v1.py`
-- `scripts/run-v12-hard-siblings-posttrain-v1.ps1`
-- `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`
+## V12 STAGE 3B — POST-TRAIN EVALUATOR RESOLVER FIXED
+
+First local post-train evaluation attempt failed before model load with `V12_EXACT_ADAPTER_DISCOVERY:0`.
+
+Cause: the evaluator was checking the console completion label `V12_TRAINING_COMPLETE` against `metrics.json`, while the trainer correctly persists `LORA_V12_RETENTION_ROBUSTNESS_TRAIN_COMPLETE` there.
+
+Fix:
+- `scripts/v12-hard-siblings-posttrain-resolved-v2.py`
+- `run-v12-hard-siblings-posttrain-v1.ps1` now calls the resolved evaluator
+- uses trainer-written `local-data/lora-v12/LATEST.txt`
+- verifies exact V12 adapter SHA and metrics SHA
+- verifies the persisted metrics status
+- verifies recorded V11 parent SHA and re-hashes current V11 parent weights
+- rechecks all frozen/holdout/locked-test safety flags and 18-label retention before inference
+
+The failed attempt did not load the model, read frozen holdouts, train, or mutate corpus/model state.
 
 ## NEXT ACTION
 
 1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate V11 test worktree.
-2. Run `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`.
+2. Rerun `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`.
 3. Compare exact result against fixed V11 baseline `70/72`.
 4. Do not tune on or read Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
 5. After the 72-row before/after result, run a separate all-18-label retention check.
