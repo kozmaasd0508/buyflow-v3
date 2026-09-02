@@ -134,9 +134,6 @@ Exact post-train evaluation on the same fixed 72 hard-sibling validation rows:
 Metrics:
 `local-data/lora-v12/hard-siblings-v2/posttrain-v12/runs/20260902T101119Z/metrics.json`
 
-Protocol:
-`protocols/V12-STAGE3B-POSTTRAIN-HARD-SIBLING-RESULT-2026-09-02.md`
-
 Interpretation: narrow net improvement on the development set, but not perfect and not broad proof.
 
 ## V12 STAGE 3C — ALL-18 RETENTION PASS
@@ -157,20 +154,39 @@ Exact V11 vs V12 retention comparison completed on only the 288 `V11_REPLAY_VALI
 Metrics:
 `local-data/lora-v12/retention-replay-v1/retention-compare/runs/20260902T103814Z/metrics.json`
 
-Protocol:
-`protocols/V12-STAGE3C-ALL18-RETENTION-RESULT-2026-09-02.md`
-
 Interpretation: clean development-retention PASS with no measurable forgetting across the 18 labels. Because both models score 100% here, this does not prove broad V12 improvement.
+
+## V12 STAGE 4 — POST-TRAIN UNTOUCHED HOLDOUT PREPARED
+
+Prepared a brand-new freeze-only generator after training and retention measurement:
+- `scripts/v12-posttrain-holdout-v1.py`
+- `scripts/run-v12-posttrain-holdout-v1.ps1`
+- `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-V1.cmd`
+- protocol: `protocols/V12-STAGE4-POSTTRAIN-UNTOUCHED-HOLDOUT-V1-2026-09-02.md`
+
+Holdout contract:
+- 108 new synthetic/deidentified rows
+- 18 labels x 6 rows
+- languages `hu,en,de,pl,fr,es`
+- six representation variants: clean plain, stale subject, HTML-only, stale snippet, quoted history, metadata noise
+- complete event x language matrix
+- complete event x representation matrix
+- newly authored wording; source rows copied `False`
+- training/tuning eligible `False`
+- generator loads no model and reads no prior training corpus, hard-sibling rows or protected holdouts
+- local output is SHA-locked under `local-data/lora-v12/posttrain-holdout-v1/`
+- existing frozen corpus can only be regenerated if bytes and SHA are exactly identical; otherwise fail closed
+
+No holdout has been scored yet. The SHA must be preserved before any V11/V12 inference.
 
 ## NEXT ACTION
 
-1. Do not tune again on the 72 hard-sibling development rows or the 288 retention rows.
-2. Create a brand-new post-V12 untouched holdout with entirely new rows/wording/representation families and all 18 labels.
-3. SHA-lock that fixture before any model inference.
-4. Compare exact unchanged V11 vs exact V12 using constrained decoding once on the locked holdout.
-5. Do not read/tune on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50 during this step.
-6. Only the new untouched result should decide whether V12 is ready for promotion beyond development evidence.
-7. After the V12 gate is closed, begin the full BuyFlow module audit (MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse).
+1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate V11 test worktree.
+2. Run `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-V1.cmd`.
+3. Preserve the printed `holdout_sha256` and freeze block; do not score a model yet.
+4. After the SHA is confirmed, prepare/run the one-shot unchanged V11 vs exact V12 constrained comparison on that exact frozen corpus.
+5. Never train or tune on this holdout. Any later model change requires a new versioned holdout.
+6. After the V12 gate is closed, begin the full BuyFlow module audit (MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse).
 
 ## RESUME CONTRACT
 
