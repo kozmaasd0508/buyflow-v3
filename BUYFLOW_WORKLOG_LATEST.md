@@ -1,296 +1,50 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — DocVault content/ownership audit PASS
+## 2026-09-02 — MailGate real Gmail read-only smoke: PARTIAL PASS / history gate BLOCKED
 
 Branch: `codex/modern-email-source-foundation-v1`  
-Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+Architecture PR: #295 draft
 
-DocVault invoice/document storage, ownership, dedupe/content identity and private PDF access were reviewed end-to-end.
+Real Gmail smoke completed without mailbox or BuyFlow writes:
+- six recent purchase/lifecycle emails sampled;
+- exact RAW MIME available **6/6**;
+- observed normal authored-body vs RAW semantics consistent;
+- attachment metadata present where expected;
+- no detached renderable text-body occurred in this live slice, so detached live parity is not claimed;
+- sampled UNREAD mail remained UNREAD;
+- no Gmail mutation action called;
+- production since smoke start: **0 source emails, 0 Purchase updates, 0 Shipment updates, 0 Documents, 0 AI runs**.
 
-Real findings fixed:
-- an existing invoice row could have its stored PDF/hash silently replaced by a later different PDF with the same Purchase + invoice number;
-- attachment storage used a provider-identity path with `upsert: true`, so changed bytes after an interrupted retry could overwrite the old object before DB verification;
-- `documents.user_id` is required by the base schema while legacy controlled document insert paths did not populate it directly;
-- admin-client document reads were Purchase-scoped but not independently filtered by `documents.user_id` before signed URL creation.
-
-Remediation:
-- invoice attachment storage paths now include the full PDF SHA-256;
-- changed bytes for an already-known attachment identity fail closed to REVIEW before overwrite;
-- malformed SHA values cannot produce a storage path;
-- prepared DB migration enforces document owner = Purchase owner and validates source ownership;
-- already-existing cross-user document rows cause the migration to stop for explicit review instead of silent repair;
-- hashed document physical identity is immutable;
-- a body-only invoice placeholder may be upgraded once to a physical PDF;
-- same invoice + different PDF SHA-256 is a hard conflict, not replacement;
-- new attachment-backed document inserts explicitly include `user_id` + `source_email_id`;
-- document list/detail reads now independently require `documents.user_id = authenticated user.id` before signed URL creation;
-- private PDF signed URL TTL remains 60 seconds and detail responses remain `Cache-Control: no-store`.
-
-Prepared migration only:
-`supabase/migrations/20260902162000_harden_docvault_content_identity.sql`
-
-The migration was **not applied** to staging or production.
-
-Final verified behavior head:
-`e77a226f403c6d5141e91d32d277bc99ce91ac21`
-
-Final GitHub Actions CI #1184 / run `33652929490`: **PASS**.
-- EventMind Python runtime syntax PASS;
-- EventMind PowerShell launcher syntax PASS;
-- API typecheck PASS;
-- API tests PASS;
-- API build PASS;
-- mobile typecheck PASS;
-- mobile web build PASS.
-
-Temporary verification PR #307 was closed unmerged.
+Remaining MailGate blocker:
+- connected Gmail tool has no `history.list` and profile does not expose historyId;
+- production `buyflow-v3` does not yet contain `email_provider_credentials` or `email_sync_states` and has 0 new-runtime direct Gmail connections;
+- therefore live initial historyId capture + `history.list` replay were **NOT RUN**;
+- no production migration was applied just to force this smoke.
 
 Verdict:
-- **DocVault code/document safety audit: PASS**;
-- PDF content identity/overwrite protection: **PASS**;
-- document ownership/read scoping: **PASS**;
-- production database migration: **NOT APPLIED / BLOCKED** pending controlled staging migration + document smoke.
+- MailGate code: PASS;
+- real Gmail RAW/read-only path: PASS;
+- zero-write/zero-AI/mailbox mutation safety: PASS;
+- live cursor/history replay: BLOCKED;
+- full production MailGate gate: NOT YET PASS;
+- direct Gmail runtime remains OFF.
 
-Protocol: `protocols/DOCVAULT-AUDIT-2026-09-02.md`.
+Protocol: `protocols/MAILGATE-REAL-GMAIL-SHADOW-SMOKE-2026-09-02.md`.
 
-Next module audit: **Core**.
-
----
-
-## 2026-09-02 — JourneyGraph state audit PASS
-
-Branch: `codex/modern-email-source-foundation-v1`  
-Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
-
-JourneyGraph timeline/state reduction was reviewed across the Purchase Identity Graph, deterministic lifecycle reconciliation, controlled Shipment RPC, carrier bridge and controlled post-write verification.
-
-Real findings fixed:
-- one delivered parcel could falsely complete a multi-parcel Purchase;
-- whole-Purchase delivery time could become the first parcel delivery time instead of final parcel completion;
-- stale order/delay evidence could downgrade `ready_for_pickup`;
-- proven physical Shipment progress could leave stale `payment_failed` / `delayed` as the visible journey state;
-- controlled Shipment verification used the old single-parcel assumption and could report failure after a correct write;
-- an older controlled replay could be treated as a status mismatch even though the database correctly preserves monotonic Shipment progress.
-
-Remediation:
-- all Shipments under a Purchase are reduced together;
-- Purchase is `delivered` only if every linked Shipment is delivered;
-- whole-Purchase `delivered_at` uses the latest parcel delivery timestamp and stays null until completion is proven;
-- earliest known whole-Purchase `shipped_at` is preserved;
-- `ready_for_pickup` is protected physical progress;
-- proven physical progress outranks stale non-terminal order/payment/delay journey state;
-- cancelled/refunded/returned remain protected terminal states;
-- controlled verification recomputes the aggregate after the RPC;
-- individual Shipment replay is monotonic;
-- pre-advice / `shipment_created` is fail-closed from the physical controlled-write lane.
-
-No alternate Purchase-state bypass was found: the carrier-parcel-sender bridge uses the same controlled Shipment RPC, while Foxpost repair only changes source-email evidence.
-
-Prepared migration only:
-`supabase/migrations/20260902153000_fix_journeygraph_multishipment_aggregate.sql`
-
-The migration was **not applied** to staging or production.
-
-Final verified code head:
-`8ef8d36bb9f0ee7ebce3477c13e30f510df30e4f`
-
-Final GitHub Actions CI #1183 / run `33651035053`: **PASS**.
-- EventMind Python runtime syntax PASS;
-- EventMind PowerShell launcher syntax PASS;
-- API typecheck PASS;
-- API tests PASS;
-- API build PASS;
-- mobile typecheck PASS;
-- mobile web build PASS.
-
-Temporary verification PR #306 was closed unmerged.
-
-Verdict:
-- **JourneyGraph code/state audit: PASS**;
-- multi-shipment safety: **PASS**;
-- production database migration: **NOT APPLIED / BLOCKED** pending controlled staging migration + multi-shipment smoke.
-
-Protocol: `protocols/JOURNEYGRAPH-AUDIT-2026-09-02.md`.
-
-Next module audit: **DocVault**.
+Next actionable gate: **RawVault private-storage/retention/orphan/account-deletion cleanup smoke**. MailGate cursor/history is finished later in a controlled readonly Direct Gmail runtime environment.
 
 ---
 
-## 2026-09-02 — TrustLink zero-trust audit PASS
+## 2026-09-02 — Controlled JourneyGraph/DocVault/Core DB smoke PASS
 
-Branch: `codex/modern-email-source-foundation-v1`  
-Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+A separate synthetic Supabase smoke project reproduced the required production baseline. JourneyGraph multi-parcel aggregation, DocVault ownership/content identity and Core fail-closed authority all passed. Production remained read-only; migrations remain unapplied. Smoke project is INACTIVE; old staging restored ACTIVE_HEALTHY.
 
-TrustLink correlation, graph mutation rules and future promotion readiness were reviewed end-to-end.
-
-Existing safe behavior confirmed:
-- exact identity keys are scoped by user + namespace + stable identifier;
-- unscoped discovery is review-only;
-- multiple hard candidates -> REVIEW;
-- hard extraction conflict -> PENDING;
-- lifecycle-only messages cannot create Purchase;
-- Purchase creation requires deterministic root authority;
-- REVIEW/PENDING/UNLINKED do not mutate the graph;
-- current orchestration remains shadow-only with `productionWrites: 0`.
-
-One real promotion-safety gap was found: the visible email `From:` / sender domain could previously be strong enough to establish merchant scope for a future write-ready hard order link, even though `From:` can be spoofed. Raw `Authentication-Results` is already diagnostic-only in MailLens and is not a trustworthy source by itself.
-
-Remediation:
-- merchant-scoped CREATE_PURCHASE and merchant-scoped hard order/parent-child/invoice promotion now require explicit trusted sender authority provenance;
-- accepted authority must be `field=sender_authority`, `source=provider_adapter`, qualifier `trusted_sender_authority`;
-- raw/header provenance cannot satisfy the gate;
-- current real source adapters do not yet emit this trusted marker, so merchant-scoped production promotion remains fail-closed by default.
-
-Tests added for trusted/untrusted merchant creation and links, fake header-origin authority, and carrier-scoped tracking independence.
-
-First verification CI #1168 / run `33648039402` failed one old lifecycle-chain test because its synthetic safe-merchant fixtures did not declare the new trusted authority. The safety rule was kept unchanged; the synthetic gate was updated to explicitly model provider-authenticated safe merchant senders.
-
-Final verified code head:
-`dcbd2e5a95b00d1b7c67ce845329d9b8164cc8ba`
-
-Final GitHub Actions CI #1169 / run `33648405215`: **PASS**.
-- EventMind Python runtime syntax PASS;
-- EventMind PowerShell launcher syntax PASS;
-- API typecheck PASS;
-- API tests PASS;
-- API build PASS;
-- mobile typecheck PASS;
-- mobile web build PASS.
-
-Verdict:
-- **TrustLink code / zero-trust audit: PASS**;
-- sender-authority gap: **REMEDIATED**;
-- production writes remain **OFF/BLOCKED**;
-- real provider-authentication provenance still needs a separate trusted source-adapter implementation before merchant promotion can ever be enabled.
-
-Protocol: `protocols/TRUSTLINK-AUDIT-2026-09-02.md`.
-
-Next module audit: **JourneyGraph**.
+Protocol: `protocols/STAGING-SMOKE-2026-09-02.md`.
 
 ---
 
-## 2026-09-02 — EventMind V11 fresh local GPU gate PASS
+## 2026-09-02 — 9-module code audit complete
 
-Branch: `codex/modern-email-source-foundation-v1`  
-Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+`MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`
 
-The first untouched local GPU run of the new MailLens/EventMind V11 representation gate completed successfully.
-
-Frozen fixture:
-- 90 cases;
-- all 18 fixed EventMind labels represented;
-- fixture SHA-256: `4d70c774b332edbc7aabe19d754f51ac2e47762c3d17cc018f25d4786d91fd0e`.
-
-Pinned real V11 adapter SHA-256:
-`462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
-
-First preserved result:
-- Exact: **90/90 (100.00%)**;
-- Macro event: **100.00%**;
-- Invalid: **0**;
-- Unsafe promotions: **0**;
-- Gate: **PASS**.
-
-Local result directory:
-`local-data/eventmind-v11-representation-gate/runs/20260902T150955Z`
-
-The fixture must never be used for training after this evaluation.
-
-Interpretation:
-- EventMind MailLens/input/identity boundary: **PASS**;
-- V11 runtime safety: **PASS**;
-- fresh V11 representation/runtime gate: **PASS**;
-- production EventMind remains **OFF/BLOCKED** because this synthetic gate is not full real-mailbox generalization proof and upstream MailGate/RawVault production smokes are still pending.
-
-Next module audit: **TrustLink**.
-
----
-
-## 2026-09-02 — EventMind V11 runtime + fresh gate prepared and CI GREEN
-
-After the EventMind MailLens/identity boundary passed, the actual V11 runtime path was hardened.
-
-Implemented:
-- `apps/api/src/ai/eventmind-v11-runtime.ts` as a fail-closed API-side V11 client;
-- `scripts/eventmind-v11-runtime.py` as a loopback-only local Qwen3-8B/V11 server;
-- exact adapter SHA-256 pinning and runtime metadata checks;
-- explicit thinking OFF with no silent tokenizer fallback;
-- deterministic generation (`do_sample=false`, max 48 new tokens);
-- V11 training completion + holdout-isolation checks before model load;
-- timeout through full response parsing;
-- unavailable/OOM/timeout/HTTP/malformed/metadata mismatch/invalid output -> no semantic result;
-- no Purchase identity authority added anywhere.
-
-Production EventMind remains OFF and the normalized inbound source lane is still not automatically calling Qwen.
-
-Fresh representation/runtime gate prepared:
-- `apps/api/src/ai/eventmind-v11-representation-gate.ts`;
-- `apps/api/src/scripts/eventmind-v11-representation-gate.ts`;
-- `apps/api/src/scripts/eventmind-v11-untouched-fixture-v1.ts`;
-- `scripts/run-eventmind-v11-gate.ps1`;
-- `scripts/BuyFlow-EVENTMIND-V11-GATE.cmd`.
-
-The new local fixture contains 90 synthetic cases: 5 for each of the fixed 18 events. It includes multilingual cases, stale snippet/subject traps, quoted old lifecycle history and structured lifecycle/identity noise. It is first-use-only and stored under Git-ignored `local-data/`.
-
-The already-viewed 180-case fixture is explicitly rejected by SHA-256:
-`6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`.
-
-Before first inference the runner hashes and freezes the exact fixture, writes a `FROZEN_BEFORE_INFERENCE` manifest and refuses silent reuse of a locally consumed fixture hash.
-
-Gate PASS rules:
-- >=90 cases and all 18 labels;
-- invalid output = 0;
-- incoherent output = 0;
-- unsafe lifecycle promotion = 0;
-- OTHER -> commerce FP = 0;
-- exact >=90%;
-- macro event >=85%.
-
-Final exact branch verification before local gate:
-`af99492f4e852250b5a8fb05f1167336dd50c419`
-
-Temporary CI-only PR #304 / GitHub Actions CI #1167 / run `33635810471` passed Python/PowerShell syntax, API typecheck/tests/build, and mobile typecheck/build. PR #304 was closed unmerged.
-
----
-
-## 2026-09-02 — EventMind MailLens / identity boundary remediated
-
-Added `apps/api/src/ai/eventmind-v1.ts` as the single production-side semantic input/decoder contract. EventMind consumes MailLens `semanticText`, uses a locked 18-event taxonomy, rejects every extra model output field and maps only into a semantic-only override. Internal Purchase candidates/ids do not enter the model contract and AI cannot create/link/merge/select Purchase identity.
-
-Initial boundary behavior head:
-`1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`
-
-Temporary CI-only PR #303 / CI #1152 / run `33632992124`: API typecheck/tests/build + mobile typecheck/build PASS. PR #303 closed unmerged.
-
----
-
-## 2026-09-02 — MailLens remediation complete
-
-MailLens `normalized-email-document-v1.1` became the single provider-neutral semantic normalization boundary with bounded full `bodyText`, separate current `semanticText`, quoted-history/hidden-content controls, attachment protection and diagnostic-only header authentication.
-
-Behavior head:
-`f69195404831323f2783464a61f6f7b7435698b5`.
-
-CI #1151 / run `33631564933`: API typecheck/tests/build + mobile typecheck/build PASS. Production source path remains BLOCKED pending MailGate + RawVault staging/live gates.
-
----
-
-## 2026-09-02 — RawVault remediation complete
-
-Immutable source archive, SHA-256/opaque keys, durable pre-write manifest, explicit retention, crash/orphan/account-deletion cleanup, raw-hash conflict detection and DB immutability added.
-
-Behavior head:
-`9480e6d4e8d5c3e0a771b43671503cda593971c2`.
-
-Production RawVault remains BLOCKED pending controlled staging migration + retention/storage smoke.
-
----
-
-## 2026-09-02 — MailGate remediation complete
-
-Direct Gmail source code hardened for complete initial snapshot/cursor behavior, detached body hydration, safe timestamps, bounded retry/concurrency, expired-history recovery, watch renewal/fallback sync and strict OAuth authority.
-
-Behavior head:
-`e67b908e07d072e3737611eca4ee804d7d905c26`
-
-Production MailGate remains BLOCKED pending controlled real-Gmail read-only shadow smoke.
+All module code audits are complete. Production source/AI/write/cutover flags remain OFF. EventMind V11 first untouched 90-case gate remains preserved at 90/90 exact. TrustLink merchant production promotion still requires trusted provider-auth provenance. V12 remains unpromoted.
