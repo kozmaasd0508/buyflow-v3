@@ -78,8 +78,31 @@ If push notifications are added later, they must consume the same server-side Pu
 - unknown-state fail-closed behavior;
 - absence of email/source/identity authority fields in Pulse output.
 
+## Verification
+
+Final verified head:
+`df75e04989afd89df080942adcf31cb4ee4ec2d4`
+
+Initial CI #1186 / run `33660140564` stopped at API typecheck because of a test-only TypeScript cast. The test assertion was corrected; no Pulse behavior code change was required.
+
+Final CI #1187 / run `33660311868`: **PASS**.
+- EventMind runtime syntax PASS;
+- EventMind launcher syntax PASS;
+- API typecheck PASS;
+- API tests PASS;
+- API build PASS;
+- mobile typecheck PASS;
+- mobile web build PASS.
+
+Temporary verification PR #309 was closed unmerged.
+
 ## Production status
 
-Pulse is a read-only derived view. No database migration and no production write/notification enablement is introduced by this audit.
+Pulse read-only status authority remediation: **PASS**.
 
-Verification CI: pending.
+No database migration, push delivery, production write authority, provider cutover or live feature enablement was introduced by this audit.
+
+The full module code-audit sequence is now complete:
+`MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`.
+
+Production remains blocked behind the already-recorded staging migrations, real source smokes and trusted provider-authentication provenance gates.
