@@ -21,6 +21,7 @@ export interface GmailDirectSyncSummary {
   archived: number;
   deleted: number;
   resetRequired: boolean;
+  resetRecovered: boolean;
   cursorCommitted: boolean;
   purchaseWrites: 0;
   shipmentWrites: 0;
@@ -46,6 +47,7 @@ function baseSummary(mode: GmailDirectSyncSummary['mode']): GmailDirectSyncSumma
     archived: 0,
     deleted: 0,
     resetRequired: false,
+    resetRecovered: false,
     cursorCommitted: false,
     purchaseWrites: 0,
     shipmentWrites: 0,
@@ -61,6 +63,17 @@ function addPersistResult(summary: GmailDirectSyncSummary, result: NormalizedInb
   if (result.deduped) summary.deduped += 1;
   else if (result.sourceEmailId) summary.persisted += 1;
   if (result.sourceArchived) summary.archived += 1;
+}
+
+function addSummary(target: GmailDirectSyncSummary, source: GmailDirectSyncSummary) {
+  target.observed += source.observed;
+  target.persisted += source.persisted;
+  target.deduped += source.deduped;
+  target.ignored += source.ignored;
+  target.review += source.review;
+  target.recognized += source.recognized;
+  target.archived += source.archived;
+  target.deleted += source.deleted;
 }
 
 async function requireActiveGmailConnection(input: {
@@ -194,8 +207,8 @@ export async function runDirectGmailInitialSync(input: {
     addPersistResult(summary, result);
   }
 
-  // Cursor advances only after every observable message was either deliberately
-  // ignored by the privacy gate or safely persisted.
+  // Cursor advances only after the entire discovery snapshot was exhausted and
+  // every observable message was deliberately ignored or safely persisted.
   await runtime.commitCheckpoint(read.checkpoint);
   summary.cursorCommitted = true;
   return summary;
@@ -213,7 +226,26 @@ export async function runDirectGmailIncrementalSync(input: {
   const summary = baseSummary('incremental');
   summary.observed = read.page.changes.length;
   summary.resetRequired = read.page.resetRequired;
-  if (read.page.resetRequired || !read.checkpoint) return summary;
+
+  if (read.page.resetRequired) {
+    // An expired Gmail historyId is not a terminal state. Rebuild the complete
+    // bounded discovery snapshot, dedupe by provider message id downstream, and
+    // only then replace the stale cursor with the newly captured boundary.
+    const recovery = await runDirectGmailInitialSync({
+      db: input.db,
+      userId: input.userId,
+      emailConnectionId: input.emailConnectionId,
+      limit: 500,
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    });
+    addSummary(summary, recovery);
+    summary.resetRequired = false;
+    summary.resetRecovered = true;
+    summary.cursorCommitted = recovery.cursorCommitted;
+    return summary;
+  }
+
+  if (!read.checkpoint) return summary;
 
   for (const change of read.page.changes) {
     if (change.kind === 'message_deleted' || !change.message) {
