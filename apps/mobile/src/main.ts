@@ -85,9 +85,15 @@ function stateLabel(value: string | null | undefined): string {
     ordered: 'Megrendelve',
     paid: 'Fizetve',
     shipped: 'Úton van',
+    in_transit: 'Úton van',
+    out_for_delivery: 'Kézbesítés alatt',
+    ready_for_pickup: 'Átvehető',
     delivered: 'Kézbesítve',
+    delayed: 'Késik',
+    payment_failed: 'Fizetési hiba',
     cancelled: 'Törölve',
     refunded: 'Visszatérítve',
+    returned: 'Visszaküldve',
     review: 'Ellenőrzés alatt',
     pending: 'Függőben',
   };
@@ -221,10 +227,12 @@ function purchaseCard(purchase: PurchaseSummary, variant: 'purchase' | 'order' =
   const shipment = purchase.shipments[0];
   const merchant = purchase.merchantName || purchase.merchantDomain || 'Ismeretlen webshop';
   const orderNumber = purchase.orderNumber ? `#${purchase.orderNumber}` : 'Rendelési szám nélkül';
-  const status = shipment?.status || purchase.currentState;
+  const status = purchase.pulse.status;
   const iconName = variant === 'order' ? 'truck' : 'box';
   const meta = variant === 'order'
-    ? `${shipment?.carrier || 'Futár még nincs'} · ${shipment?.trackingNumber ? 'Tracking elérhető' : 'Trackingre vár'}`
+    ? purchase.shipments.length > 1
+      ? `${purchase.shipments.length} csomag · ${purchase.pulse.label}`
+      : `${shipment?.carrier || 'Futár még nincs'} · ${shipment?.trackingNumber ? 'Tracking elérhető' : 'Trackingre vár'}`
     : `${formatDate(purchase.orderedAt || purchase.createdAt)} · ${purchase.documentCount} dokumentum`;
 
   return `
@@ -236,7 +244,7 @@ function purchaseCard(purchase: PurchaseSummary, variant: 'purchase' | 'order' =
             <strong class="entity-title">${escapeHtml(merchant)}</strong>
             <small>${escapeHtml(orderNumber)}</small>
           </span>
-          <span class="badge badge-${cssToken(status)}">${escapeHtml(stateLabel(status))}</span>
+          <span class="badge badge-${cssToken(status)}">${escapeHtml(purchase.pulse.label)}</span>
         </span>
         <span class="entity-meta-line">${escapeHtml(meta)}</span>
         <span class="entity-bottom">
@@ -254,8 +262,8 @@ function latestPurchase(): PurchaseSummary | null {
 
 function renderHomePage(): string {
   const latest = latestPurchase();
-  const delivered = state.purchases.filter((purchase) => purchase.currentState === 'delivered').length;
-  const inTransit = state.purchases.filter((purchase) => ['shipped', 'processing', 'ordered'].includes(purchase.currentState)).length;
+  const delivered = state.purchases.filter((purchase) => purchase.pulse.delivered).length;
+  const inTransit = state.purchases.filter((purchase) => purchase.pulse.movement).length;
   const documents = state.purchases.reduce((sum, purchase) => sum + purchase.documentCount, 0);
   const latestCard = latest
     ? purchaseCard(latest, latest.shipments.length > 0 ? 'order' : 'purchase')
@@ -486,7 +494,7 @@ function renderPurchaseDetail() {
           ${feedbackHtml()}
           <article class="order-hero glass-panel">
             <div><p class="eyebrow">${purchase.orderNumber ? `#${escapeHtml(purchase.orderNumber)}` : 'RENDELÉSI SZÁM NÉLKÜL'}</p><h1>${escapeHtml(merchant)}</h1></div>
-            <span class="badge badge-${cssToken(purchase.currentState)}">${escapeHtml(stateLabel(purchase.currentState))}</span>
+            <span class="badge badge-${cssToken(purchase.pulse.status)}">${escapeHtml(purchase.pulse.label)}</span>
             <div class="order-hero-meta"><strong>${formatMoney(purchase.totalAmount, purchase.currency)}</strong><span>${escapeHtml(formatDate(purchase.orderedAt || purchase.createdAt))}</span></div>
           </article>
 
