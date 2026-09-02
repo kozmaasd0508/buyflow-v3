@@ -8,7 +8,7 @@ $fixture = Join-Path $project 'local-data\eventmind-v11-representation-gate\unto
 $runtimeRoot = Join-Path $project 'local-data\eventmind-v11-runtime'
 $stdout = Join-Path $runtimeRoot 'server.out.log'
 $stderr = Join-Path $runtimeRoot 'server.err.log'
-$serverPid = $null
+$serverProcess = $null
 $finalExit = 0
 
 function Convert-ToWslPath([string]$p) {
@@ -20,11 +20,14 @@ function Convert-ToWslPath([string]$p) {
 }
 
 function Stop-EventMindServer {
-    if ($serverPid) {
-        & wsl.exe -d $distro -- sh -lc "kill $serverPid 2>/dev/null || true" | Out-Null
-    } else {
-        & wsl.exe -d $distro -- sh -lc "pkill -f '[e]ventmind-v11-runtime.py' || true" | Out-Null
+    if ($serverProcess) {
+        try {
+            if (-not $serverProcess.HasExited) {
+                Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+            }
+        } catch {}
     }
+    & wsl.exe -d $distro -- sh -lc "pkill -f '[e]ventmind-v11-runtime.py' || true" | Out-Null
 }
 
 Write-Host ''
@@ -42,8 +45,6 @@ if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'NPM_NOT_F
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
 $wslProject = Convert-ToWslPath $project
 $wslServer = Convert-ToWslPath $server
-$wslStdout = Convert-ToWslPath $stdout
-$wslStderr = Convert-ToWslPath $stderr
 $wslHome = (& wsl.exe -d $distro -- sh -lc 'printf %s "$HOME"').Trim()
 if ([string]::IsNullOrWhiteSpace($wslHome)) { throw 'WSL_HOME_NOT_FOUND' }
 $wslPython = "$wslHome/.venvs/buyflow-lora/bin/python"
@@ -60,9 +61,20 @@ try {
     Write-Host '[2/4] V11 modell biztonságos helyi indítása...' -ForegroundColor Yellow
     Stop-EventMindServer
     Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
-    $launch = "nohup env HSA_ENABLE_DXG_DETECTION=1 TOKENIZERS_PARALLELISM=false '$wslPython' '$wslServer' '$wslProject' > '$wslStdout' 2> '$wslStderr' < /dev/null & echo `$!"
-    $serverPid = (& wsl.exe -d $distro -- bash -lc $launch).Trim()
-    if ($serverPid -notmatch '^\d+$') { throw "EVENTMIND_SERVER_PID_INVALID: $serverPid" }
+
+    $launchArgs = @(
+        '-d', $distro,
+        '--',
+        'env',
+        'HSA_ENABLE_DXG_DETECTION=1',
+        'TOKENIZERS_PARALLELISM=false',
+        $wslPython,
+        $wslServer,
+        $wslProject
+    )
+    $serverProcess = Start-Process -FilePath 'wsl.exe' -ArgumentList $launchArgs -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
+    if (-not $serverProcess -or $serverProcess.Id -le 0) { throw 'EVENTMIND_SERVER_START_FAILED' }
+    Write-Host "V11 szerver folyamat elindult: $($serverProcess.Id)" -ForegroundColor DarkGray
 
     $health = $null
     for ($i = 0; $i -lt 180; $i++) {
@@ -70,6 +82,7 @@ try {
             $health = Invoke-RestMethod -Uri 'http://127.0.0.1:4394/health' -Method Get -TimeoutSec 2
             if ($health.ok) { break }
         } catch {}
+        if ($serverProcess.HasExited) { break }
         Start-Sleep -Seconds 1
     }
     if (-not $health -or -not $health.ok) {
