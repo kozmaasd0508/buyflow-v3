@@ -137,10 +137,24 @@ def _looks_like_v11_validation(rows: list[dict[str, Any]]) -> bool:
     return len(rows) == EXPECTED_V11_VALIDATION and set(dist) == set(ALLOWED) and all(dist[event] == 32 for event in ALLOWED)
 
 
+def _discovery_roots(project_root: Path) -> list[Path]:
+    roots: list[Path] = []
+    for candidate in (
+        project_root / "local-data",
+        project_root / "data",
+        project_root / "training-data",
+        project_root / "artifacts",
+    ):
+        if candidate.is_dir():
+            roots.append(candidate.resolve())
+    if not roots:
+        raise RuntimeError(f"V11_DISCOVERY_ROOTS_MISSING:{project_root}")
+    return roots
+
+
 def _discover_v11_corpora(project_root: Path, v11_metrics: dict[str, Any]) -> tuple[Path, list[dict[str, Any]], Path, list[dict[str, Any]]]:
-    search_root = project_root / "local-data" / "lora-v11"
-    if not search_root.is_dir():
-        raise RuntimeError(f"V11_LOCAL_DATA_MISSING:{search_root}")
+    roots = _discovery_roots(project_root)
+    safety_base = project_root.resolve()
 
     candidates: dict[Path, str] = {}
     for key, value in _iter_metric_strings(v11_metrics):
@@ -148,16 +162,17 @@ def _discover_v11_corpora(project_root: Path, v11_metrics: dict[str, Any]) -> tu
         if not any(token in key_lower for token in ("train", "valid", "corpus", "dataset", "data")):
             continue
         resolved = _resolve_metric_path(value, project_root)
-        if resolved and resolved.suffix.lower() in {".jsonl", ".json"} and _is_safe_path(resolved, search_root):
+        if resolved and resolved.suffix.lower() in {".jsonl", ".json"} and _is_safe_path(resolved, safety_base):
             candidates[resolved] = f"metrics:{key}"
 
-    for pattern in ("*.jsonl", "*.json"):
-        for path in search_root.rglob(pattern):
-            if not _is_safe_path(path, search_root):
-                continue
-            name = path.name.lower()
-            if any(token in name for token in ("train", "valid", "corpus", "dataset")):
-                candidates.setdefault(path.resolve(), "safe_filename_scan")
+    for search_root in roots:
+        for pattern in ("*.jsonl", "*.json"):
+            for path in search_root.rglob(pattern):
+                if not _is_safe_path(path, safety_base):
+                    continue
+                name = path.name.lower()
+                if any(token in name for token in ("train", "valid", "corpus", "dataset")):
+                    candidates.setdefault(path.resolve(), f"safe_filename_scan:{search_root.name}")
 
     train_matches: list[tuple[Path, list[dict[str, Any]]]] = []
     validation_matches: list[tuple[Path, list[dict[str, Any]]]] = []
@@ -176,10 +191,12 @@ def _discover_v11_corpora(project_root: Path, v11_metrics: dict[str, Any]) -> tu
             validation_matches.append((path, rows))
 
     if len(train_matches) != 1 or len(validation_matches) != 1:
-        detail = "\n".join(inspected[:80])
+        detail = "\n".join(inspected[:120])
+        roots_text = ", ".join(str(root) for root in roots)
         raise RuntimeError(
             "V11_CORPUS_DISCOVERY_FAILED: "
-            f"train_matches={len(train_matches)} validation_matches={len(validation_matches)}\n{detail}"
+            f"train_matches={len(train_matches)} validation_matches={len(validation_matches)} "
+            f"roots=[{roots_text}]\n{detail}"
         )
     return train_matches[0][0], train_matches[0][1], validation_matches[0][0], validation_matches[0][1]
 
