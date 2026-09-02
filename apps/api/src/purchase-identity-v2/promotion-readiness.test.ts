@@ -3,6 +3,15 @@ import test from 'node:test';
 import { evaluatePromotionReadiness } from './promotion-readiness.js';
 import type { CanonicalEvent, CorrelationDecision, EvidenceEdge } from './types.js';
 
+function trustedSenderAuthority() {
+  return [{
+    field: 'sender_authority',
+    source: 'provider_adapter' as const,
+    parserVersion: 'test-provider-auth-v1',
+    qualifiers: ['trusted_sender_authority'],
+  }];
+}
+
 function event(overrides: Partial<CanonicalEvent> = {}): CanonicalEvent {
   return {
     eventId: 'event-1',
@@ -31,7 +40,7 @@ function event(overrides: Partial<CanonicalEvent> = {}): CanonicalEvent {
     orderUrl: null,
     trackingUrl: null,
     productFingerprints: [],
-    provenance: [],
+    provenance: trustedSenderAuthority(),
     sourceRole: 'unknown',
     carrierId: null,
     paymentProviderId: null,
@@ -59,7 +68,7 @@ function linked(reasons: EvidenceEdge[]): CorrelationDecision {
   return { kind: 'LINKED', purchaseId: 'purchase-1', reasons };
 }
 
-test('authorized merchant order creation is promotion eligible', () => {
+test('authorized merchant order creation is promotion eligible with trusted sender authority', () => {
   const result = evaluatePromotionReadiness({
     event: event({
       eventType: 'order_created',
@@ -79,6 +88,25 @@ test('authorized merchant order creation is promotion eligible', () => {
   assert.deepEqual(result.reasons, ['ELIGIBLE_NEW_PURCHASE']);
 });
 
+test('new purchase is blocked when merchant sender authority is not trusted', () => {
+  const result = evaluatePromotionReadiness({
+    event: event({
+      eventType: 'order_created',
+      sourceRole: 'merchant',
+      merchantNamespace: 'sender:shop.example',
+      orderIdRaw: 'ORDER-1',
+      orderIdNormalized: 'ORDER-1',
+      purchaseCreationAuthority: 'authorized',
+      provenance: [],
+    }),
+    decision: { kind: 'NEW_PURCHASE', reasons: [] },
+  });
+
+  assert.equal(result.eligible, false);
+  assert.equal(result.action, null);
+  assert.ok(result.reasons.includes('NEW_PURCHASE_MERCHANT_SCOPE_UNPROVEN'));
+});
+
 test('new purchase is blocked when creation authority is review', () => {
   const result = evaluatePromotionReadiness({
     event: event({
@@ -96,7 +124,7 @@ test('new purchase is blocked when creation authority is review', () => {
   assert.ok(result.reasons.includes('NEW_PURCHASE_AUTHORITY_NOT_AUTHORIZED'));
 });
 
-test('hard merchant-scoped order link is promotion eligible', () => {
+test('hard merchant-scoped order link is promotion eligible with trusted sender authority', () => {
   const result = evaluatePromotionReadiness({
     event: event({
       sourceRole: 'merchant',
@@ -109,6 +137,42 @@ test('hard merchant-scoped order link is promotion eligible', () => {
   assert.equal(result.eligible, true);
   assert.equal(result.action, 'LINK_EVENT');
   assert.deepEqual(result.reasons, ['ELIGIBLE_HARD_LINK']);
+});
+
+test('merchant order link is blocked when visible sender scope is not independently trusted', () => {
+  const result = evaluatePromotionReadiness({
+    event: event({
+      sourceRole: 'merchant',
+      merchantId: 'merchant:shop',
+      orderIdRaw: 'ORDER-1',
+      provenance: [],
+    }),
+    decision: linked([edge()]),
+  });
+
+  assert.equal(result.eligible, false);
+  assert.equal(result.action, null);
+  assert.ok(result.reasons.includes('LINK_HARD_ORDER_SCOPE_UNPROVEN'));
+});
+
+test('raw header provenance cannot impersonate trusted sender authority', () => {
+  const result = evaluatePromotionReadiness({
+    event: event({
+      sourceRole: 'merchant',
+      merchantId: 'merchant:shop',
+      orderIdRaw: 'ORDER-1',
+      provenance: [{
+        field: 'sender_authority',
+        source: 'header',
+        parserVersion: 'raw-auth-results-v1',
+        qualifiers: ['trusted_sender_authority'],
+      }],
+    }),
+    decision: linked([edge()]),
+  });
+
+  assert.equal(result.eligible, false);
+  assert.ok(result.reasons.includes('LINK_HARD_ORDER_SCOPE_UNPROVEN'));
 });
 
 test('soft-only link is blocked even if a LINKED decision is supplied', () => {
@@ -140,7 +204,7 @@ test('review-only decorated alias blocks promotion even beside hard evidence', (
 
 test('hard tracking link requires carrier namespace', () => {
   const result = evaluatePromotionReadiness({
-    event: event({ trackingIdRaw: 'TRACK-1', carrierId: null }),
+    event: event({ trackingIdRaw: 'TRACK-1', carrierId: null, provenance: [] }),
     decision: linked([edge({ evidenceType: 'TRACKING_ID_EXACT' })]),
   });
 
@@ -149,9 +213,9 @@ test('hard tracking link requires carrier namespace', () => {
   assert.ok(result.reasons.includes('ATTACHED_TRACKING_SCOPE_UNPROVEN'));
 });
 
-test('hard carrier-scoped tracking link is promotion eligible', () => {
+test('hard carrier-scoped tracking link does not depend on merchant sender authority', () => {
   const result = evaluatePromotionReadiness({
-    event: event({ trackingIdRaw: 'TRACK-1', carrierId: 'carrier:test' }),
+    event: event({ trackingIdRaw: 'TRACK-1', carrierId: 'carrier:test', provenance: [] }),
     decision: linked([edge({ evidenceType: 'TRACKING_ID_EXACT' })]),
   });
 
