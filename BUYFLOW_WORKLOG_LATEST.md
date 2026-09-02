@@ -1,8 +1,35 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 all-18 retention PASS: 288/288 for V11 and V12
+## 2026-09-02 — V12 post-training untouched holdout v1 prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+After the clean all-18 retention PASS, prepared the final post-training freeze gate without scoring any model:
+- `scripts/v12-posttrain-holdout-v1.py`
+- `scripts/run-v12-posttrain-holdout-v1.ps1`
+- `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-V1.cmd`
+- `protocols/V12-STAGE4-POSTTRAIN-UNTOUCHED-HOLDOUT-V1-2026-09-02.md`
+
+Holdout design:
+- 108 brand-new synthetic/deidentified cases
+- 18 events x 6 rows
+- languages `hu,en,de,pl,fr,es`
+- variants `clean_plain`, `stale_subject`, `html_only`, `stale_snippet`, `quoted_history`, `metadata_noise`
+- complete event x language and event x variant matrices
+- newly authored wording; no source row copying
+- train/tuning eligible `False`
+- no model load
+- no V11/V12 training corpus read
+- no hard-sibling row read
+- no Fresh Blind / Input View Holdout / frozen108 / BLIND50 read
+
+The generator writes locally to `local-data/lora-v12/posttrain-holdout-v1/` and SHA-locks `cases.jsonl`. If a frozen copy already exists, any byte/SHA mismatch fails closed.
+
+Next: run `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-V1.cmd`, preserve the printed SHA before any inference, then prepare/run one unchanged V11 vs exact V12 comparison on that frozen SHA. Never tune on this holdout.
+
+---
+
+## 2026-09-02 — V12 all-18 retention PASS: 288/288 for V11 and V12
 
 Exact development retention comparison completed on the 288 `V11_REPLAY_VALIDATION` rows only, with constrained output and no training/corpus mutation/protected holdout read.
 
@@ -31,11 +58,6 @@ The earlier fixed hard-sibling development comparison remains:
 - ORDER_PROCESSING `34/36 -> 36/36`
 - ORDER_PACKING `36/36 -> 35/36`
 - one V12 stale-snippet reverse error `ORDER_PACKING -> ORDER_PROCESSING`.
-
-Protocol:
-`protocols/V12-STAGE3C-ALL18-RETENTION-RESULT-2026-09-02.md`
-
-Next: do not tune again on these development sets. Build a brand-new SHA-locked post-V12 untouched holdout with entirely new rows/wording/representation families across all 18 labels, then compare unchanged V11 vs exact V12 once. After the V12 final gate is closed, begin the full BuyFlow module-by-module audit.
 
 ---
 
