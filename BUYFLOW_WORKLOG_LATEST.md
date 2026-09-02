@@ -1,5 +1,58 @@
 # BuyFlow worklog latest
 
+## 2026-09-02 — TrustLink zero-trust audit PASS
+
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+TrustLink correlation, graph mutation rules and future promotion readiness were reviewed end-to-end.
+
+Existing safe behavior confirmed:
+- exact identity keys are scoped by user + namespace + stable identifier;
+- unscoped discovery is review-only;
+- multiple hard candidates -> REVIEW;
+- hard extraction conflict -> PENDING;
+- lifecycle-only messages cannot create Purchase;
+- Purchase creation requires deterministic root authority;
+- REVIEW/PENDING/UNLINKED do not mutate the graph;
+- current orchestration remains shadow-only with `productionWrites: 0`.
+
+One real promotion-safety gap was found: the visible email `From:` / sender domain could previously be strong enough to establish merchant scope for a future write-ready hard order link, even though `From:` can be spoofed. Raw `Authentication-Results` is already diagnostic-only in MailLens and is not a trustworthy source by itself.
+
+Remediation:
+- merchant-scoped CREATE_PURCHASE and merchant-scoped hard order/parent-child/invoice promotion now require explicit trusted sender authority provenance;
+- accepted authority must be `field=sender_authority`, `source=provider_adapter`, qualifier `trusted_sender_authority`;
+- raw/header provenance cannot satisfy the gate;
+- current real source adapters do not yet emit this trusted marker, so merchant-scoped production promotion remains fail-closed by default.
+
+Tests added for trusted/untrusted merchant creation and links, fake header-origin authority, and carrier-scoped tracking independence.
+
+First verification CI #1168 / run `33648039402` failed one old lifecycle-chain test because its synthetic safe-merchant fixtures did not declare the new trusted authority. The safety rule was kept unchanged; the synthetic gate was updated to explicitly model provider-authenticated safe merchant senders.
+
+Final verified code head:
+`dcbd2e5a95b00d1b7c67ce845329d9b8164cc8ba`
+
+Final GitHub Actions CI #1169 / run `33648405215`: **PASS**.
+- EventMind Python runtime syntax PASS;
+- EventMind PowerShell launcher syntax PASS;
+- API typecheck PASS;
+- API tests PASS;
+- API build PASS;
+- mobile typecheck PASS;
+- mobile web build PASS.
+
+Verdict:
+- **TrustLink code / zero-trust audit: PASS**;
+- sender-authority gap: **REMEDIATED**;
+- production writes remain **OFF/BLOCKED**;
+- real provider-authentication provenance still needs a separate trusted source-adapter implementation before merchant promotion can ever be enabled.
+
+Protocol: `protocols/TRUSTLINK-AUDIT-2026-09-02.md`.
+
+Next module audit: **JourneyGraph**.
+
+---
+
 ## 2026-09-02 — EventMind V11 fresh local GPU gate PASS
 
 Branch: `codex/modern-email-source-foundation-v1`  
@@ -100,7 +153,7 @@ Temporary CI-only PR #303 / CI #1152 / run `33632992124`: API typecheck/tests/bu
 MailLens `normalized-email-document-v1.1` became the single provider-neutral semantic normalization boundary with bounded full `bodyText`, separate current `semanticText`, quoted-history/hidden-content controls, attachment protection and diagnostic-only header authentication.
 
 Behavior head:
-`f69195404831323f2783464a61f6f7b7435698b5`
+`f69195404831323f2783464a61f6f7b7435698b5`.
 
 CI #1151 / run `33631564933`: API typecheck/tests/build + mobile typecheck/build PASS. Production source path remains BLOCKED pending MailGate + RawVault staging/live gates.
 
