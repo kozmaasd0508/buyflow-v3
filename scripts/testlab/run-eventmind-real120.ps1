@@ -7,9 +7,10 @@ Set-StrictMode -Version Latest
 
 $repoRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modelRoot=if($env:BUYFLOW_V11_MODEL_ROOT){$env:BUYFLOW_V11_MODEL_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation'}
+$privateRoot=if($env:BUYFLOW_TESTLAB_PRIVATE_ROOT){$env:BUYFLOW_TESTLAB_PRIVATE_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\.testlab-private'}
+$idFile=Join-Path $privateRoot 'real120-ids.json'
 $distro='Ubuntu-24.04'
 $tempRoot=Join-Path $env:TEMP ('buyflow-testlab-real120-' + [guid]::NewGuid().ToString('N'))
-$idFile=Join-Path $tempRoot 'real120-ids.json'
 $stdout=Join-Path $tempRoot 'eventmind.out.log'
 $stderr=Join-Path $tempRoot 'eventmind.err.log'
 $serverProcess=$null
@@ -31,16 +32,14 @@ function Remove-Junction([string]$p){if(Test-Path -LiteralPath $p){cmd.exe /d /c
 
 New-Item -ItemType Directory -Force -Path $tempRoot,$ReportDir | Out-Null
 try {
-  foreach($name in @('BUYFLOW_TESTLAB_GMAIL_CLIENT_ID','BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET','BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN','BUYFLOW_TESTLAB_REAL120_IDS_B64')){
+  foreach($name in @('BUYFLOW_TESTLAB_GMAIL_CLIENT_ID','BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET','BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN')){
     if([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))){Fail "TESTLAB_SECRET_MISSING:$name"}
   }
-  if(-not (Test-Path -LiteralPath (Join-Path $modelRoot 'local-data\lora-v11\LATEST.txt'))){Fail 'TESTLAB_V11_MODEL_NOT_FOUND'}
-  if(-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)){Fail 'TESTLAB_WSL_NOT_FOUND'}
-
-  $idBytes=[Convert]::FromBase64String($env:BUYFLOW_TESTLAB_REAL120_IDS_B64)
-  [IO.File]::WriteAllBytes($idFile,$idBytes)
+  if(-not (Test-Path -LiteralPath $idFile)){Fail "TESTLAB_REAL120_IDS_MISSING:$idFile"}
   $ids=Get-Content -Raw -LiteralPath $idFile | ConvertFrom-Json
   if(@($ids).Count -ne 120){Fail "TESTLAB_REAL120_EXPECTED_120_IDS_GOT_$(@($ids).Count)"}
+  if(-not (Test-Path -LiteralPath (Join-Path $modelRoot 'local-data\lora-v11\LATEST.txt'))){Fail 'TESTLAB_V11_MODEL_NOT_FOUND'}
+  if(-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)){Fail 'TESTLAB_WSL_NOT_FOUND'}
 
   $tokenResponse=Invoke-RestMethod -Method Post -Uri 'https://oauth2.googleapis.com/token' -ContentType 'application/x-www-form-urlencoded' -Body @{
     client_id=$env:BUYFLOW_TESTLAB_GMAIL_CLIENT_ID
