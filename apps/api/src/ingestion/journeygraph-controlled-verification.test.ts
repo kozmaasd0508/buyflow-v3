@@ -11,6 +11,13 @@ test('controlled shipment replay never downgrades delivered or ready-for-pickup'
   assert.equal(monotonicControlledShipmentStatus('in_transit', 'delivered'), 'delivered');
 });
 
+test('controlled shipment verification rejects pre-advice without physical progress', () => {
+  assert.throws(
+    () => monotonicControlledShipmentStatus(null, 'shipment_created'),
+    /pre-advice without physical progress/,
+  );
+});
+
 test('controlled Purchase verification follows the aggregate of all linked Shipments', () => {
   assert.equal(purchaseStateMatchesShipmentSummary('in_transit', {
     status: 'in_transit',
