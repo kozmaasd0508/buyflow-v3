@@ -23,7 +23,7 @@ if not "%BF_EXIT%"=="0" goto :failed
 
 echo.
 echo KESZ. Masold be ide a SUMMARY reszt, vagy huzd be a Desktopra mentett
-necho BuyFlow-MAILGATE-HISTORY-SMOKE-*.json fajlt.
+echo BuyFlow-MAILGATE-HISTORY-SMOKE-*.json fajlt.
 echo.
 pause
 exit /b 0
