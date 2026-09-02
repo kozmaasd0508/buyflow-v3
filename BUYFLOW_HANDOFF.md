@@ -99,6 +99,31 @@ Status:
 - **RawVault code audit remediation: PASS**
 - **Production RawVault: BLOCKED** until controlled staging migration + explicit retention policy + real private-storage retention/orphan smoke.
 
+## MAILLENS AUDIT
+
+Role: the single provider-neutral evidence normalization boundary between MailGate/RawVault and every downstream deterministic/semantic/EventMind consumer. It may normalize representation but may not invent lifecycle or identity facts.
+
+Audit protocol:
+`protocols/MAILLENS-AUDIT-2026-09-02.md`
+
+Current verdict:
+- **MailLens code: BLOCKED pending remediation**
+- production remains blocked; all relevant live/source flags stay OFF.
+
+Blockers found:
+1. `normalizeEmailDocumentV1()` is currently produced by the archive path, while deterministic parsing/universal grammar run earlier and directly from `NormalizedEmail`; therefore MailLens is not actually the single canonical downstream representation.
+2. `normalizedEmailToDeterministicInput()` and the older `buildEmailDocumentV1()` use HTML when present, otherwise Gmail/provider `snippet`; they ignore full `bodyText` in the plain-text-only case. This can reduce a real commerce email to a snippet and can cause the direct-Gmail privacy candidate gate to drop a legitimate message before persistence.
+3. Gmail MIME body collection recursively treats every nested `text/plain`/`text/html` part as message body even when it is a real attachment/nested message, allowing attachment content to contaminate lifecycle semantics.
+4. Regex-based HTML text conversion does not separate hidden/preheader content or quoted/replied history from current visible content, so stale/hidden lifecycle text can be given equal semantic weight.
+5. DKIM/SPF/DMARC normalization reads arbitrary `Authentication-Results`/ARC headers without binding them to a trusted provider/authserv-id provenance, so those verdicts are not safe hard trust evidence.
+
+Additional required hardening:
+- complete HTML entity decoding with bounded parser semantics;
+- explicit truncation/provenance metadata instead of silent first-N character slicing;
+- actual microdata property/value extraction rather than itemtype-only records;
+- bounded/iterative JSON-LD audit traversal and provenance-aware compatibility parsing;
+- dedicated adversarial tests for links/auth/hidden content/plain-text-only/attachments/deep structured data.
+
 ## DEPLOYMENT STATE
 
 Still conservative:
@@ -113,7 +138,8 @@ Still conservative:
 
 1. Keep PR #295 draft and all live flags OFF.
 2. Controlled Gmail/RawVault staging smokes remain required before any production cutover.
-3. Continue module audit with **MailLens** next: inspect normalization completeness, MIME/body/header handling, structured-data extraction, safe-link extraction, authentication verdict semantics, truncation/bounds, duplicate/conflict behavior, and whether evidence is ever invented or lost.
+3. Remediate MailLens blockers, make one canonical document feed candidate gating + deterministic/universal semantics + future EventMind, add regression tests, then run exact-head CI.
+4. Only after MailLens code PASS continue to **EventMind** audit.
 
 ## RESUME CONTRACT
 
