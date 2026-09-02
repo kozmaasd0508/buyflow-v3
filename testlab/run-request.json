@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite": "core",
-  "reason": "retry TestLab bootstrap after Node24 and npm-install alignment",
+  "suite": "eventmind",
+  "reason": "run frozen 120 real Gmail EventMind V11 blind predictions via TestLab",
   "production_cutover_authorized": false
 }
