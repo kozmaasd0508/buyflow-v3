@@ -1,4 +1,4 @@
-import { htmlToCompactText } from '../ai/openai-email-extractor.js';
+import { normalizeEmailDocumentV1 } from '../email/normalize-document-v1.js';
 import type { EmailAddress, EmailAttachmentMetadata, EmailHeader, NormalizedEmail } from '../email/types.js';
 import { extractUniversalOrderIdentityV2 } from './universal-order-identity-v2.js';
 
@@ -238,12 +238,11 @@ function detectSections(text: string): EmailDocumentSection[] {
 }
 
 export function buildEmailDocumentV1(email: NormalizedEmail): EmailDocumentV1 {
-  const text = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml, 100_000)
-    : (email.snippet ?? '').trim().slice(0, 100_000);
-  const normalized = normalizeText(`${email.subject ?? ''}\n${text}`);
-  const domains = senderDomains(email.from);
-  const primary = email.from[0] ?? null;
+  const mailLens = normalizeEmailDocumentV1(email, { maxBodyTextChars: 100_000 });
+  const text = mailLens.semanticText ?? mailLens.bodyText ?? '';
+  const normalized = normalizeText(`${mailLens.subject ?? ''}\n${text}`);
+  const domains = senderDomains(mailLens.from);
+  const primary = mailLens.from[0] ?? null;
 
   const orderNumbers = extractUniversalOrderIdentityV2(normalized).map((match) => match.value);
   const trackingNumbers = uniqueMatches(normalized, [
@@ -252,22 +251,22 @@ export function buildEmailDocumentV1(email: NormalizedEmail): EmailDocumentV1 {
 
   return {
     schemaVersion: 1,
-    provider: email.provider,
-    providerMessageId: email.providerMessageId,
-    receivedAt: email.receivedAt,
+    provider: mailLens.provider,
+    providerMessageId: mailLens.providerMessageId,
+    receivedAt: mailLens.receivedAt,
     sender: {
-      addresses: email.from,
+      addresses: mailLens.from,
       domains,
       primaryEmail: primary?.email ?? null,
       primaryDomain: domains[0] ?? null,
       primaryName: primary?.name ?? null,
     },
-    recipients: { to: email.to, cc: email.cc, bcc: email.bcc },
-    subject: email.subject ?? null,
+    recipients: { to: mailLens.to, cc: mailLens.cc, bcc: mailLens.bcc },
+    subject: mailLens.subject,
     text,
-    html: email.bodyHtml ?? null,
-    headers: email.headers ?? [],
-    attachments: email.attachments,
+    html: mailLens.bodyHtml,
+    headers: mailLens.headers,
+    attachments: mailLens.attachments,
     sections: detectSections(text),
     signals: {
       orderNumbers,
