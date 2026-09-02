@@ -1,66 +1,63 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 post-train evaluator first attempt failed before model load; resolver fixed
+## 2026-09-02 — V12 hard-sibling post-train: 71/72; all-18 retention compare prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-First local post-train evaluation attempt failed before model loading/inference with:
-`V12_EXACT_ADAPTER_DISCOVERY:0`.
+Exact V12 post-training evaluation completed on the same fixed 72 hard-sibling validation rows with constrained output:
+- V11 baseline `70/72 = 97.22%`
+- V12 `71/72 = 98.61%`
+- delta `+1`
+- invalid `0`
+- wrong `1`
+- ORDER_PROCESSING `34/36 -> 36/36`
+- ORDER_PACKING `36/36 -> 35/36`
+- clean_plain `12/12`
+- html_body `12/12`
+- metadata_order_shift `12/12`
+- misleading_subject `12/12`
+- quoted_old_state `12/12`
+- stale_snippet `11/12`
+- only V12 wrong transition: `ORDER_PACKING -> ORDER_PROCESSING` x1
+- V12 adapter SHA verified `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
+- parent V11 SHA verified `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+- training `False`
+- corpus mutation `False`
+- frozen holdouts read `False`
 
-Root cause was a status-contract mismatch inside the evaluator:
-- trainer persisted metrics status `LORA_V12_RETENTION_ROBUSTNESS_TRAIN_COMPLETE`;
-- evaluator discovery incorrectly required `V12_TRAINING_COMPLETE`, which is only the human-facing final console status.
+Local metrics:
+`local-data/lora-v12/hard-siblings-v2/posttrain-v12/runs/20260902T101119Z/metrics.json`
 
-No model, corpus or holdout was read or modified by this failed evaluation.
+Interpretation: V12 fixes both previously observed ORDER_PROCESSING->ORDER_PACKING hard-sibling errors but introduces one reverse stale-snippet error. Net exact improvement is +1 on this development set; this is not broad proof and not a reason to tune again yet.
 
-Fix:
-- added `scripts/v12-hard-siblings-posttrain-resolved-v2.py`;
-- launcher now uses the trainer-written `local-data/lora-v12/LATEST.txt` pointer instead of directory scanning;
-- requires the real persisted training metrics status;
-- verifies exact V12 best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`;
-- verifies the same SHA recorded in training metrics;
-- verifies recorded parent V11 SHA and re-hashes the current V11 parent weights to prove they remain unchanged;
-- rechecks frozen/holdout/locked-test safety flags and 18-label retention before inference.
+Prepared next gate:
+- `scripts/v12-retention-compare-v1.py`
+- `scripts/run-v12-retention-compare-v1.ps1`
+- `scripts/BuyFlow-V12-RETENTION-COMPARE.cmd`
 
-Next: pull latest branch and rerun `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`.
+The new gate compares exact unchanged V11 vs V12 on the 288 `V11_REPLAY_VALIDATION` rows only: 18 labels x 16 rows, constrained output, exact adapter/hash/safety checks, no training, no corpus mutation, and no protected holdout read. This is development retention evidence, not a new untouched holdout.
+
+Next: run `scripts/BuyFlow-V12-RETENTION-COMPARE.cmd`, inspect overall + per-label deltas and wrong transitions, then only if retention is acceptable create a brand-new untouched V12 post-training holdout.
 
 ---
 
-## 2026-09-02 — V12 continuation QLoRA COMPLETE; post-train exact evaluator prepared
+## 2026-09-02 — V12 post-train evaluator first attempt failed before model load; resolver fixed
+
+First local post-train evaluation attempt failed before model loading/inference with `V12_EXACT_ADAPTER_DISCOVERY:0` because the evaluator checked the human-facing console completion label instead of the persisted metrics status. The resolver was fixed to use `LATEST.txt`, exact adapter SHA, persisted status and parent SHA. No model/corpus/holdout mutation occurred.
+
+---
+
+## 2026-09-02 — V12 continuation QLoRA COMPLETE
 
 Local Stage 3 continuation training completed successfully:
-- status `V12_TRAINING_COMPLETE`
-- model `Qwen/Qwen3-8B`
-- GPU `AMD Radeon RX 9060 XT`
-- parent V11 adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
-- parent V11 unchanged `True`
-- merged TRAIN SHA `81c4a92bcdb22d58215ee51f1fc193415ab72c54141d6e97d12dd3766f60f00a`
-- merged validation SHA `d2c6a2d60c9739d81c0afda7e051c558578e93933ee72e2f82fd66ba27bfbfd6`
-- TRAIN `1296`
-- validation `360`
-- all 18 events retained
-- epochs `1`
-- LR `2e-5`
-- grad_accum `4`
-- max_seq `768`
-- optimizer steps `324/324`
-- train loss `0.000222`
-- validation loss `0.000007`
-- best epoch `1`
-- training time `66.36 min`
-- GPU peak `10.13 GiB`
+- Qwen3-8B / AMD Radeon RX 9060 XT
+- parent V11 unchanged
+- TRAIN 1296 / validation 360
+- 324/324 optimizer steps
+- LR `2e-5`, 1 epoch, grad_accum 4, max_seq 768
+- train loss `0.000222`, validation loss `0.000007`
 - best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
-- adapter saved `True`
 - frozen holdouts read `False`
-- frozen108 trained `False`
-- BLIND50 trained `False`
-
-Best adapter:
-`local-data/lora-v12/runs/20260902T085426Z-qwen3-8b-buyflow-v12-retention-robustness/best`
-
-Training itself PASS. Validation loss is not treated as proof of behavioral improvement.
-
-Prepared the exact post-training before/after gate. V11 fixed baseline remains `70/72`.
 
 ---
 
