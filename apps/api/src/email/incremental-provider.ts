@@ -33,7 +33,17 @@ export interface EmailWatchRegistration {
 
 export interface InitialEmailSyncInput {
   query: string;
+  /**
+   * For a bounded/read-only sample this is the total number of messages to read.
+   * For completeSnapshot=true this becomes the per-page fetch size; the provider
+   * must exhaust the query before a durable cursor may be committed.
+   */
   limit?: number;
+  /**
+   * Durable initial synchronization must set this true so pre-existing matching
+   * messages cannot be skipped by committing a cursor after only a partial scan.
+   */
+  completeSnapshot?: boolean;
 }
 
 export interface InitialEmailSyncResult {
