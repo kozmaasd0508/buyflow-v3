@@ -3,16 +3,16 @@ $ErrorActionPreference = "Stop"
 $project = "$env:USERPROFILE\Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $distro = "Ubuntu-24.04"
-$runner = Join-Path $here "v12-build-retention-replay-v1.py"
+$runner = Join-Path $here "v12-build-retention-replay-direct-v1.py"
 
 Write-Host ""
 Write-Host "==============================================================" -ForegroundColor Cyan
 Write-Host "BUYFLOW V12 - RETENTION REPLAY V1" -ForegroundColor Cyan
-Write-Host "V11 tudĂˇsmegĹ‘rzĂ©s + 144 hard sibling merge" -ForegroundColor Cyan
+Write-Host "V11 tudasmegorzes + 144 hard sibling merge" -ForegroundColor Cyan
 Write-Host "==============================================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Ez NEM tanit. Csak biztonsĂˇgos V12 TRAIN/VALIDATION merge-et Ă©pĂ­t." -ForegroundColor Green
-Write-Host "A V11 eredeti TRAIN/validation corpust keresi; frozen holdout utvonalakat kizĂˇr." -ForegroundColor Green
+Write-Host "Ez NEM tanit. Csak biztonsagos V12 TRAIN/VALIDATION merge-et epit." -ForegroundColor Green
+Write-Host "A V11 eredeti corpus canonicalis mappajat hasznalja; nincs teljes projekt-kereses." -ForegroundColor Green
 Write-Host "Cel: a masik 16 lifecycle osztaly ne felejtodjon el a hard-boundary tanitas kozben." -ForegroundColor Gray
 Write-Host ""
 
