@@ -81,6 +81,27 @@ test('Gmail OAuth refuses an initial credential without gmail.readonly', async (
   );
 });
 
+test('Gmail OAuth rejects unexpected extra Gmail authority even when readonly is present', async () => {
+  const fetchImpl = (async () => jsonResponse({
+    access_token: 'access-1',
+    refresh_token: 'refresh-1',
+    expires_in: 3600,
+    scope: `${GMAIL_READONLY_SCOPE} https://www.googleapis.com/auth/gmail.modify`,
+    token_type: 'Bearer',
+  })) as typeof fetch;
+  const client = new GoogleGmailOAuthClient({
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    redirectUri: 'https://api.example.com/auth/google/gmail/callback',
+    fetchImpl,
+  });
+
+  await assert.rejects(
+    () => client.exchangeCode({ code: 'code-1', codeVerifier: 'verifier-1' }),
+    /unexpected Gmail authority/,
+  );
+});
+
 test('Gmail OAuth refresh and profile lookup keep credentials out of URLs', async () => {
   const calls: Array<{ url: string; authorization: string | null; body: string }> = [];
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
