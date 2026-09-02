@@ -53,16 +53,6 @@ Status:
 
 Role: immutable source evidence storage only. It owns exact raw provider/MIME bytes when available, versioned normalized source documents, integrity metadata, opaque object identities, retention and crash/orphan/account-deletion cleanup. It has zero Purchase/Identity authority.
 
-The RawVault audit found and remediated:
-- source/user deletion could leave untracked Storage objects;
-- retention metadata had no deletion worker;
-- object upload before DB insert could leave crash/DB-failure orphans;
-- deduped provider id did not verify raw-byte integrity;
-- empty raw bytes were accepted;
-- expired retention boundaries were accepted;
-- normalized JSON had no separate retention;
-- archive metadata was not DB-level immutable.
-
 Behavior code head verified by CI:
 `9480e6d4e8d5c3e0a771b43671503cda593971c2`
 
@@ -72,12 +62,12 @@ Current RawVault design:
 - manifest contains no user id, provider message id, subject or body;
 - raw + normalized object identities/hashes/retention are DB-immutable;
 - separate raw and normalized retention boundaries;
-- no retention duration is guessed: archive writes fail closed until both `BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS` and `BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS` are explicitly configured;
+- no retention duration is guessed: archive writes fail closed until both retention settings are explicit;
 - empty raw and expired/invalid retention fail before object writes;
 - duplicate provider message raw SHA mismatch fails closed;
 - pending manifests survive source-insert failure and provide a crash-safe retry/cleanup journal;
 - periodic maintenance heals commit races, deletes stale orphans, enforces raw/normalized retention independently, and removes archived objects after source/user deletion;
-- object/hash identity remains in audit metadata while deletion timestamps record retention cleanup;
+- object/hash identity remains in audit metadata while deletion timestamps record cleanup;
 - bucket remains private and archive remains OFF by default.
 
 Migration:
@@ -86,7 +76,43 @@ Migration:
 Protocol:
 `protocols/RAWVAULT-AUDIT-REMEDIATION-2026-09-02.md`
 
-Temporary CI-only PR #296 / CI #1147 on exact behavior head `9480e6d4e8d5c3e0a771b43671503cda593971c2`:
+Temporary CI-only PR #296 / CI #1147 on exact behavior head:
+- API typecheck PASS
+- API tests PASS
+- API build PASS
+- mobile typecheck PASS
+- mobile web build PASS
+
+Status:
+- **RawVault code audit remediation: PASS**
+- **Production RawVault: BLOCKED** until controlled staging migration + explicit retention policy + real private-storage retention/orphan smoke.
+
+## MAILLENS
+
+Role: one provider-neutral evidence normalization contract between MailGate/RawVault and candidate gating, deterministic parsing, universal semantics and future EventMind. MailLens may normalize representation but has zero identity authority.
+
+Initial blockers were remediated on exact behavior head:
+`f69195404831323f2783464a61f6f7b7435698b5`
+
+Current MailLens contract:
+- normalizer version `normalized-email-document-v1.1`;
+- full bounded `bodyText` and separate current `semanticText`;
+- explicit body-source/truncation/hidden/quoted-history metadata;
+- provider plain text preferred, HTML-derived text fallback, snippet last resort;
+- archived raw HTML stays preserved while legacy semantic consumers receive the MailLens semantic text view;
+- deterministic parser, legacy email document, Gmail privacy candidate gate, normalized inbound planning/universal grammar and diagnostic identity shadow are routed through the MailLens semantic view;
+- common hidden/preheader HTML is removed from derived semantic text without deleting source HTML;
+- strong quoted/reply history is excluded from current semantic text but remains in full body evidence;
+- Gmail text/HTML attachments cannot contaminate authored message body; detached real body parts still hydrate;
+- raw `Authentication-Results`/ARC/Received-SPF parsing is explicitly diagnostic-only (`trusted:false`) with source provenance;
+- JSON-LD audit is bounded/iterative; raw JSON parses first, compatibility entity decoding is provenance-tagged;
+- microdata itemtype is type-hint-only (`fieldEvidence:false`) until real bounded itemprop extraction exists;
+- numeric HTML entities are handled in semantic/link/structured-data compatibility paths.
+
+Protocol:
+`protocols/MAILLENS-AUDIT-2026-09-02.md`
+
+Temporary CI-only PR #296 / GitHub Actions CI #1151, run `33631564933`, exact behavior head `f69195404831323f2783464a61f6f7b7435698b5`:
 - API typecheck PASS
 - API tests PASS
 - API build PASS
@@ -96,33 +122,36 @@ Temporary CI-only PR #296 / CI #1147 on exact behavior head `9480e6d4e8d5c3e0a77
 PR #296 was closed unmerged after verification.
 
 Status:
-- **RawVault code audit remediation: PASS**
-- **Production RawVault: BLOCKED** until controlled staging migration + explicit retention policy + real private-storage retention/orphan smoke.
+- **MailLens code audit remediation: PASS**
+- **Production source path: BLOCKED** behind controlled MailGate + RawVault staging/live smokes and explicit enablement.
 
-## MAILLENS AUDIT
+Important limitations remain fail-closed/non-authoritative:
+- arbitrary HTML/CSS is not claimed to be browser-perfect rendered;
+- type-only microdata is not field evidence;
+- header-derived email-auth verdicts are never hard trust evidence by themselves.
 
-Role: the single provider-neutral evidence normalization boundary between MailGate/RawVault and every downstream deterministic/semantic/EventMind consumer. It may normalize representation but may not invent lifecycle or identity facts.
+## EVENTMIND CONTEXT
 
-Audit protocol:
-`protocols/MAILLENS-AUDIT-2026-09-02.md`
+EventMind owns semantic commerce/lifecycle classification only: **“Mi történt ebben az emailben?”** It must not answer **“Melyik vásárláshoz tartozik?”**
 
-Current verdict:
-- **MailLens code: BLOCKED pending remediation**
-- production remains blocked; all relevant live/source flags stay OFF.
+Current promoted semantic model remains V11 Qwen3-8B QLoRA. V12 is not promoted because its post-training untouched holdout regressed versus V11:
+- V11: 105/108 = 97.22%
+- V12: 102/108 = 94.44%
+- V12 wins: 0; V11 wins: 3; all three new regressions were stale-snippet cases.
 
-Blockers found:
-1. `normalizeEmailDocumentV1()` is currently produced by the archive path, while deterministic parsing/universal grammar run earlier and directly from `NormalizedEmail`; therefore MailLens is not actually the single canonical downstream representation.
-2. `normalizedEmailToDeterministicInput()` and the older `buildEmailDocumentV1()` use HTML when present, otherwise Gmail/provider `snippet`; they ignore full `bodyText` in the plain-text-only case. This can reduce a real commerce email to a snippet and can cause the direct-Gmail privacy candidate gate to drop a legitimate message before persistence.
-3. Gmail MIME body collection recursively treats every nested `text/plain`/`text/html` part as message body even when it is a real attachment/nested message, allowing attachment content to contaminate lifecycle semantics.
-4. Regex-based HTML text conversion does not separate hidden/preheader content or quoted/replied history from current visible content, so stale/hidden lifecycle text can be given equal semantic weight.
-5. DKIM/SPF/DMARC normalization reads arbitrary `Authentication-Results`/ARC headers without binding them to a trusted provider/authserv-id provenance, so those verdicts are not safe hard trust evidence.
+V12 did retain 288/288 on the all-18 replay validation and improved the 72 hard-sibling development set by +1, but the untouched holdout controls promotion. Do not continue tuning on that frozen holdout.
 
-Additional required hardening:
-- complete HTML entity decoding with bounded parser semantics;
-- explicit truncation/provenance metadata instead of silent first-N character slicing;
-- actual microdata property/value extraction rather than itemtype-only records;
-- bounded/iterative JSON-LD audit traversal and provenance-aware compatibility parsing;
-- dedicated adversarial tests for links/auth/hidden content/plain-text-only/attachments/deep structured data.
+EventMind audit must now inspect:
+- exact production semantic contract and prompt/input shape;
+- label ontology and mapping boundaries;
+- V11 adapter identity/hash and deterministic decoder;
+- train/inference representation match with MailLens v1.1;
+- invalid-output/fallback behavior;
+- stale subject/snippet/quoted-history handling;
+- confidence/review semantics;
+- no Purchase/Identity authority leakage;
+- model/runtime loading, resource/failure behavior and observability;
+- exact evidence gates before any production promotion.
 
 ## DEPLOYMENT STATE
 
@@ -136,10 +165,10 @@ Still conservative:
 
 ## NEXT ACTION
 
-1. Keep PR #295 draft and all live flags OFF.
-2. Controlled Gmail/RawVault staging smokes remain required before any production cutover.
-3. Remediate MailLens blockers, make one canonical document feed candidate gating + deterministic/universal semantics + future EventMind, add regression tests, then run exact-head CI.
-4. Only after MailLens code PASS continue to **EventMind** audit.
+1. Keep PR #295 draft and all live/source flags OFF.
+2. Controlled Gmail/RawVault staging smokes remain required before production source cutover.
+3. Begin the full **EventMind** code/model/prompt/runtime audit against the new MailLens v1.1 semantic contract.
+4. Do not promote V12; use V11 as the current comparison/reference model unless new untouched evidence justifies a future version.
 
 ## RESUME CONTRACT
 
