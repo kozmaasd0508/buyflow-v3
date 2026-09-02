@@ -45,6 +45,10 @@ function email(): NormalizedEmail {
   };
 }
 
+const nowMs = Date.parse('2026-09-02T10:00:00.000Z');
+const rawRetention = '2026-10-02T10:00:00.000Z';
+const normalizedRetention = '2026-11-02T10:00:00.000Z';
+
 test('archives immutable raw MIME plus normalized document with opaque content-addressed keys', async () => {
   const store = new MemoryImmutableStore();
   const raw = Buffer.from('From: orders@shop.example\r\nSubject: Order A-42\r\n\r\nhello', 'utf8');
@@ -53,10 +57,12 @@ test('archives immutable raw MIME plus normalized document with opaque content-a
     emailConnectionId: '22222222-2222-4222-8222-222222222222',
     email: email(),
     store,
+    nowMs,
+    normalizedRetainedUntil: normalizedRetention,
     rawSource: {
       bytes: raw,
       contentType: 'message/rfc822',
-      retainedUntil: '2027-08-30T20:00:00.000Z',
+      retainedUntil: rawRetention,
     },
   });
 
@@ -64,10 +70,13 @@ test('archives immutable raw MIME plus normalized document with opaque content-a
   assert.equal(result.rawRef?.sha256, createHash('sha256').update(raw).digest('hex'));
   assert.equal(result.rawRef?.sizeBytes, raw.byteLength);
   assert.equal(result.rawRef?.contentType, 'message/rfc822');
+  assert.equal(result.rawRef?.retainedUntil, rawRetention);
+  assert.equal(result.normalizedRef.retainedUntil, normalizedRetention);
   assert.equal(result.document.rawRef?.objectKey, result.rawRef?.objectKey);
   assert.equal(result.document.authentication.dkim, 'pass');
   assert.equal(result.document.structuredData[0]?.schemaType, 'Order');
   assert.ok(result.normalizedRef.objectKey.endsWith(`${result.normalizedRef.sha256}.json`));
+  assert.match(result.sourceIdentitySha256, /^[0-9a-f]{64}$/);
 
   for (const key of store.objects.keys()) {
     assert.equal(key.includes('private-provider-message-id'), false);
@@ -83,18 +92,21 @@ test('same source is retry-idempotent with deterministic trace and normalized ha
     emailConnectionId: '22222222-2222-4222-8222-222222222222',
     email: email(),
     store,
+    nowMs,
+    normalizedRetainedUntil: normalizedRetention,
   };
 
   const first = await archiveNormalizedEmailSourceV1(input);
   const second = await archiveNormalizedEmailSourceV1(input);
   assert.equal(first.traceId, second.traceId);
+  assert.equal(first.sourceIdentitySha256, second.sourceIdentitySha256);
   assert.equal(first.normalizedRef.sha256, second.normalizedRef.sha256);
   assert.equal(first.normalizedRef.objectKey, second.normalizedRef.objectKey);
   assert.equal(store.objects.size, 1);
   assert.equal(first.rawRef, null);
 });
 
-test('invalid retention timestamp fails before a raw reference can be trusted', async () => {
+test('invalid retention timestamp fails before any object write', async () => {
   const store = new MemoryImmutableStore();
   await assert.rejects(
     archiveNormalizedEmailSourceV1({
@@ -102,8 +114,56 @@ test('invalid retention timestamp fails before a raw reference can be trusted', 
       emailConnectionId: 'c',
       email: email(),
       store,
+      nowMs,
+      normalizedRetainedUntil: normalizedRetention,
       rawSource: { bytes: Buffer.from('raw'), retainedUntil: 'not-a-date' },
     }),
     /valid timestamp/,
   );
+  assert.equal(store.objects.size, 0);
+});
+
+test('empty raw source fails closed before any object write', async () => {
+  const store = new MemoryImmutableStore();
+  await assert.rejects(
+    archiveNormalizedEmailSourceV1({
+      userId: 'u',
+      emailConnectionId: 'c',
+      email: email(),
+      store,
+      nowMs,
+      normalizedRetainedUntil: normalizedRetention,
+      rawSource: { bytes: Buffer.alloc(0), retainedUntil: rawRetention },
+    }),
+    /cannot be empty/,
+  );
+  assert.equal(store.objects.size, 0);
+});
+
+test('expired raw or normalized retention fails closed before any object write', async () => {
+  const store = new MemoryImmutableStore();
+  await assert.rejects(
+    archiveNormalizedEmailSourceV1({
+      userId: 'u',
+      emailConnectionId: 'c',
+      email: email(),
+      store,
+      nowMs,
+      normalizedRetainedUntil: normalizedRetention,
+      rawSource: { bytes: Buffer.from('raw'), retainedUntil: '2026-09-01T10:00:00.000Z' },
+    }),
+    /must be in the future/,
+  );
+  await assert.rejects(
+    archiveNormalizedEmailSourceV1({
+      userId: 'u',
+      emailConnectionId: 'c',
+      email: email(),
+      store,
+      nowMs,
+      normalizedRetainedUntil: '2026-09-01T10:00:00.000Z',
+    }),
+    /must be in the future/,
+  );
+  assert.equal(store.objects.size, 0);
 });
