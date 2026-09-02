@@ -15,6 +15,7 @@
 - Lifecycle-only email cannot create a Purchase.
 - Multiple/hard-conflicting identity candidates remain REVIEW/PENDING.
 - Direct Gmail runtime, source archive, Mailgun persistence, EventMind production runtime and TrustLink production writes remain OFF.
+- Legacy automatic Purchase creation/payment Core writes remain OFF/fail-closed.
 - No provider production cutover or live migration was performed from this audit.
 - Raw/private email fixtures and local model results stay out of Git.
 - V11 remains the reference semantic model. V12 is not promoted.
@@ -136,6 +137,33 @@ Prepared migration only:
 Migration NOT APPLIED. Production DB remediation remains BLOCKED pending controlled staging + document storage/ownership smoke.
 Protocol: `protocols/DOCVAULT-AUDIT-2026-09-02.md`.
 
+## CORE — PASS / legacy Purchase writes OFF / migration not applied
+
+Purchase authority audit PASS.
+
+Real issues found and remediated:
+- old `trg_apply_trusted_merchant_lifecycle_source` trusted the visible `From:` domain and directly changed Purchase state, bypassing TrustLink sender authority and JourneyGraph multi-shipment aggregation;
+- old `controlled_create_purchase_with_sources` did not independently prove the current trusted-sender authority contract at the database boundary;
+- old order/payment RPCs accepted caller-supplied financial JSON after source validation, so a valid source could act as a bearer token for values not independently re-derived in SQL.
+
+Current source behavior:
+- `LEGACY_CORE_PURCHASE_WRITES_ENABLED = false`;
+- automatic Purchase creation remains fail-closed even for formerly high-confidence candidates;
+- automatic `payment_completed` evidence is fail-closed from the legacy Core lane;
+- separately audited Shipment and DocVault controlled write lanes remain available.
+
+Prepared migration only:
+`supabase/migrations/20260902170000_harden_core_purchase_authority.sql`
+
+The migration drops the old visible-From lifecycle trigger/function and replaces legacy Purchase create/enrich/payment RPCs with explicit fail-closed functions.
+
+Verified head: `326b6481fc74c9f367a841f334ecd22928030012`.
+CI #1185 / run `33658358024`: PASS.
+Temporary PR #308 closed unmerged.
+Protocol: `protocols/CORE-AUDIT-2026-09-02.md`.
+
+Migration NOT APPLIED. Production Core DB remediation remains BLOCKED pending controlled staging migration + existing Purchase/state smoke.
+
 ## DEPLOYMENT STATE
 
 Still conservative:
@@ -144,8 +172,10 @@ Still conservative:
 - Mailgun source persistence OFF;
 - EventMind V11 runtime OFF;
 - TrustLink production writes OFF;
+- legacy automatic Purchase creation/payment Core writes OFF;
 - JourneyGraph migration NOT APPLIED;
 - DocVault migration NOT APPLIED;
+- Core migration NOT APPLIED;
 - no live migration applied from this flow;
 - no provider cutover;
 - no AI identity authority;
@@ -153,14 +183,15 @@ Still conservative:
 
 ## NEXT ACTION
 
-1. Continue the module audit with **Core**.
+1. Continue the module audit with **Pulse**.
 2. Keep PR #295 draft and all live/source/AI/write flags OFF.
 3. Preserve the EventMind first gate result unchanged and never train on that fixture.
 4. MailGate/RawVault production smokes are still required before source cutover.
 5. Trusted provider-authentication provenance must be implemented and separately verified before merchant-scoped TrustLink promotion can be enabled.
 6. JourneyGraph migration must first pass controlled staging + multi-shipment smoke.
 7. DocVault migration must first pass controlled staging + PDF ownership/content smoke.
-8. Do not promote V12.
+8. Core migration must first pass controlled staging + existing Purchase/state smoke.
+9. Do not promote V12.
 
 ## RESUME CONTRACT
 
