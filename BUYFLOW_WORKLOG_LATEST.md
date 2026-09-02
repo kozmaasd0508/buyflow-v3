@@ -1,5 +1,68 @@
 # BuyFlow worklog latest
 
+## 2026-09-02 — EventMind authority/input boundary remediated; code CI GREEN
+
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+EventMind was the fourth module in the full BuyFlow audit. The audit covered the current V11 Qwen reference, prompt/output ontology, 18 lifecycle labels, decoder, model-input representation and all direct/indirect paths by which AI semantics might influence Purchase identity.
+
+Remediation:
+- added `apps/api/src/ai/eventmind-v1.ts` as the production-side EventMind contract;
+- EventMind now has one MailLens-only input builder consuming already-normalized `NormalizedEmailDocumentV1` instead of reparsing provider body/HTML;
+- only current `semanticText`, sender/subject/time, quote/truncation flags and bounded structured lifecycle hints enter the model view;
+- provider/thread ids, recipients, snippet, full body, raw HTML, raw auth/header data, folders, links, attachments, raw archive refs, trace ids and internal Purchase candidate/id values are excluded;
+- common identity-bearing structured keys and URLs are removed while status/state hints remain;
+- added explicit semantic-only prompt contract denying create/link/merge/select/identify Purchase authority;
+- fixed 18-event taxonomy is shared through a generic semantic-event overlay;
+- strict EventMind decoder accepts exactly `is_commerce` + `event_type`, rejects extra identity fields, invalid labels and commerce/event incoherence;
+- V9 overlay remains backwards compatible through the shared semantic-only contract;
+- semantic override continues to contain only event semantics + model provenance, never identity fields;
+- existing deterministic Purchase Identity Graph creation/link/conflict gates are unchanged and remain authoritative.
+
+Regression coverage verifies:
+- stale quoted lifecycle history cannot enter EventMind current semantics;
+- stale snippet cannot bypass MailLens;
+- provider/archive/header/attachment/private identity metadata cannot enter the model view;
+- structured order/tracking identity values/URLs are removed while lifecycle status hints remain;
+- taxonomy is exactly 18 labels;
+- attempted model `purchase_id` output is `INVALID_SCHEMA`;
+- invalid/incoherent output fails closed;
+- successful V11 decode maps only to semantic override keys.
+
+Exact behavior code head:
+`1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`
+
+Temporary CI-only PR #303 / GitHub Actions CI #1152, run `33632992124`:
+- API typecheck PASS
+- API tests PASS
+- API build PASS
+- mobile typecheck PASS
+- mobile web build PASS
+
+PR #303 was closed unmerged after verification.
+
+Protocol:
+`protocols/EVENTMIND-AUDIT-2026-09-02.md`
+
+Verdict:
+- **EventMind code contract / identity-authority remediation: PASS**
+- **Production EventMind runtime: BLOCKED**
+
+Remaining production blockers:
+- wire actual V11 only through the new MailLens/EventMind input + strict decoder;
+- pin base model/tokenizer/template and adapter SHA instead of mutable `LATEST.txt` selection;
+- explicitly disable thinking with no silent tokenizer-template fallback;
+- model unavailable/OOM/timeout/invalid output must fail closed;
+- run a new untouched representation gate on the exact MailLens/EventMind V1 input; the prior 180-case SemanticEmailView A/B is diagnostic only;
+- add privacy-safe runtime model/version/latency/failure observability.
+
+Safety unchanged: no Qwen runtime was enabled, source/live flags remain OFF, `aiCalls` in the normalized inbound source lane remain zero, and no Purchase/Shipment/Document/Identity authority changed.
+
+Next: prepare the exact V11 runtime integration + untouched MailLens/EventMind V1 representation gate; after clean runtime evidence continue with **TrustLink**.
+
+---
+
 ## 2026-09-02 — MailLens blockers remediated; code CI GREEN
 
 Branch: `codex/modern-email-source-foundation-v1`  
