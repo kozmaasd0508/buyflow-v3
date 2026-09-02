@@ -2,7 +2,7 @@
 
 > Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile with GitHub/live state before changing runtime code.
 
-**Last updated:** 2026-09-01 Europe/Budapest  
+**Last updated:** 2026-09-02 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current `main`:** `92461ac103d4e337baa69ef91d09717eeb488d00`  
 **Modern email source:** PR #295 (draft)  
@@ -61,47 +61,71 @@ First local run on 144 new synthetic/deidentified cases:
 
 Family results:
 - `order_processing_vs_packing`: `22/24`, 2 disagreements
-- `out_for_delivery_vs_delivered`: `24/24`
-- `payment_vs_invoice`: `24/24`
-- `return_vs_refunded`: `24/24`
-- `shipment_created_vs_shipped`: `24/24`
-- `shipped_vs_in_transit`: `24/24`
+- every other pilot family: `24/24`
 
 Local run:
 `local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
 
-The 144 cases are new TRAIN-candidate material, not evaluation holdouts. No external teacher was called and no training occurred.
+## V12 STAGE 1B — HUMAN TEACHER REVIEW COMPLETE
 
-## V12 STAGE 1B — OPENAI TEACHER REVIEW READY
+The user uploaded the 14-row synthetic/deidentified teacher queue and it was reviewed manually in-chat instead of calling an external API.
 
-Protocol: `protocols/V12-STAGE1-OPENAI-TEACHER-REVIEW-V1-2026-09-01.md`
+Verdict:
+- reviewed: `14/14`
+- seed labels approved: `14/14`
+- agreement audits: `12/12` Qwen correct
+- disagreements: `2/2` Qwen wrong, seed correct
+- both Qwen errors are `ORDER_PROCESSING -> ORDER_PACKING`
+- no external API call and no training
 
-Prepared an independent strong-teacher review of only the 14-case queue. Default teacher: `gpt-5.6-sol` via Responses API with strict JSON-schema output.
+Disagreement IDs:
+- `V12C1-0002` (hu): stale/misleading subject claims packing; current body explicitly says processing and packing has not started.
+- `V12C1-0018` (fr): same semantic failure in French.
 
-Important controls:
-- teacher does NOT see seed label or student prediction before classifying;
-- only rows explicitly marked synthetic + deidentified may be sent;
-- `store=false`;
-- API key from `OPENAI_API_KEY` only and never written to files;
-- checkpoint/resume per case;
-- teacher event, confidence, evidence sufficiency, response id and token usage are recorded;
-- a row is approved only if teacher matches seed + evidence is sufficient + confidence HIGH;
-- approved means source for later augmentation, NOT immediate TRAIN eligibility;
-- no Purchase/Identity/Gmail/DB writes.
+Extracted teacher rule:
+**explicit current body evidence + explicit negation of the next lifecycle step overrides stale/misleading subject or snippet.**
+
+Protocol:
+`protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`
+
+Do not simply copy the two error rows into TRAIN. Generate new sibling examples from the failure rule.
+
+## V12 STAGE 2 — HARD SIBLINGS / REPRESENTATION ROBUSTNESS PREPARED
+
+Prepared deterministic generator focused on the confirmed weak boundary `ORDER_PROCESSING vs ORDER_PACKING`.
+
+Planned corpus:
+- `216` entirely new synthetic/deidentified rows
+- `144` TRAIN candidates, `72` VALIDATION
+- languages: hu/en/de/pl/fr/es
+- balanced labels
+- three independent wording families per label/language; wording family 2 is validation-only
+- six representation variants per semantic group:
+  - clean plain
+  - misleading subject
+  - HTML body
+  - stale snippet
+  - quoted historical opposite state
+  - harmless metadata + field-order shift
+- semantic-group train/validation overlap must be zero
+- explicit contamination check rejects `IVH2-`, `V12C1-`, old V12C1 order range and frozen fixture hashes
+- no training and no external API call in this corpus-build gate
 
 Files:
-- `scripts/v12-teacher-review-openai-v1.py`
-- `scripts/run-v12-teacher-review-openai-v1.ps1`
-- `scripts/BuyFlow-V12-TEACHER-REVIEW.cmd`
+- `scripts/v12-hard-siblings-v2.py`
+- `scripts/run-v12-hard-siblings-v2.ps1`
+- `scripts/BuyFlow-V12-HARD-SIBLINGS-V2.cmd`
+
+The generator writes production-shaped cases plus V11-compatible `train.sft.jsonl` and `validation.sft.jsonl` under `local-data/lora-v12/hard-siblings-v2/`.
 
 ## NEXT ACTION
 
-1. Pull latest `codex/v12-teacher-robustness-foundation` into the separate test worktree.
-2. Set `OPENAI_API_KEY` only in the user's local PowerShell environment; never paste it into chat or Git.
-3. Run `scripts/BuyFlow-V12-TEACHER-REVIEW.cmd` on the 14-case synthetic queue.
-4. Preserve the first `# SUMMARY` and inspect any teacher-vs-seed conflict before generating training data.
-5. If the two student disagreements are independently confirmed as seed-correct, generate new sibling examples from that failure family and add representation-invariance variants.
-6. Never train on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
+1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate test worktree.
+2. Run `scripts/BuyFlow-V12-HARD-SIBLINGS-V2.cmd`.
+3. Preserve the first corpus summary and SHA.
+4. Require: rows 216, train 144, validation 72, semantic-group overlap 0, frozen/stage1 row reuse false, privacy gate PASS.
+5. Only after that gate, build the V12 training merge: V11 original TRAIN replay + approved new hard siblings, keeping old frozen evaluation sets untouched.
+6. Do not train on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
 7. Qwen remains semantic-only; Zero-Trust Purchase Identity Graph remains authoritative.
 
 ## RESUME CONTRACT
