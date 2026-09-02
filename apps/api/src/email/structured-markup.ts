@@ -1,4 +1,7 @@
-import type { EmailStructuredDataRecord } from './document-v1.js';
+import type {
+  EmailStructuredDataNormalization,
+  EmailStructuredDataRecord,
+} from './document-v1.js';
 
 export interface StructuredMarkupAudit {
   hasJsonLd: boolean;
@@ -88,11 +91,33 @@ function decodeBasicHtmlEntities(value: string): string {
     .replace(/&gt;/gi, '>');
 }
 
-function cleanedJsonLdSource(raw: string): string {
-  return decodeBasicHtmlEntities(raw.trim())
+function cleanedJsonLdRaw(raw: string): string {
+  return raw.trim()
     .replace(/^<!--\s*/, '')
     .replace(/\s*-->$/, '')
     .trim();
+}
+
+function parseJsonLdWithProvenance(raw: string): {
+  parsed: unknown;
+  normalization: EmailStructuredDataNormalization;
+} | null {
+  const cleaned = cleanedJsonLdRaw(raw);
+  if (!cleaned) return null;
+  try {
+    return { parsed: JSON.parse(cleaned) as unknown, normalization: 'raw_json' };
+  } catch {
+    const compatible = decodeBasicHtmlEntities(cleaned);
+    if (compatible === cleaned) return null;
+    try {
+      return {
+        parsed: JSON.parse(compatible) as unknown,
+        normalization: 'html_entity_compat',
+      };
+    } catch {
+      return null;
+    }
+  }
 }
 
 function topLevelJsonLdNodes(value: unknown): unknown[] {
@@ -105,8 +130,8 @@ function topLevelJsonLdNodes(value: unknown): unknown[] {
 
 /**
  * Extracts bounded, parseable structured-data records before any AI stage.
- * Malformed/oversized JSON-LD is ignored here and remains visible through
- * auditStructuredMarkup() counters. Raw HTML is never copied into the record.
+ * Raw JSON is always parsed first. An entity-decoded compatibility fallback is
+ * explicitly tagged so derived normalization can never masquerade as raw JSON.
  * Microdata itemtype records are schema hints only, never field-level evidence.
  */
 export function extractStructuredDataRecords(
@@ -122,24 +147,22 @@ export function extractStructuredDataRecords(
 
   for (const match of html.matchAll(JSON_LD_SCRIPT_REGEX)) {
     if (records.length >= maxRecords) break;
-    const raw = cleanedJsonLdSource(match[1] ?? '');
+    const raw = cleanedJsonLdRaw(match[1] ?? '');
     if (!raw || Buffer.byteLength(raw, 'utf8') > maxJsonLdBlockBytes) continue;
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      for (const node of topLevelJsonLdNodes(parsed)) {
-        if (records.length >= maxRecords) break;
-        const schemaType = node && typeof node === 'object'
-          ? (normalizeType((node as Record<string, unknown>)['@type'])[0] ?? null)
-          : null;
-        records.push({
-          kind: 'json_ld',
-          schemaType,
-          payload: node,
-          source: 'body_html',
-        });
-      }
-    } catch {
-      // Audit path reports malformed JSON-LD; extraction remains fail-closed.
+    const decoded = parseJsonLdWithProvenance(raw);
+    if (!decoded) continue;
+    for (const node of topLevelJsonLdNodes(decoded.parsed)) {
+      if (records.length >= maxRecords) break;
+      const schemaType = node && typeof node === 'object'
+        ? (normalizeType((node as Record<string, unknown>)['@type'])[0] ?? null)
+        : null;
+      records.push({
+        kind: 'json_ld',
+        schemaType,
+        payload: node,
+        source: 'body_html',
+        normalization: decoded.normalization,
+      });
     }
   }
 
@@ -161,6 +184,7 @@ export function extractStructuredDataRecords(
         schemaType,
         payload: { itemType: part, fieldEvidence: false },
         source: 'body_html',
+        normalization: 'microdata_type_hint',
       });
     }
   }
@@ -176,14 +200,13 @@ export function auditStructuredMarkup(html: string): StructuredMarkupAudit {
 
   for (const match of html.matchAll(JSON_LD_SCRIPT_REGEX)) {
     jsonLdBlocks += 1;
-    const raw = cleanedJsonLdSource(match[1] ?? '');
-    if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      collectJsonLdTypes(parsed, jsonLdTypes);
-    } catch {
-      jsonLdParseErrors += 1;
+    const raw = match[1] ?? '';
+    const decoded = parseJsonLdWithProvenance(raw);
+    if (!decoded) {
+      if (cleanedJsonLdRaw(raw)) jsonLdParseErrors += 1;
+      continue;
     }
+    collectJsonLdTypes(decoded.parsed, jsonLdTypes);
   }
 
   for (const match of html.matchAll(ITEM_TYPE_REGEX)) {
