@@ -1,11 +1,11 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — EventMind V11 runtime + fresh gate prepared
+## 2026-09-02 — EventMind V11 runtime + fresh gate prepared and CI GREEN
 
 Branch: `codex/modern-email-source-foundation-v1`  
 Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
 
-After the EventMind MailLens/identity boundary passed, the next blocker was the actual V11 runtime path.
+After the EventMind MailLens/identity boundary passed, the actual V11 runtime path was hardened.
 
 Implemented:
 - `apps/api/src/ai/eventmind-v11-runtime.ts` as a fail-closed API-side V11 client;
@@ -43,19 +43,26 @@ Gate PASS rules:
 - exact >=90%;
 - macro event >=85%.
 
-One-click user action prepared:
+One-click user action:
 `scripts/BuyFlow-EVENTMIND-V11-GATE.cmd`
 
 It creates the fixture, starts the real local V11 adapter in WSL, verifies actual adapter SHA + Qwen3-8B + thinking OFF + deterministic mode, runs the 90-case gate, prints PASS/FAIL and stops the model server. It does not train the model and does not enable production EventMind.
 
-Runtime safety behavior head before documentation commits:
-`a3539e08927b9d6013c0b15ff6b4222df8c26211`
+Verified branch head including runtime/gate preparation:
+`3d03313750f842de89e439738eae6709cb41ff71`
 
-Temporary CI-only PR: #304. Final exact-head CI result must be recorded after documentation is complete; then close #304 unmerged.
+Temporary CI-only PR #304 / GitHub Actions CI #1165 / run `33635558885`:
+- EventMind Python runtime syntax PASS;
+- EventMind PowerShell launcher syntax PASS;
+- API typecheck PASS;
+- API tests PASS;
+- API build PASS;
+- mobile typecheck PASS;
+- mobile web build PASS.
 
 Current verdict:
 - **EventMind MailLens/identity boundary: PASS**
-- **V11 runtime safety code: implemented; final exact-head CI record pending**
+- **V11 runtime safety code: PASS**
 - **Fresh V11 representation gate: PREPARED / NOT RUN ON LOCAL GPU**
 - **Production EventMind: BLOCKED**
 
