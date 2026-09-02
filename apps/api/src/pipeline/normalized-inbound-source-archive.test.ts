@@ -154,7 +154,7 @@ test('archive-enabled inbound stages manifest before objects and persists only s
   assert.equal(typeof payload.normalized_sha256, 'string');
   assert.equal(payload.normalized_content_type, 'application/json');
   assert.equal(typeof payload.normalized_retention_until, 'string');
-  assert.equal(payload.normalizer_version, 'normalized-email-document-v1');
+  assert.equal(payload.normalizer_version, 'normalized-email-document-v1.1');
   assert.equal(payload.trace_id, result.traceId);
 
   const structured = payload.structured_result as Record<string, unknown>;
