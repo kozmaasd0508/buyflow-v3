@@ -1,8 +1,41 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 post-training untouched holdout v1 prepared
+## 2026-09-02 — V12 Stage 4 holdout FROZEN; one-shot compare prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+The brand-new post-training holdout was frozen locally before any model scoring:
+- status `V12_POSTTRAIN_HOLDOUT_V1_FROZEN`
+- SHA `03892ba760b46fbe32f64c1915dce77b67ccb162917e3119d78eaca14a3c8aba`
+- rows `108`
+- 18 events x 6 rows
+- languages `hu,en,de,pl,fr,es`
+- variants `clean_plain`, `stale_subject`, `html_only`, `stale_snippet`, `quoted_history`, `metadata_noise`
+- event x language matrix complete
+- event x variant matrix complete
+- synthetic/deidentified `True`
+- source rows copied `False`
+- training/tuning eligible `False`
+- model loaded at freeze `False`
+- V11 scored `False`
+- V12 scored `False`
+- protected holdouts read `False`
+- prior training corpus read `False`
+- prior hard-sibling rows read `False`
+
+Prepared after the freeze:
+- `scripts/v12-posttrain-holdout-compare-v1.py`
+- `scripts/run-v12-posttrain-holdout-compare-v1.ps1`
+- `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-COMPARE.cmd`
+- protocol `protocols/V12-STAGE4-HOLDOUT-FROZEN-AND-COMPARE-PREP-2026-09-02.md`
+
+The compare is one-shot, requires the exact frozen holdout SHA and exact V11/V12 adapter SHAs, scores both models with constrained decoding, hides per-case results until both complete, performs no training/corpus mutation, and refuses a second completed run if `FINAL_RESULT.json` already exists.
+
+Next: run `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-COMPARE.cmd` once and inspect overall, per-event, per-language, per-variant, invalid and wrong-transition results. Never tune from this holdout.
+
+---
+
+## 2026-09-02 — V12 post-training untouched holdout v1 prepared
 
 After the clean all-18 retention PASS, prepared the final post-training freeze gate without scoring any model:
 - `scripts/v12-posttrain-holdout-v1.py`
@@ -24,8 +57,6 @@ Holdout design:
 - no Fresh Blind / Input View Holdout / frozen108 / BLIND50 read
 
 The generator writes locally to `local-data/lora-v12/posttrain-holdout-v1/` and SHA-locks `cases.jsonl`. If a frozen copy already exists, any byte/SHA mismatch fails closed.
-
-Next: run `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-V1.cmd`, preserve the printed SHA before any inference, then prepare/run one unchanged V11 vs exact V12 comparison on that frozen SHA. Never tune on this holdout.
 
 ---
 
