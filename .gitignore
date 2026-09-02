@@ -7,6 +7,9 @@ dist/
 coverage/
 *.log
 
+# Local model runs and private evaluation fixtures/results never belong in Git.
+local-data/
+
 # Real Gmail ground truth stays private and must never be committed.
 private-ground-truth/
 *.real-gmail-private.json
