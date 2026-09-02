@@ -131,7 +131,7 @@ test('unknown states fail closed instead of inventing a next step', () => {
 });
 
 test('Pulse output contains no email, source or Purchase identity authority fields', () => {
-  const pulse = derivePurchasePulse(base) as Record<string, unknown>;
+  const pulse = derivePurchasePulse(base) as unknown as Record<string, unknown>;
   for (const forbidden of ['sourceEmailId', 'providerMessageId', 'orderNumber', 'purchaseId', 'merchantDomain', 'rawRef']) {
     assert.equal(Object.hasOwn(pulse, forbidden), false);
   }
