@@ -1,4 +1,4 @@
-import { env } from '../config.js';
+import { env, requireEmailSourceArchiveRetentionConfig } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
   resolveBuyFlowEmailRecipient,
@@ -9,12 +9,19 @@ import type {
   SesSecuritySignals,
 } from '../email/ses-inbound.js';
 import {
-  archiveNormalizedEmailSourceV1,
+  prepareNormalizedEmailSourceV1,
+  sha256EmailArchiveBytes,
   SupabaseEmailArchiveObjectStore,
+  writePreparedEmailSourceArchiveV1,
   type ArchivedEmailSourceV1,
   type EmailArchiveObjectStore,
   type RawEmailSourceV1,
 } from '../email/source-archive-v1.js';
+import {
+  assertExistingArchivedRawMatches,
+  markEmailSourceArchiveCommitted,
+  stageEmailSourceArchiveManifest,
+} from '../email/source-archive-manifest.js';
 import type { NormalizedEmail } from '../email/types.js';
 import {
   normalizedEmailToDeterministicInput,
@@ -64,6 +71,11 @@ export interface NormalizedInboundPersistResult {
   aiCalls: 0;
 }
 
+export interface EmailSourceArchiveRetentionDays {
+  rawDays: number;
+  normalizedDays: number;
+}
+
 export interface PersistResolvedNormalizedEmailInput {
   email: NormalizedEmail;
   recipient: ResolvedBuyFlowRecipient;
@@ -72,6 +84,7 @@ export interface PersistResolvedNormalizedEmailInput {
   rawSource?: RawEmailSourceV1;
   sourceArchiveStore?: EmailArchiveObjectStore;
   sourceArchiveEnabled?: boolean;
+  sourceArchiveRetentionDays?: EmailSourceArchiveRetentionDays;
   db?: any;
 }
 
@@ -272,6 +285,7 @@ function sourceInsertPayload(input: {
     processed_at: now,
     processing_status: input.plan.processingStatus,
     ...(input.archivedSource ? {
+      archive_manifest_id: input.archivedSource.traceId,
       raw_object_key: input.archivedSource.rawRef?.objectKey ?? null,
       raw_sha256: input.archivedSource.rawRef?.sha256 ?? null,
       raw_size_bytes: input.archivedSource.rawRef?.sizeBytes ?? null,
@@ -281,10 +295,18 @@ function sourceInsertPayload(input: {
       normalized_sha256: input.archivedSource.normalizedRef.sha256,
       normalized_size_bytes: input.archivedSource.normalizedRef.sizeBytes,
       normalized_content_type: input.archivedSource.normalizedRef.contentType,
+      normalized_retention_until: input.archivedSource.normalizedRef.retainedUntil,
       normalizer_version: input.archivedSource.document.normalizerVersion,
       trace_id: input.archivedSource.traceId,
     } : {}),
   };
+}
+
+function retentionBoundary(days: number, nowMs: number): string {
+  if (!Number.isInteger(days) || days <= 0 || days > 3650) {
+    throw new Error('Email source archive retention days must be an integer between 1 and 3650');
+  }
+  return new Date(nowMs + days * 24 * 60 * 60_000).toISOString();
 }
 
 /**
@@ -319,9 +341,12 @@ export async function persistNormalizedEmailForResolvedRecipient(
     };
   }
 
+  const sourceArchiveEnabled = input.sourceArchiveEnabled
+    ?? env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED;
+
   const { data: existing, error: existingError } = await db
     .from('source_emails')
-    .select('id,classification,processing_status,validated_result')
+    .select('id,classification,processing_status,validated_result,raw_sha256,normalized_sha256,archive_manifest_id,trace_id')
     .eq('email_connection_id', recipient.emailConnectionId)
     .eq('provider_message_id', input.email.providerMessageId)
     .maybeSingle();
@@ -330,6 +355,16 @@ export async function persistNormalizedEmailForResolvedRecipient(
   }
 
   if (existing) {
+    if (sourceArchiveEnabled && input.rawSource) {
+      const incomingBytes = Buffer.from(input.rawSource.bytes);
+      if (incomingBytes.byteLength === 0) {
+        throw new Error('Raw email source cannot be empty');
+      }
+      assertExistingArchivedRawMatches({
+        existingRawSha256: existing.raw_sha256,
+        incomingRawSha256: sha256EmailArchiveBytes(incomingBytes),
+      });
+    }
     return {
       status: existing.processing_status === 'ignored' ? 'security_rejected' : 'recognized',
       sourceEmailId: existing.id as string,
@@ -339,6 +374,8 @@ export async function persistNormalizedEmailForResolvedRecipient(
         ? existing.validated_result.parser_version
         : null,
       deduped: true,
+      sourceArchived: Boolean(existing.archive_manifest_id || existing.raw_sha256 || existing.normalized_sha256),
+      ...(typeof existing.trace_id === 'string' ? { traceId: existing.trace_id } : {}),
       purchaseWrites: 0,
       shipmentWrites: 0,
       documentWrites: 0,
@@ -346,22 +383,36 @@ export async function persistNormalizedEmailForResolvedRecipient(
     };
   }
 
-  const sourceArchiveEnabled = input.sourceArchiveEnabled
-    ?? env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED;
   let archivedSource: ArchivedEmailSourceV1 | null = null;
   if (sourceArchiveEnabled) {
+    const retention = input.sourceArchiveRetentionDays
+      ?? requireEmailSourceArchiveRetentionConfig();
+    const nowMs = Date.now();
+    const rawRetainedUntil = retentionBoundary(retention.rawDays, nowMs);
+    const normalizedRetainedUntil = retentionBoundary(retention.normalizedDays, nowMs);
     const store = input.sourceArchiveStore
       ?? new SupabaseEmailArchiveObjectStore(
         db,
         env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_BUCKET,
       );
-    archivedSource = await archiveNormalizedEmailSourceV1({
+    const prepared = prepareNormalizedEmailSourceV1({
       userId: recipient.userId,
       emailConnectionId: recipient.emailConnectionId,
       email: input.email,
-      store,
-      ...(input.rawSource ? { rawSource: input.rawSource } : {}),
+      normalizedRetainedUntil,
+      nowMs,
+      ...(input.rawSource ? {
+        rawSource: {
+          ...input.rawSource,
+          retainedUntil: rawRetainedUntil,
+        },
+      } : {}),
     });
+
+    // Durable two-phase boundary: the opaque manifest exists before any object
+    // write. A crash or DB failure therefore leaves recoverable cleanup state.
+    await stageEmailSourceArchiveManifest({ db, prepared });
+    archivedSource = await writePreparedEmailSourceArchiveV1({ prepared, store });
     plan.structuredResult.modern_email_source_v1 = sourceArchiveDiagnostic(archivedSource);
   }
 
@@ -389,7 +440,13 @@ export async function persistNormalizedEmailForResolvedRecipient(
     .select('id')
     .single();
   if (insertError || !inserted) {
+    // Do not attempt ad-hoc object deletion here: the durable pending manifest is
+    // the crash-safe cleanup/retry journal and will be reconciled separately.
     throw new Error(`Failed to save normalized inbound source email: ${insertError?.message ?? 'missing row'}`);
+  }
+
+  if (archivedSource) {
+    await markEmailSourceArchiveCommitted({ db, source: archivedSource });
   }
 
   return {
@@ -416,6 +473,7 @@ export async function persistNormalizedInboundEmail(input: {
   rawSource?: RawEmailSourceV1;
   sourceArchiveStore?: EmailArchiveObjectStore;
   sourceArchiveEnabled?: boolean;
+  sourceArchiveRetentionDays?: EmailSourceArchiveRetentionDays;
   db?: any;
 }): Promise<NormalizedInboundPersistResult> {
   const db = input.db ?? (getSupabaseAdmin() as any);
@@ -443,6 +501,9 @@ export async function persistNormalizedInboundEmail(input: {
     ...(input.sourceArchiveStore ? { sourceArchiveStore: input.sourceArchiveStore } : {}),
     ...(input.sourceArchiveEnabled !== undefined
       ? { sourceArchiveEnabled: input.sourceArchiveEnabled }
+      : {}),
+    ...(input.sourceArchiveRetentionDays
+      ? { sourceArchiveRetentionDays: input.sourceArchiveRetentionDays }
       : {}),
     db,
   });
