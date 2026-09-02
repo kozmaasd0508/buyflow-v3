@@ -23,35 +23,46 @@ export interface EmailArchiveObjectStore {
   putImmutable(input: EmailArchivePutInput): Promise<void>;
 }
 
+export interface EmailArchiveDeletionStore {
+  removeImmutable(objectKeys: string[]): Promise<void>;
+}
+
 export interface ArchivedNormalizedObjectV1 {
   objectKey: string;
   sha256: string;
   sizeBytes: number;
   contentType: 'application/json';
+  retainedUntil: string;
 }
 
 export interface ArchivedEmailSourceV1 {
   traceId: string;
+  sourceIdentitySha256: string;
   document: NormalizedEmailDocumentV1;
   rawRef: RawEmailReference | null;
   normalizedRef: ArchivedNormalizedObjectV1;
 }
 
-function sha256(bytes: Uint8Array | string): string {
+export interface PreparedEmailSourceArchiveV1 extends ArchivedEmailSourceV1 {
+  rawObject: EmailArchivePutInput | null;
+  normalizedObject: EmailArchivePutInput;
+}
+
+export function sha256EmailArchiveBytes(bytes: Uint8Array | string): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
 function opaqueSegment(value: string): string {
-  return sha256(value).slice(0, 32);
+  return sha256EmailArchiveBytes(value).slice(0, 32);
 }
 
-function deterministicTraceId(input: {
+function sourceIdentitySha256(input: {
   userId: string;
   emailConnectionId: string;
   provider: string;
   providerMessageId: string;
 }): string {
-  const digest = createHash('sha256')
+  return createHash('sha256')
     .update(input.userId)
     .update('\0')
     .update(input.emailConnectionId)
@@ -59,7 +70,11 @@ function deterministicTraceId(input: {
     .update(input.provider)
     .update('\0')
     .update(input.providerMessageId)
-    .digest();
+    .digest('hex');
+}
+
+function deterministicTraceId(identitySha256: string): string {
+  const digest = Buffer.from(identitySha256, 'hex');
   const bytes = Buffer.from(digest.subarray(0, 16));
   bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50;
   bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
@@ -67,12 +82,18 @@ function deterministicTraceId(input: {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function validateRetainedUntil(value: string | null | undefined): string | null {
-  if (!value) return null;
-  if (Number.isNaN(Date.parse(value))) {
-    throw new Error('Raw email retention boundary must be a valid timestamp');
+function validateFutureRetention(value: string | null | undefined, label: string, nowMs: number): string {
+  if (!value) {
+    throw new Error(`${label} retention boundary must be explicitly configured`);
   }
-  return new Date(value).toISOString();
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} retention boundary must be a valid timestamp`);
+  }
+  if (parsed <= nowMs) {
+    throw new Error(`${label} retention boundary must be in the future`);
+  }
+  return new Date(parsed).toISOString();
 }
 
 function sourceBaseKey(input: {
@@ -80,7 +101,7 @@ function sourceBaseKey(input: {
   emailConnectionId: string;
   email: NormalizedEmail;
 }): string {
-  const messageHash = sha256(`${input.email.provider}\0${input.email.providerMessageId}`);
+  const messageHash = sha256EmailArchiveBytes(`${input.email.provider}\0${input.email.providerMessageId}`);
   return [
     'v1',
     `u_${opaqueSegment(input.userId)}`,
@@ -91,41 +112,43 @@ function sourceBaseKey(input: {
 }
 
 /**
- * Archives immutable raw source bytes when available and always archives the
- * versioned normalized document. Keys are content-addressed/opaque so provider
- * message ids and user ids are not leaked in object paths.
+ * Build every immutable artifact and integrity value before any object-store
+ * write occurs. This lets the caller durably stage an archive manifest first.
  */
-export async function archiveNormalizedEmailSourceV1(input: {
+export function prepareNormalizedEmailSourceV1(input: {
   userId: string;
   emailConnectionId: string;
   email: NormalizedEmail;
-  store: EmailArchiveObjectStore;
   rawSource?: RawEmailSourceV1;
+  normalizedRetainedUntil: string;
   traceId?: string;
-}): Promise<ArchivedEmailSourceV1> {
+  nowMs?: number;
+}): PreparedEmailSourceArchiveV1 {
+  const nowMs = input.nowMs ?? Date.now();
   const baseKey = sourceBaseKey(input);
-  const traceId = input.traceId ?? deterministicTraceId({
+  const identitySha256 = sourceIdentitySha256({
     userId: input.userId,
     emailConnectionId: input.emailConnectionId,
     provider: input.email.provider,
     providerMessageId: input.email.providerMessageId,
   });
+  const traceId = input.traceId ?? deterministicTraceId(identitySha256);
 
   let rawRef: RawEmailReference | null = null;
+  let rawObject: EmailArchivePutInput | null = null;
   if (input.rawSource) {
-    // Validate retention before writing any bytes so invalid metadata cannot
-    // leave an orphaned raw object behind.
-    const retainedUntil = validateRetainedUntil(input.rawSource.retainedUntil);
     const rawBytes = Buffer.from(input.rawSource.bytes);
-    const rawSha256 = sha256(rawBytes);
+    if (rawBytes.byteLength === 0) {
+      throw new Error('Raw email source cannot be empty');
+    }
+    const retainedUntil = validateFutureRetention(
+      input.rawSource.retainedUntil,
+      'Raw email',
+      nowMs,
+    );
+    const rawSha256 = sha256EmailArchiveBytes(rawBytes);
     const contentType = input.rawSource.contentType?.trim() || 'message/rfc822';
     const objectKey = `${baseKey}/raw/${rawSha256}.eml`;
-    await input.store.putImmutable({
-      objectKey,
-      bytes: rawBytes,
-      contentType,
-      sha256: rawSha256,
-    });
     rawRef = {
       objectKey,
       sha256: rawSha256,
@@ -133,29 +156,83 @@ export async function archiveNormalizedEmailSourceV1(input: {
       contentType,
       retainedUntil,
     };
+    rawObject = {
+      objectKey,
+      bytes: rawBytes,
+      contentType,
+      sha256: rawSha256,
+    };
   }
 
+  const normalizedRetainedUntil = validateFutureRetention(
+    input.normalizedRetainedUntil,
+    'Normalized email',
+    nowMs,
+  );
   const document = normalizeEmailDocumentV1(input.email, {
     rawRef,
     traceId,
     normalizerVersion: NORMALIZED_EMAIL_DOCUMENT_V1_NORMALIZER,
   });
   const normalizedBytes = Buffer.from(JSON.stringify(document), 'utf8');
-  const normalizedSha256 = sha256(normalizedBytes);
+  const normalizedSha256 = sha256EmailArchiveBytes(normalizedBytes);
   const normalizedRef: ArchivedNormalizedObjectV1 = {
     objectKey: `${baseKey}/normalized/${NORMALIZED_EMAIL_DOCUMENT_V1_NORMALIZER}/${normalizedSha256}.json`,
     sha256: normalizedSha256,
     sizeBytes: normalizedBytes.byteLength,
     contentType: 'application/json',
+    retainedUntil: normalizedRetainedUntil,
   };
-  await input.store.putImmutable({
-    objectKey: normalizedRef.objectKey,
-    bytes: normalizedBytes,
-    contentType: normalizedRef.contentType,
-    sha256: normalizedRef.sha256,
-  });
 
-  return { traceId, document, rawRef, normalizedRef };
+  return {
+    traceId,
+    sourceIdentitySha256: identitySha256,
+    document,
+    rawRef,
+    normalizedRef,
+    rawObject,
+    normalizedObject: {
+      objectKey: normalizedRef.objectKey,
+      bytes: normalizedBytes,
+      contentType: normalizedRef.contentType,
+      sha256: normalizedRef.sha256,
+    },
+  };
+}
+
+export async function writePreparedEmailSourceArchiveV1(input: {
+  prepared: PreparedEmailSourceArchiveV1;
+  store: EmailArchiveObjectStore;
+}): Promise<ArchivedEmailSourceV1> {
+  if (input.prepared.rawObject) {
+    await input.store.putImmutable(input.prepared.rawObject);
+  }
+  await input.store.putImmutable(input.prepared.normalizedObject);
+  return {
+    traceId: input.prepared.traceId,
+    sourceIdentitySha256: input.prepared.sourceIdentitySha256,
+    document: input.prepared.document,
+    rawRef: input.prepared.rawRef,
+    normalizedRef: input.prepared.normalizedRef,
+  };
+}
+
+/**
+ * Convenience wrapper for tests/non-durable callers. Production persistence
+ * should stage a durable manifest before calling writePreparedEmailSourceArchiveV1.
+ */
+export async function archiveNormalizedEmailSourceV1(input: {
+  userId: string;
+  emailConnectionId: string;
+  email: NormalizedEmail;
+  store: EmailArchiveObjectStore;
+  rawSource?: RawEmailSourceV1;
+  normalizedRetainedUntil: string;
+  traceId?: string;
+  nowMs?: number;
+}): Promise<ArchivedEmailSourceV1> {
+  const prepared = prepareNormalizedEmailSourceV1(input);
+  return writePreparedEmailSourceArchiveV1({ prepared, store: input.store });
 }
 
 interface SupabaseStorageBucketLike {
@@ -168,6 +245,7 @@ interface SupabaseStorageBucketLike {
     data: Blob | null;
     error: { message?: string } | null;
   }>;
+  remove(paths: string[]): Promise<{ error: { message?: string } | null }>;
 }
 
 interface SupabaseStorageClientLike {
@@ -182,7 +260,7 @@ function isAlreadyExistsError(error: { message?: string; statusCode?: string | n
 }
 
 /** Service-role object-store implementation. The bucket must stay private. */
-export class SupabaseEmailArchiveObjectStore implements EmailArchiveObjectStore {
+export class SupabaseEmailArchiveObjectStore implements EmailArchiveObjectStore, EmailArchiveDeletionStore {
   constructor(
     private readonly client: SupabaseStorageClientLike,
     private readonly bucket: string,
@@ -207,8 +285,17 @@ export class SupabaseEmailArchiveObjectStore implements EmailArchiveObjectStore 
       throw new Error(`Email source archive verification failed: ${existing.error?.message ?? 'missing object'}`);
     }
     const existingBytes = Buffer.from(await existing.data.arrayBuffer());
-    if (sha256(existingBytes) !== input.sha256) {
+    if (sha256EmailArchiveBytes(existingBytes) !== input.sha256) {
       throw new Error('Email source archive immutable-object conflict');
+    }
+  }
+
+  async removeImmutable(objectKeys: string[]): Promise<void> {
+    const keys = [...new Set(objectKeys.map((key) => key.trim()).filter(Boolean))];
+    if (keys.length === 0) return;
+    const { error } = await this.client.storage.from(this.bucket).remove(keys);
+    if (error) {
+      throw new Error(`Email source archive deletion failed: ${error.message ?? 'unknown storage error'}`);
     }
   }
 }
