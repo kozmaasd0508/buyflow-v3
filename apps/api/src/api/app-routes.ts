@@ -143,6 +143,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         supabase
           .from('documents')
           .select('id,purchase_id,type,document_number,issued_at,source_type,external_url,filename,mime_type,created_at')
+          .eq('user_id', user.id)
           .in('purchase_id', purchaseIds)
           .order('created_at', { ascending: false }),
         supabase
@@ -221,6 +222,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         .from('documents')
         .select('id,purchase_id,type,document_number,issued_at,source_type,external_url,filename,mime_type,storage_bucket,storage_path,created_at')
         .eq('purchase_id', purchaseId)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase
         .from('products')
