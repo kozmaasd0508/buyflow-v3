@@ -51,11 +51,14 @@
 - Fixture SHA `4d70c774b332edbc7aabe19d754f51ac2e47762c3d17cc018f25d4786d91fd0e`; adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`.
 - Never train on that fixture. Production EventMind remains OFF.
 
-### TrustLink — PASS / production writes OFF
+### TrustLink — PASS / trusted Gmail provider-auth code PASS / production writes OFF
 - Zero-trust identity/linking: scoped hard keys, ambiguity -> REVIEW, hard conflict -> PENDING, lifecycle-only no-create.
-- Merchant-scoped promotion requires explicit trusted `provider_adapter` sender authority; visible From/header auth cannot grant authority.
-- Head `dcbd2e5a95b00d1b7c67ce845329d9b8164cc8ba`; CI #1169 PASS.
-- Real trusted provider-authentication provenance is not wired yet, so merchant production promotion remains BLOCKED.
+- Merchant-scoped promotion requires explicit trusted `provider_adapter` sender authority; visible From/header auth alone cannot grant authority.
+- Gmail provider-auth adapter now emits `trusted_sender_authority` only when the source provider is Gmail, the first `Authentication-Results` authserv-id is exactly `mx.google.com`, DMARC passes, and authenticated `header.from` exactly matches the normalized visible sender domain.
+- Spoofed authserv-id, DMARC fail, domain mismatch, non-Gmail source and later-header spoofing all fail closed.
+- Exact verified provider-auth head `2424d1d19bd975b7d2905f47352520abab93c50d`; CI #1188 / run `33666543307` PASS; verification PR #310 closed unmerged.
+- Protocol: `protocols/TRUSTLINK-PROVIDER-AUTH-2026-09-02.md`.
+- This closes the prior code-level direct-Gmail provenance gap in shadow/readiness evaluation. TrustLink production writes remain OFF until the Direct Gmail runtime/cursor gate passes and a separate production cutover is explicitly approved.
 
 ### JourneyGraph — PASS / isolated DB smoke PASS
 - Multi-shipment aggregation, final delivery timestamp and monotonic physical progress fixed.
@@ -106,12 +109,12 @@ Still OFF / conservative:
 
 ## NEXT ACTION — REMAINING PRE-PRODUCTION GATES
 
-1. **RawVault controlled storage/retention/orphan/account-deletion cleanup smoke** can proceed without enabling production source ingestion.
-2. For the remaining MailGate gate, prepare a controlled readonly Direct Gmail runtime environment containing the committed runtime-state migration + readonly OAuth; then prove live `historyId` capture and `history.list` replay with **no checkpoint/source/archive/AI/domain writes**.
-3. Implement and separately verify real trusted provider-authentication provenance before merchant-scoped TrustLink promotion.
-4. Keep all production DB remediations unapplied until upstream gates are complete and a separate cutover decision is made.
+1. **RawVault controlled storage/retention/orphan/account-deletion cleanup smoke** remains required. The separate Smoke-Test project is currently INACTIVE and cannot be restored while production + the actively-used old staging consume the Free-plan active-project slots; do not stop an active environment merely to force this test.
+2. **MailGate cursor/history gate:** prepare a controlled readonly Direct Gmail runtime environment containing the committed runtime-state migration + readonly OAuth; then prove live `historyId` capture and `history.list` replay with **no checkpoint/source/archive/AI/domain writes**.
+3. After gates 1–2 pass, perform a final release/cutover review. Production database migrations and TrustLink writes remain OFF until that explicit decision.
+4. Other mailbox/provider adapters must define their own trusted provider-authentication policy; they must not inherit Gmail authority automatically.
 5. Do not promote V12.
 
 ## RESUME CONTRACT
 
-**Folytasd a BuyFlowot a GitHubból. 9 modulos audit PASS; JourneyGraph/DocVault/Core isolated DB smoke PASS; MailGate real Gmail RAW/read-only smoke PASS 6/6 but live historyId/history.list remains BLOCKED because Direct Gmail runtime state/OAuth is not deployed. Next actionable gate: RawVault private-storage/retention cleanup smoke, then finish MailGate cursor/history in a controlled readonly runtime. Production remains OFF.**
+**Folytasd a BuyFlowot a GitHubból. 9 modulos audit PASS; JourneyGraph/DocVault/Core isolated DB smoke PASS; TrustLink direct-Gmail provider-auth code path PASS on CI #1188; MailGate real Gmail RAW/read-only smoke PASS 6/6 but live historyId/history.list remains BLOCKED because Direct Gmail runtime state/OAuth is not deployed; RawVault real private-storage/retention cleanup smoke also remains. Production remains OFF. Next: finish RawVault + MailGate environment-dependent gates, then final cutover review.**
