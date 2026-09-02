@@ -4,6 +4,10 @@ import {
   resolveBuyFlowEmailRecipient,
   type ResolvedBuyFlowRecipient,
 } from '../email/buyflow-address.js';
+import {
+  mailLensSemanticEmailV1,
+  normalizeEmailDocumentV1,
+} from '../email/normalize-document-v1.js';
 import type {
   SesSecurityDisposition,
   SesSecuritySignals,
@@ -151,7 +155,21 @@ export function planNormalizedInboundEmail(input: {
     };
   }
 
-  const purpose = evaluateShoppingEmailPurpose(input.email);
+  // MailLens is the canonical representation boundary for all semantic stages.
+  // Raw provider HTML/body remains available in the archived document, while
+  // downstream legacy consumers receive only the bounded current semantic view.
+  const mailLens = normalizeEmailDocumentV1(input.email);
+  const semanticEmail = mailLensSemanticEmailV1(input.email);
+  const mailLensDiagnostic = {
+    normalizer_version: mailLens.normalizerVersion,
+    body_text_source: mailLens.normalization.bodyTextSource,
+    body_text_truncated: mailLens.normalization.bodyTextTruncated,
+    semantic_text_truncated: mailLens.normalization.semanticTextTruncated,
+    hidden_html_removed: mailLens.normalization.hiddenHtmlRemoved,
+    quoted_history_detected: mailLens.normalization.quotedHistoryDetected,
+  };
+
+  const purpose = evaluateShoppingEmailPurpose(semanticEmail);
   if (purpose.action === 'ignore') {
     return {
       status: 'non_commerce_ignored',
@@ -160,6 +178,7 @@ export function planNormalizedInboundEmail(input: {
       parserVersion: null,
       structuredResult: {
         ...diagnostic,
+        mail_lens: mailLensDiagnostic,
         reason: purpose.reason,
         stored: false,
       },
@@ -168,9 +187,9 @@ export function planNormalizedInboundEmail(input: {
     };
   }
 
-  const universalGrammarShadow = runUniversalCommerceGrammarShadow(input.email);
-  const deterministicInput = normalizedEmailToDeterministicInput(input.email);
-  const parsed = parseNormalizedDeterministicEmail(input.email);
+  const universalGrammarShadow = runUniversalCommerceGrammarShadow(semanticEmail);
+  const deterministicInput = normalizedEmailToDeterministicInput(semanticEmail);
+  const parsed = parseNormalizedDeterministicEmail(semanticEmail);
   if (!parsed) {
     return {
       status: 'review',
@@ -179,6 +198,7 @@ export function planNormalizedInboundEmail(input: {
       parserVersion: null,
       structuredResult: {
         ...diagnostic,
+        mail_lens: mailLensDiagnostic,
         reason: 'no_deterministic_match',
         universal_commerce_grammar_shadow: universalGrammarShadow,
       },
@@ -215,6 +235,7 @@ export function planNormalizedInboundEmail(input: {
     parser_reasons: parsed.reasons,
     ingestion_source: 'normalized-inbound',
     shopping_email_purpose: 'shopping_only',
+    mail_lens: mailLensDiagnostic,
     universal_commerce_grammar_shadow: universalGrammarShadow,
     ...(input.security ? { gateway_security: securitySnapshot(input.security) } : {}),
     ...(shadowOnly ? { shadow_only: true, would_write: false } : {}),
@@ -226,6 +247,7 @@ export function planNormalizedInboundEmail(input: {
   validatedResult.parser_reasons = parsed.reasons;
   validatedResult.ingestion_source = 'normalized-inbound';
   validatedResult.shopping_email_purpose = 'shopping_only';
+  validatedResult.mail_lens = mailLensDiagnostic;
   if (input.security) validatedResult.gateway_security = securitySnapshot(input.security);
   if (parsed.shipmentPhase) validatedResult.shipment_phase = parsed.shipmentPhase;
   if (shadowOnly) {
@@ -256,6 +278,8 @@ function sourceArchiveDiagnostic(source: ArchivedEmailSourceV1) {
       dkim: source.document.authentication.dkim,
       spf: source.document.authentication.spf,
       dmarc: source.document.authentication.dmarc,
+      trusted: source.document.authentication.trusted,
+      source: source.document.authentication.source,
     },
   };
 }
@@ -419,10 +443,11 @@ export async function persistNormalizedEmailForResolvedRecipient(
   // Purchase Identity Graph is diagnostic-only in this lane. It may read the
   // user's snapshot but cannot write purchases, shipments, documents or graph rows.
   if (plan.status === 'review' || plan.status === 'recognized') {
+    const semanticEmail = mailLensSemanticEmailV1(input.email);
     plan.structuredResult.purchase_identity_shadow_v2 = await runShoppingEmailIdentityShadow({
       db,
       userId: recipient.userId,
-      email: input.email,
+      email: semanticEmail,
     });
   }
 
