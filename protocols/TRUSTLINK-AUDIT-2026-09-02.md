@@ -45,11 +45,32 @@ A raw/header-origin marker does not qualify. Current MailLens diagnostic authent
 
 Carrier-scoped tracking identity remains independent of merchant sender authority because its hard identity is user + carrier namespace + tracking identifier. Journey/state authority is audited separately downstream.
 
-## Current verdict
+## Regression verification
 
-- TrustLink deterministic correlation logic: reviewed, conservative.
-- Merchant sender-authority promotion gap: remediated.
-- Production writes: still OFF / unavailable from this audit path.
-- Trusted provider-authentication provenance: not implemented yet, therefore merchant-scoped production promotion remains BLOCKED by default.
+The first verification CI (#1168 / run `33648039402`) correctly exposed that the old synthetic lifecycle-chain fixture did not declare the new trusted sender authority. The production safety rule was not weakened. Instead, the synthetic safe-merchant fixture was updated to explicitly model a provider-authenticated sender.
 
-Next after CI: record exact verified head/run, then continue the module audit with JourneyGraph. MailGate/RawVault live/staging gates remain separate blockers for any source cutover.
+Final verified code head:
+`dcbd2e5a95b00d1b7c67ce845329d9b8164cc8ba`
+
+GitHub Actions CI #1169 / run `33648405215`: **PASS**.
+
+All checks passed:
+- EventMind V11 Python runtime syntax;
+- EventMind V11 PowerShell launcher syntax;
+- API typecheck;
+- API tests;
+- API build;
+- mobile typecheck;
+- mobile web build.
+
+The 25-scenario lifecycle-chain regression gate remains zero-trust: safe synthetic merchant cases carry explicit trusted provider provenance, while ambiguous/conflicting/unscoped cases remain blocked.
+
+## Final verdict
+
+- **TrustLink deterministic correlation logic: PASS**.
+- **Merchant sender-authority promotion gap: REMEDIATED**.
+- **Production writes: OFF / unavailable from this audit path**.
+- **Trusted provider-authentication provenance is not wired into real source adapters yet**, therefore merchant-scoped production promotion remains **BLOCKED by default**.
+- MailGate/RawVault live/staging gates remain separate blockers for source cutover.
+
+Next module audit: **JourneyGraph**.
