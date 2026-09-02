@@ -206,6 +206,15 @@ function decodedBody(part: GmailPartLike): string | null {
   }
 }
 
+function isRenderableMessageBodyPart(part: GmailPartLike): boolean {
+  const mime = part.mimeType?.toLowerCase();
+  if (mime !== 'text/plain' && mime !== 'text/html') return false;
+  if (part.filename?.trim()) return false;
+  const disposition = firstHeader(headersOf(part), 'Content-Disposition')?.toLowerCase() ?? '';
+  if (/\battachment\b/.test(disposition)) return false;
+  return true;
+}
+
 function collectBodyParts(
   part: GmailPartLike | undefined,
   output: { plain: string[]; html: string[] },
@@ -213,10 +222,10 @@ function collectBodyParts(
 ) {
   if (!part || depth > 30) return;
   const mime = part.mimeType?.toLowerCase();
-  if (mime === 'text/plain') {
+  if (isRenderableMessageBodyPart(part) && mime === 'text/plain') {
     const value = decodedBody(part);
     if (value) output.plain.push(value);
-  } else if (mime === 'text/html') {
+  } else if (isRenderableMessageBodyPart(part) && mime === 'text/html') {
     const value = decodedBody(part);
     if (value) output.html.push(value);
   }
@@ -229,9 +238,8 @@ function collectDetachedBodyParts(
   depth = 0,
 ) {
   if (!part || depth > 30 || output.length >= 200) return;
-  const mime = part.mimeType?.toLowerCase();
   if (
-    (mime === 'text/plain' || mime === 'text/html')
+    isRenderableMessageBodyPart(part)
     && !part.body?.data
     && part.body?.attachmentId?.trim()
   ) {
@@ -255,13 +263,7 @@ function collectAttachments(
   const filename = part.filename?.trim();
   const partHeaders = headersOf(part);
   const disposition = firstHeader(partHeaders, 'Content-Disposition');
-  const mime = part.mimeType?.toLowerCase();
-  const detachedBodyOnly = Boolean(
-    attachmentId
-    && (mime === 'text/plain' || mime === 'text/html')
-    && !filename
-    && !disposition,
-  );
+  const detachedBodyOnly = Boolean(attachmentId && isRenderableMessageBodyPart(part));
   if (attachmentId && !detachedBodyOnly) {
     output.push({
       id: attachmentId,
@@ -295,8 +297,6 @@ function resolveReceivedAt(message: GmailMessageLike, headers: EmailHeader[]): s
     if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
   }
 
-  // Missing provider time is evidence absence, not 1970. Fail closed so a
-  // fabricated timestamp can never influence lifecycle ordering/correlation.
   throw new Error('Gmail message is missing a valid received timestamp');
 }
 
@@ -506,9 +506,6 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
   }
 
   async initialSync(input: InitialEmailSyncInput): Promise<InitialEmailSyncResult> {
-    // Capture the mailbox history cursor before reading the snapshot. Any change
-    // racing with the initial scan will then be replayed by history.list rather
-    // than being silently missed. Duplicate observations are safe downstream.
     const profile = await this.getProfile();
     if (!profile.historyId) throw new Error('Gmail profile did not contain historyId');
 
@@ -619,8 +616,6 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
           message: await this.getMessage(providerMessageId),
         });
       } catch (error) {
-        // If the message disappeared between history.list and messages.get,
-        // represent the strongest observable state: it is no longer readable.
         if (error instanceof GmailApiError && error.status === 404) {
           changes.push({ kind: 'message_deleted', providerMessageId });
           continue;
