@@ -1,5 +1,4 @@
 import { env } from '../config.js';
-import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
   SupabaseEmailArchiveObjectStore,
   type EmailArchiveDeletionStore,
@@ -95,11 +94,11 @@ async function removeAllManifestObjects(
 }
 
 export async function runEmailSourceArchiveMaintenance(input: {
-  db?: any;
+  db: any;
   store?: EmailArchiveDeletionStore;
   nowMs?: number;
   batch?: number;
-} = {}): Promise<EmailSourceArchiveMaintenanceSummary> {
+}): Promise<EmailSourceArchiveMaintenanceSummary> {
   const summary: EmailSourceArchiveMaintenanceSummary = {
     scanned: 0,
     healedCommits: 0,
@@ -109,9 +108,9 @@ export async function runEmailSourceArchiveMaintenance(input: {
     sourceMissingDeleted: 0,
     failed: 0,
   };
-  if (!env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED && !input.db && !input.store) return summary;
+  if (!env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED && !input.store) return summary;
 
-  const db = input.db ?? (getSupabaseAdmin() as any);
+  const db = input.db;
   const store = input.store ?? new SupabaseEmailArchiveObjectStore(
     db,
     env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_BUCKET,
