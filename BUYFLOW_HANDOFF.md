@@ -89,7 +89,7 @@ Status:
 
 ## MAILLENS
 
-Role: one provider-neutral evidence normalization contract between MailGate/RawVault and candidate gating, deterministic parsing, universal semantics and future EventMind. MailLens may normalize representation but has zero identity authority.
+Role: one provider-neutral evidence normalization contract between MailGate/RawVault and candidate gating, deterministic parsing, universal semantics and EventMind. MailLens may normalize representation but has zero identity authority.
 
 Initial blockers were remediated on exact behavior head:
 `f69195404831323f2783464a61f6f7b7435698b5`
@@ -130,28 +130,57 @@ Important limitations remain fail-closed/non-authoritative:
 - type-only microdata is not field evidence;
 - header-derived email-auth verdicts are never hard trust evidence by themselves.
 
-## EVENTMIND CONTEXT
+## EVENTMIND
 
-EventMind owns semantic commerce/lifecycle classification only: **“Mi történt ebben az emailben?”** It must not answer **“Melyik vásárláshoz tartozik?”**
+Role: semantic commerce/lifecycle classification only: **“Mi történt ebben az emailben?”** It must not answer **“Melyik vásárláshoz tartozik?”**
 
-Current promoted semantic model remains V11 Qwen3-8B QLoRA. V12 is not promoted because its post-training untouched holdout regressed versus V11:
+Current reference semantic model remains V11 Qwen3-8B QLoRA. V12 remains unpromoted because its untouched post-training holdout regressed versus V11:
 - V11: 105/108 = 97.22%
 - V12: 102/108 = 94.44%
-- V12 wins: 0; V11 wins: 3; all three new regressions were stale-snippet cases.
+- V12 wins: 0; V11 wins: 3.
 
-V12 did retain 288/288 on the all-18 replay validation and improved the 72 hard-sibling development set by +1, but the untouched holdout controls promotion. Do not continue tuning on that frozen holdout.
+EventMind authority/input remediation is verified on exact behavior head:
+`1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`
 
-EventMind audit must now inspect:
-- exact production semantic contract and prompt/input shape;
-- label ontology and mapping boundaries;
-- V11 adapter identity/hash and deterministic decoder;
-- train/inference representation match with MailLens v1.1;
-- invalid-output/fallback behavior;
-- stale subject/snippet/quoted-history handling;
-- confidence/review semantics;
-- no Purchase/Identity authority leakage;
-- model/runtime loading, resource/failure behavior and observability;
-- exact evidence gates before any production promotion.
+Implemented:
+- `apps/api/src/ai/eventmind-v1.ts` is the only production-side EventMind input/decoder contract;
+- EventMind consumes an already-normalized MailLens `NormalizedEmailDocumentV1`, never reparses raw provider body/HTML;
+- input uses current `semanticText`, sender/subject/time, truncation/quote flags and bounded lifecycle structured hints;
+- provider/thread ids, recipients, snippet, full body, raw HTML, raw headers/auth, folders, links, attachment metadata, raw archive refs, trace ids and internal Purchase candidate/id values are omitted;
+- identity-bearing structured keys/URLs are removed while lifecycle status/state hints may remain;
+- prompt explicitly denies Purchase create/link/merge/select/identify authority;
+- fixed 18-event taxonomy is shared and locked;
+- decoder accepts exactly `is_commerce` + `event_type`; any extra field invalidates the response;
+- decoder rejects invalid event values and commerce/event incoherence;
+- shared semantic overlay accepts/returns semantics + provenance only, never identity;
+- legacy V9 semantic overlay remains backwards compatible through the shared contract;
+- existing Purchase Identity Graph boundary remains authoritative: all order/tracking/invoice/payment/merchant/carrier identity stays deterministic, hard conflicts remain REVIEW/PENDING, and NEW_PURCHASE requires separate deterministic purchase-creation authority.
+
+Regression coverage proves stale quoted history/snippet/raw/provider/archive/attachment/identity values cannot enter the EventMind contract, and attempted model identity output is rejected.
+
+Protocol:
+`protocols/EVENTMIND-AUDIT-2026-09-02.md`
+
+Temporary CI-only PR #303 / GitHub Actions CI #1152, run `33632992124`, exact behavior head `1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`:
+- API typecheck PASS
+- API tests PASS
+- API build PASS
+- mobile typecheck PASS
+- mobile web build PASS
+
+PR #303 was closed unmerged after verification.
+
+Status:
+- **EventMind code contract / identity-authority remediation: PASS**
+- **Production EventMind runtime: BLOCKED**
+
+Production blockers before any Qwen enablement:
+- actual V11 runtime must be wired only through `buildEventMindInputV1(...)` + `decodeEventMindPredictionV1(...)`;
+- exact base model/tokenizer/template and adapter SHA-256 must be pinned; no mutable `LATEST.txt` authority;
+- thinking must be explicitly disabled with no silent compatibility fallback;
+- model unavailable/OOM/timeout/invalid output must fail closed with no semantic or identity authority escalation;
+- a new untouched representation gate must validate the exact MailLens/EventMind V1 input because the already-used 180-case SemanticEmailView A/B is diagnostic only;
+- observability must record model/adapter/contract versions, latency and failure/event metadata without raw private email bodies.
 
 ## DEPLOYMENT STATE
 
@@ -159,16 +188,18 @@ Still conservative:
 - direct Gmail runtime OFF by default;
 - source archive OFF by default;
 - Mailgun source persistence OFF by default;
+- EventMind/Qwen production runtime not wired/enabled;
 - new migrations committed only, not applied live here;
 - no Google OAuth credentials/archive secrets/customer raw email committed;
 - no Purchase/Shipment/Document/Identity authority change.
 
 ## NEXT ACTION
 
-1. Keep PR #295 draft and all live/source flags OFF.
+1. Keep PR #295 draft and all live/source/AI flags OFF.
 2. Controlled Gmail/RawVault staging smokes remain required before production source cutover.
-3. Begin the full **EventMind** code/model/prompt/runtime audit against the new MailLens v1.1 semantic contract.
-4. Do not promote V12; use V11 as the current comparison/reference model unless new untouched evidence justifies a future version.
+3. Prepare the exact **V11 runtime integration + untouched MailLens/EventMind V1 representation gate** without consuming frozen evaluation data for tuning.
+4. After EventMind runtime evidence is clean, continue module audit with **TrustLink**.
+5. Do not promote V12; V11 remains the reference model unless new untouched evidence justifies a future version.
 
 ## RESUME CONTRACT
 
