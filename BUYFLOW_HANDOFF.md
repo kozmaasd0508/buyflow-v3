@@ -58,74 +58,65 @@ First local run on 144 new synthetic/deidentified cases:
 - disagreements: `2`
 - unsafe: `0`
 - teacher review queue: `14` = 2 disagreements + 12 agreement audits
+- `order_processing_vs_packing`: `22/24`; every other pilot family `24/24`
 
-Family results:
-- `order_processing_vs_packing`: `22/24`, 2 disagreements
-- every other pilot family: `24/24`
-
-Local run:
-`local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
+Local run: `local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
 
 ## V12 STAGE 1B — HUMAN TEACHER REVIEW COMPLETE
 
-The user uploaded the 14-row synthetic/deidentified teacher queue and it was reviewed manually in-chat instead of calling an external API.
-
-Verdict:
-- reviewed: `14/14`
-- seed labels approved: `14/14`
-- agreement audits: `12/12` Qwen correct
-- disagreements: `2/2` Qwen wrong, seed correct
+Manual in-chat review of the 14 synthetic/deidentified queue rows:
+- reviewed `14/14`
+- seed labels approved `14/14`
+- agreement audits `12/12` student correct
+- disagreements `2/2` student wrong, seed correct
 - both Qwen errors are `ORDER_PROCESSING -> ORDER_PACKING`
 - no external API call and no training
 
-Disagreement IDs:
-- `V12C1-0002` (hu): stale/misleading subject claims packing; current body explicitly says processing and packing has not started.
-- `V12C1-0018` (fr): same semantic failure in French.
+Disagreement IDs: `V12C1-0002` (hu) and `V12C1-0018` (fr). In both, stale/misleading subject says PACKING while current body explicitly says PROCESSING and packing has not started.
 
-Extracted teacher rule:
-**explicit current body evidence + explicit negation of the next lifecycle step overrides stale/misleading subject or snippet.**
+Teacher rule: **explicit current body evidence + explicit negation of the next lifecycle step overrides stale/misleading subject or snippet.**
 
-Protocol:
-`protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`
+Protocol: `protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`.
 
-Do not simply copy the two error rows into TRAIN. Generate new sibling examples from the failure rule.
+## V12 STAGE 2 — HARD SIBLING CORPUS BUILT AND PASSED GATE
 
-## V12 STAGE 2 — HARD SIBLINGS / REPRESENTATION ROBUSTNESS PREPARED
+First deterministic local build completed successfully:
+- status `V12_HARD_SIBLINGS_V2_CORPUS_READY`
+- rows `216`
+- TRAIN `144`
+- VALIDATION `72`
+- languages `hu,en,de,pl,fr,es`
+- events `ORDER_PROCESSING,ORDER_PACKING`
+- representation variants `6`
+- semantic-group train/validation overlap `0`
+- frozen/stage1 row reuse `False`
+- privacy gate `PASS_SYNTHETIC_DEIDENTIFIED`
+- corpus SHA-256 `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`
+- training started `False`
 
-Prepared deterministic generator focused on the confirmed weak boundary `ORDER_PROCESSING vs ORDER_PACKING`.
+Local corpus: `local-data/lora-v12/hard-siblings-v2/` with `cases.jsonl`, `train.sft.jsonl`, `validation.sft.jsonl`, `metrics.json`, and `CORPUS_SHA256.txt`.
 
-Planned corpus:
-- `216` entirely new synthetic/deidentified rows
-- `144` TRAIN candidates, `72` VALIDATION
-- languages: hu/en/de/pl/fr/es
-- balanced labels
-- three independent wording families per label/language; wording family 2 is validation-only
-- six representation variants per semantic group:
-  - clean plain
-  - misleading subject
-  - HTML body
-  - stale snippet
-  - quoted historical opposite state
-  - harmless metadata + field-order shift
-- semantic-group train/validation overlap must be zero
-- explicit contamination check rejects `IVH2-`, `V12C1-`, old V12C1 order range and frozen fixture hashes
-- no training and no external API call in this corpus-build gate
+This corpus uses new sibling examples, not the two reviewed error rows and not any frozen holdout rows.
+
+## V12 STAGE 2B — PRE-TRAIN V11 BASELINE PREPARED
+
+Before changing any weights, score the unchanged V11 adapter + constrained decoder on the 72 validation-only sibling rows. This establishes the exact pre-training weakness by label and representation variant and keeps the later before/after comparison honest.
 
 Files:
-- `scripts/v12-hard-siblings-v2.py`
-- `scripts/run-v12-hard-siblings-v2.ps1`
-- `scripts/BuyFlow-V12-HARD-SIBLINGS-V2.cmd`
+- `scripts/v12-hard-siblings-baseline-v2.py`
+- `scripts/run-v12-hard-siblings-baseline-v2.ps1`
+- `scripts/BuyFlow-V12-HARD-SIBLINGS-BASELINE.cmd`
 
-The generator writes production-shaped cases plus V11-compatible `train.sft.jsonl` and `validation.sft.jsonl` under `local-data/lora-v12/hard-siblings-v2/`.
+The baseline runner verifies the corpus SHA, reads only the 72 `VALIDATION` rows, does not train, does not mutate the corpus, and does not read frozen holdouts.
 
 ## NEXT ACTION
 
 1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate test worktree.
-2. Run `scripts/BuyFlow-V12-HARD-SIBLINGS-V2.cmd`.
-3. Preserve the first corpus summary and SHA.
-4. Require: rows 216, train 144, validation 72, semantic-group overlap 0, frozen/stage1 row reuse false, privacy gate PASS.
-5. Only after that gate, build the V12 training merge: V11 original TRAIN replay + approved new hard siblings, keeping old frozen evaluation sets untouched.
-6. Do not train on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
+2. Run `scripts/BuyFlow-V12-HARD-SIBLINGS-BASELINE.cmd`.
+3. Preserve `# SUMMARY`, `# BY_VARIANT`, and `# WRONG_TRANSITIONS` unchanged.
+4. Only after the baseline is recorded, build the V12 training merge with V11 replay/retention anchors + the 144 hard-sibling TRAIN rows; do not fine-tune on the two-class corpus alone.
+5. Keep the 72 hard-sibling VALIDATION rows out of training.
+6. Never train on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
 7. Qwen remains semantic-only; Zero-Trust Purchase Identity Graph remains authoritative.
 
 ## RESUME CONTRACT
