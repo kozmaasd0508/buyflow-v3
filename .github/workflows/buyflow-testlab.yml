@@ -35,6 +35,7 @@ jobs:
       BUYFLOW_TESTLAB_GMAIL_CLIENT_ID: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_CLIENT_ID }}
       BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET }}
       BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN }}
+      BUYFLOW_TESTLAB_REQUESTED_SUITE: ${{ inputs.suite }}
 
     steps:
       - name: Checkout exact TestLab commit
@@ -44,20 +45,11 @@ jobs:
           fetch-depth: 1
 
       - name: Resolve requested suite
-        id: request
-        shell: powershell
-        run: |
-          $suite = '${{ inputs.suite }}'
-          if ([string]::IsNullOrWhiteSpace($suite)) {
-            $request = Get-Content -Raw -LiteralPath 'testlab/run-request.json' | ConvertFrom-Json
-            $suite = [string]$request.suite
-          }
-          if ($suite -notin @('full','eventmind','identity','core')) { throw "INVALID_TESTLAB_SUITE: $suite" }
-          "suite=$suite" >> $env:GITHUB_OUTPUT
-          Write-Host "TestLab suite: $suite"
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\testlab\resolve-suite.ps1
 
       - name: Node and WSL preflight
-        shell: powershell
+        shell: cmd
         run: |
           node --version
           npm --version
@@ -65,16 +57,12 @@ jobs:
           wsl.exe -l -q
 
       - name: Install repository dependencies
-        shell: powershell
+        shell: cmd
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run BuyFlow TestLab
-        shell: powershell
-        run: |
-          $reportDir = Join-Path $env:RUNNER_TEMP 'buyflow-testlab-report'
-          New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
-          & .\scripts\testlab\run-testlab.ps1 -Suite '${{ steps.request.outputs.suite }}' -ReportDir $reportDir
-          exit $LASTEXITCODE
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\testlab\run-testlab.ps1 -Suite "%BUYFLOW_TESTLAB_SUITE%" -ReportDir "%RUNNER_TEMP%\buyflow-testlab-report"
 
       - name: Publish TestLab report
         if: always()
