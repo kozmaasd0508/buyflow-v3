@@ -6,8 +6,27 @@ import {
   isPrivateStoredPdf,
 } from './document-access.js';
 import { applyUserProductOverrides, loadUserProductOverrideRuns } from './product-user-overrides.js';
+import { derivePurchasePulse } from './purchase-pulse.js';
 
-function publicPurchase(row: any) {
+function publicShipment(row: any) {
+  return {
+    id: row.id,
+    carrier: row.carrier,
+    carrierSlug: row.carrier_slug,
+    trackingNumber: row.tracking_number,
+    trackingUrl: row.tracking_url,
+    status: row.status,
+    shippedAt: row.shipped_at,
+    estimatedDeliveryAt: row.estimated_delivery_at,
+    deliveredAt: row.delivered_at,
+    lastEventAt: row.last_event_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function publicPurchase(row: any, shipments: any[] = []) {
+  const publicShipments = shipments.map(publicShipment);
   return {
     id: row.id,
     merchantName: row.merchant_name,
@@ -20,10 +39,27 @@ function publicPurchase(row: any) {
     paymentStatus: row.payment_status,
     currentState: row.current_state,
     orderedAt: row.ordered_at,
+    paidAt: row.paid_at ?? null,
     shippedAt: row.shipped_at,
     deliveredAt: row.delivered_at,
+    cancelledAt: row.cancelled_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    pulse: derivePurchasePulse({
+      currentState: row.current_state,
+      orderedAt: row.ordered_at,
+      paidAt: row.paid_at ?? null,
+      shippedAt: row.shipped_at,
+      deliveredAt: row.delivered_at,
+      cancelledAt: row.cancelled_at ?? null,
+      createdAt: row.created_at,
+      shipments: publicShipments.map((shipment) => ({
+        status: shipment.status,
+        shippedAt: shipment.shippedAt,
+        deliveredAt: shipment.deliveredAt,
+        lastEventAt: shipment.lastEventAt,
+      })),
+    }),
   };
 }
 
@@ -43,23 +79,6 @@ function publicProduct(row: any) {
     currency: row.currency,
     productUrl: row.product_url,
     imageUrl: row.image_url,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-function publicShipment(row: any) {
-  return {
-    id: row.id,
-    carrier: row.carrier,
-    carrierSlug: row.carrier_slug,
-    trackingNumber: row.tracking_number,
-    trackingUrl: row.tracking_url,
-    status: row.status,
-    shippedAt: row.shipped_at,
-    estimatedDeliveryAt: row.estimated_delivery_at,
-    deliveredAt: row.delivered_at,
-    lastEventAt: row.last_event_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -115,7 +134,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
 
     const { data: purchaseRows, error: purchaseError } = await supabase
       .from('purchases')
-      .select('id,merchant_name,merchant_legal_name,merchant_domain,order_number,purchase_date,total_amount,currency,payment_status,current_state,ordered_at,shipped_at,delivered_at,created_at,updated_at')
+      .select('id,merchant_name,merchant_legal_name,merchant_domain,order_number,purchase_date,total_amount,currency,payment_status,current_state,ordered_at,paid_at,shipped_at,delivered_at,cancelled_at,created_at,updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -176,7 +195,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         const documents = documentRows.filter((row) => row.purchase_id === purchase.id);
         const products = productRows.filter((row) => row.purchase_id === purchase.id);
         return {
-          ...publicPurchase(purchase),
+          ...publicPurchase(purchase, shipments),
           shipments: shipments.map(publicShipment),
           documentCount: documents.length,
           productCount: products.length,
@@ -271,20 +290,20 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
       };
     }));
 
+    const shipments = shipmentResult.data ?? [];
+
     reply.header('Cache-Control', 'no-store');
     return {
       purchase: {
-        ...publicPurchase(purchase),
+        ...publicPurchase(purchase, shipments),
         subtotal: purchase.subtotal,
         shippingAmount: purchase.shipping_amount,
         discountAmount: purchase.discount_amount,
         paymentMethod: purchase.payment_method,
         shippingMethod: purchase.shipping_method,
         expectedCarrier: purchase.expected_carrier,
-        paidAt: purchase.paid_at,
-        cancelledAt: purchase.cancelled_at,
         products: products.map(publicProduct),
-        shipments: (shipmentResult.data ?? []).map(publicShipment),
+        shipments: shipments.map(publicShipment),
         documents: documents.map(publicDocument),
       },
     };
