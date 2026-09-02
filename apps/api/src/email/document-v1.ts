@@ -37,12 +37,17 @@ export interface EmailAuthenticationResults {
 }
 
 export type EmailStructuredDataKind = 'json_ld' | 'microdata' | 'schema_org' | 'other';
+export type EmailStructuredDataNormalization =
+  | 'raw_json'
+  | 'html_entity_compat'
+  | 'microdata_type_hint';
 
 export interface EmailStructuredDataRecord {
   kind: EmailStructuredDataKind;
   schemaType?: string | null;
   payload: unknown;
   source: 'body_html' | 'body_text' | 'header' | 'attachment';
+  normalization?: EmailStructuredDataNormalization;
 }
 
 export interface NormalizedEmailLink {
