@@ -47,20 +47,31 @@ The authenticated application Purchase API remains read-oriented; this audit doe
 
 `supabase/migrations/20260902170000_harden_core_purchase_authority.sql`
 
-The migration is source-only preparation. It must not be applied directly to production. Staging must first apply the prior JourneyGraph/DocVault prerequisites and verify existing Purchase data/state before Core migration promotion.
+The migration is source-only preparation. It was **not applied** to staging or production. Staging must first apply the prior JourneyGraph/DocVault prerequisites and verify existing Purchase data/state before Core migration promotion.
 
-## Verification target
+## Verification
 
-Behavior head before CI:
-`2122438f1ca0cbe7b3aca46b6f51f4becb4a161f`
+Verified PR head:
+`326b6481fc74c9f367a841f334ecd22928030012`
 
-Required CI:
-- API typecheck
-- API tests, including Core fail-closed tests
-- API build
-- mobile typecheck
-- mobile web build
+GitHub Actions CI #1185 / run `33658358024`: **PASS**.
+- EventMind Python runtime syntax: PASS
+- EventMind PowerShell launcher syntax: PASS
+- API typecheck: PASS
+- API tests, including Core fail-closed tests: PASS
+- API build: PASS
+- mobile typecheck: PASS
+- mobile web build: PASS
 
-## Production status
+Temporary verification PR #308 was closed unmerged.
 
-Core code authority remediation is prepared for verification. Production migration remains **NOT APPLIED / BLOCKED** until controlled staging migration and smoke verification.
+## Verdict
+
+- **Core code / Purchase authority audit: PASS**
+- legacy automatic Purchase creation: **OFF / FAIL-CLOSED**
+- legacy automatic payment/financial mutation: **OFF / FAIL-CLOSED**
+- legacy visible-From lifecycle Purchase mutation: **REMOVED BY PREPARED MIGRATION**
+- Shipment/DocVault controlled lanes: **PRESERVED**
+- production Core migration: **NOT APPLIED / BLOCKED** pending controlled staging migration + smoke verification
+
+Next module audit: **Pulse**.
