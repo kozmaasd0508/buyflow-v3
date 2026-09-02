@@ -1,5 +1,9 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { summarizeShipmentProgress } from '../ingestion/deterministic-lifecycle-state.js';
+import {
+  monotonicControlledShipmentStatus,
+  purchaseStateMatchesShipmentSummary,
+} from '../ingestion/journeygraph-controlled-verification.js';
 import { selectControlledShipmentCandidate } from '../resolution/controlled-shipment-creation.js';
 import {
   normalizeCarrierSlug,
@@ -82,15 +86,6 @@ function earliestTimestamp(rows: ShipmentResolutionEvidence[]): string | null {
 function latestTimestamp(rows: ShipmentResolutionEvidence[]): string | null {
   if (rows.length === 0) return null;
   return [...rows].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]?.receivedAt ?? null;
-}
-
-function monotonicShipmentStatus(
-  existing: string | null,
-  incoming: 'in_transit' | 'ready_for_pickup' | 'delivered',
-): 'in_transit' | 'ready_for_pickup' | 'delivered' {
-  if (existing === 'delivered' || incoming === 'delivered') return 'delivered';
-  if (existing === 'ready_for_pickup' || incoming === 'ready_for_pickup') return 'ready_for_pickup';
-  return 'in_transit';
 }
 
 async function main() {
@@ -194,7 +189,7 @@ async function main() {
     throw new Error('Existing tracking identity belongs to another purchase');
   }
 
-  const expectedShipmentStatus = monotonicShipmentStatus(
+  const expectedShipmentStatus = monotonicControlledShipmentStatus(
     existedBefore && typeof existingRows[0]?.status === 'string' ? existingRows[0].status : null,
     candidate.recommendedStatus,
   );
@@ -286,12 +281,8 @@ async function main() {
     (purchaseShipmentRows ?? []) as Array<Record<string, unknown>>,
   );
 
-  if (shipmentProgress.status) {
-    if (purchaseAfterState !== shipmentProgress.status) {
-      throw new Error('Controlled shipment aggregate purchase-state verification failed');
-    }
-  } else if (purchaseAfterState === 'delivered' || purchaseAfterState === 'ready_for_pickup') {
-    throw new Error('Controlled shipment left an unsupported whole-purchase completion state');
+  if (!purchaseStateMatchesShipmentSummary(purchaseAfterState, shipmentProgress)) {
+    throw new Error('Controlled shipment aggregate purchase-state verification failed');
   }
 
   console.log(
