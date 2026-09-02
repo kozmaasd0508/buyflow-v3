@@ -17,15 +17,12 @@ try {
   $new1='function Run-Git([string[]]$Arguments){'
   $old2='$out=& git.exe @args 2>&1'
   $new2='$out=& git.exe @Arguments 2>&1'
-  $old3="($args -join ' ')"
-  $new3="($Arguments -join ' ')"
 
   if(-not $raw.Contains($old1)){ throw 'PATCH_POINT_RUN_GIT_SIGNATURE_NOT_FOUND' }
   if(-not $raw.Contains($old2)){ throw 'PATCH_POINT_RUN_GIT_CALL_NOT_FOUND' }
 
   $raw=$raw.Replace($old1,$new1)
   $raw=$raw.Replace($old2,$new2)
-  $raw=$raw.Replace($old3,$new3)
   [IO.File]::WriteAllText($temp,$raw,(New-Object Text.UTF8Encoding($false)))
 
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $temp -IdFile $IdFile -ExpectedIdSha256 $ExpectedIdSha256
