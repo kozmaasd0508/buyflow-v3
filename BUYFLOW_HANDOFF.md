@@ -40,7 +40,7 @@ Behavior head: `e67b908e07d072e3737611eca4ee804d7d905c26`.
 
 Code remediation: **PASS**.
 
-Immutable raw/normalized archive, SHA-256 identity, pre-write manifest, explicit retention, crash/orphan/account-deletion cleanup, raw-hash conflict detection and DB immutability are implemented.
+Immutable raw/normalized archive, SHA-256/opaque keys, durable pre-write manifest, explicit retention, crash/orphan/account-deletion cleanup, raw-hash conflict detection and DB immutability added.
 
 Production RawVault: **BLOCKED** pending controlled staging migration + explicit retention policy + real private-storage cleanup smoke.
 
@@ -50,13 +50,11 @@ Behavior head: `9480e6d4e8d5c3e0a771b43671503cda593971c2`.
 
 Code remediation: **PASS**.
 
-MailLens `normalized-email-document-v1.1` is the single semantic normalization boundary. It keeps bounded full `bodyText` plus current `semanticText`, excludes safely detected quoted history from current semantics, filters common hidden/preheader HTML, prevents attachment body injection and keeps header auth diagnostic-only (`trusted:false`).
+MailLens `normalized-email-document-v1.1` is the single provider-neutral semantic normalization boundary with bounded full `bodyText`, separate current `semanticText`, quoted-history/hidden-content controls, attachment protection and diagnostic-only header authentication.
 
-MailLens behavior head: `f69195404831323f2783464a61f6f7b7435698b5`.
+Behavior head: `f69195404831323f2783464a61f6f7b7435698b5`.
 
-CI #1151 / run `33631564933`: API typecheck/tests/build + mobile typecheck/build PASS.
-
-Production source path remains blocked behind MailGate + RawVault live/staging gates.
+CI #1151 / run `33631564933`: API typecheck/tests/build + mobile typecheck/build PASS. Production source path remains BLOCKED pending MailGate + RawVault staging/live gates.
 
 ## EVENTMIND
 
@@ -90,49 +88,49 @@ Safety behavior:
 - exact adapter SHA-256 required when enabled;
 - model must report `Qwen/Qwen3-8B`;
 - runtime/template versions must match;
-- thinking must be explicitly OFF; no silent compatibility fallback;
+- thinking must be explicitly OFF; no silent tokenizer fallback;
 - deterministic generation (`do_sample=false`, max 48 new tokens);
-- local server checks V11 training completion + holdout-isolation flags and calculates the real adapter SHA;
-- timeout covers request + response parsing;
-- unavailable/OOM/timeout/HTTP/malformed/metadata mismatch/invalid model output all fail closed;
-- no identity authority is granted on any failure.
+- V11 training completion + holdout-isolation checks before model load;
+- timeout through full response parsing;
+- unavailable/OOM/timeout/HTTP/malformed/metadata mismatch/invalid output -> no semantic result;
+- no Purchase identity authority added anywhere.
 
-Final exact branch verification before local GPU gate:
+Final exact branch verification before local gate:
 `af99492f4e852250b5a8fb05f1167336dd50c419`
 
-GitHub Actions CI #1167 / run `33635810471`: Python/PowerShell syntax, API typecheck/tests/build and mobile typecheck/build all PASS. Temporary PR #304 was closed unmerged.
+Temporary CI-only PR #304 / GitHub Actions CI #1167 / run `33635810471` passed Python/PowerShell syntax, API typecheck/tests/build, and mobile typecheck/build. PR #304 was closed unmerged.
 
 ### Fresh MailLens/EventMind V11 gate — PASS
 
 First untouched local GPU inference completed on 2026-09-02.
 
 Frozen fixture:
-- cases: **90**
-- 18 labels: **all represented**
-- fixture SHA-256: `4d70c774b332edbc7aabe19d754f51ac2e47762c3d17cc018f25d4786d91fd0e`
-- real V11 adapter SHA-256: `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+- 90 cases;
+- all 18 fixed EventMind labels represented;
+- fixture SHA-256: `4d70c774b332edbc7aabe19d754f51ac2e47762c3d17cc018f25d4786d91fd0e`.
 
-First result, preserved unchanged:
-- Exact: **90/90 = 100.00%**
-- Macro event: **100.00%**
-- Invalid: **0**
-- Unsafe promotions: **0**
-- Gate: **PASS**
+Pinned real V11 adapter SHA-256:
+`462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+
+First preserved result:
+- Exact: **90/90 (100.00%)**;
+- Macro event: **100.00%**;
+- Invalid: **0**;
+- Unsafe promotions: **0**;
+- Gate: **PASS**.
 
 Local result directory:
 `local-data/eventmind-v11-representation-gate/runs/20260902T150955Z`
 
-The fixture must **never be used for training** after this evaluation.
+The fixture must never be used for training after this evaluation.
 
-Important: this is strong runtime/representation evidence for the pinned MailLens -> EventMind V11 path, but it is still a synthetic gate and is **not** complete real-mailbox generalization proof.
+Interpretation:
+- EventMind MailLens/input/identity boundary: **PASS**;
+- V11 runtime safety: **PASS**;
+- fresh V11 representation/runtime gate: **PASS**;
+- production EventMind remains **OFF/BLOCKED** because this synthetic gate is not full real-mailbox generalization proof and upstream MailGate/RawVault production smokes are still pending.
 
 Protocol: `protocols/EVENTMIND-AUDIT-2026-09-02.md`.
-
-Current status:
-- **EventMind identity/input boundary: PASS**
-- **EventMind V11 runtime safety code: PASS**
-- **Fresh V11 model gate: PASS — 90/90**
-- **Production EventMind: BLOCKED / OFF**
 
 ## TRUSTLINK
 
@@ -164,6 +162,49 @@ Current status:
 - **Production TrustLink writes: OFF / BLOCKED**
 - **Real trusted provider-authentication provenance: NOT WIRED YET**
 
+## JOURNEYGRAPH
+
+Code / state audit: **PASS**.
+
+Real issues found and fixed:
+- a multi-parcel Purchase could become `delivered` after only one Shipment was delivered;
+- whole-Purchase `delivered_at` could reflect the first parcel instead of final parcel completion;
+- stale order/delay mail could downgrade `ready_for_pickup`;
+- proven physical Shipment progress could leave stale `payment_failed` / `delayed` as the visible journey state;
+- controlled post-write verification still assumed one parcel and could falsely report failure after a correct database update.
+
+Current behavior:
+- all linked Shipments are reduced together;
+- Purchase is `delivered` only when **every** Shipment is delivered;
+- final Purchase delivery time is the **latest** parcel delivery time;
+- an outstanding in-transit parcel keeps the Purchase `in_transit`;
+- otherwise an outstanding pickup parcel keeps it `ready_for_pickup`;
+- unknown legacy outstanding Shipment state never validates a false whole-Purchase completion;
+- physical parcel progress outranks stale non-terminal order/payment/delay journey state;
+- cancelled/refunded/returned remain protected terminal states;
+- controlled Shipment replays are monotonic and pre-advice (`shipment_created`) remains blocked from the physical write lane.
+
+The carrier bridge uses the same controlled shipment RPC, and the Foxpost repair path updates source evidence only, so no separate Purchase-state bypass was found.
+
+Final verified JourneyGraph code head:
+`8ef8d36bb9f0ee7ebce3477c13e30f510df30e4f`
+
+GitHub Actions CI #1183 / run `33651035053`: EventMind syntax checks + API typecheck/tests/build + mobile typecheck/build all **PASS**.
+
+Prepared migration:
+`supabase/migrations/20260902153000_fix_journeygraph_multishipment_aggregate.sql`
+
+The migration was **NOT applied** to staging or production. Production JourneyGraph DB remediation remains **BLOCKED** pending controlled staging migration + multi-shipment smoke.
+
+Temporary verification PR #306 was closed unmerged.
+
+Protocol: `protocols/JOURNEYGRAPH-AUDIT-2026-09-02.md`.
+
+Current status:
+- **JourneyGraph code/state semantics: PASS**
+- **Multi-shipment safety: PASS**
+- **Production DB migration: NOT APPLIED / BLOCKED**
+
 ## DEPLOYMENT STATE
 
 Still conservative:
@@ -172,6 +213,7 @@ Still conservative:
 - Mailgun source persistence OFF;
 - EventMind V11 runtime OFF;
 - TrustLink production writes OFF;
+- JourneyGraph migration NOT APPLIED;
 - no live migration applied from this flow;
 - no provider cutover;
 - no AI identity authority;
@@ -181,10 +223,11 @@ Still conservative:
 
 1. Preserve the EventMind first gate result unchanged and never train on that fixture.
 2. Keep PR #295 draft and all live/source/AI/write flags OFF.
-3. Continue the module audit with **JourneyGraph**.
+3. Continue the module audit with **DocVault**.
 4. MailGate/RawVault production smokes are still required before source cutover.
 5. Trusted provider-authentication provenance must be implemented and separately verified before merchant-scoped TrustLink promotion can be enabled.
-6. Do not promote V12.
+6. JourneyGraph migration must first pass controlled staging + multi-shipment smoke before any production application.
+7. Do not promote V12.
 
 ## RESUME CONTRACT
 
