@@ -5,10 +5,17 @@ import type {
 
 function decodeBasicHtmlEntities(value: string): string {
   return value
+    .replace(/&#x([0-9a-f]{1,6});?/gi, (_match, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+    })
+    .replace(/&#([0-9]{1,7});?/g, (_match, decimal: string) => {
+      const code = Number.parseInt(decimal, 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+    })
     .replace(/&amp;/gi, '&')
     .replace(/&quot;/gi, '"')
-    .replace(/&#34;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&apos;/gi, "'")
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>');
 }
