@@ -1,91 +1,101 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — Input-view causality v1 scored
+## 2026-09-02 — V12 Stage 4 untouched holdout: promotion FAIL; audit phase opens
 
-Branch: `codex/v11-input-view-holdout-v2` / PR #301 (draft)
+Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-Causality diagnostic completed on the only FULL-correct / SEMANTIC-wrong holdout case `IVH2-0057` (`IN_TRANSIT` expected, Semantic baseline `OUT_FOR_DELIVERY`).
+Final frozen one-shot generalization gate completed on SHA-locked post-training holdout:
+- holdout SHA `03892ba760b46fbe32f64c1915dce77b67ccb162917e3119d78eaca14a3c8aba`
+- rows `108`, 18 events x 6
+- V11 `105/108 = 97.22%`
+- V12 `102/108 = 94.44%`
+- delta exact `-3`
+- invalid V11/V12 `0/0`
+- both right `102`
+- V12 wins `0`
+- V11 wins `3`
+- both wrong `3`
+- changed predictions `3`
 
-Result:
-- semantic recheck: wrong
-- real recipients: correct
-- dummy recipients: correct
-- neutral padding matched to recipients length: correct
-- real headers/auth: correct
-- dummy headers/auth: wrong
-- neutral padding matched to headers/auth length: correct
-- real raw links: correct
-- dummy raw links: correct
-- neutral padding matched to raw-links length: wrong
+Per-event regressions in V12:
+- DELAYED `6/6 -> 5/6`
+- INVOICE `6/6 -> 5/6`
+- SHIPPED `6/6 -> 5/6`
 
-Interpretation:
-- no single omitted semantic evidence group consistently explains the recovery;
-- dummy and neutral prompt additions can recover the same case;
-- therefore recipients/auth/raw-links must not be added to SemanticEmailViewV2 merely because they flipped this row;
-- V11 generative classification shows prompt-shape/token-position sensitivity at this lifecycle boundary;
-- keep FULL normalized input as current baseline while treating compact-view design as a separate robustness optimization;
-- the 6 invalid outputs from the untouched 180-case holdout remain a separate output-architecture problem.
+Per-language regressions:
+- English `18/18 -> 17/18`
+- Spanish `18/18 -> 16/18`
 
-Local report:
-`local-data/lora-v11/input-view-holdout-v2/runs/20260901T183055Z/input-view-causality-v1.json`
+Per-variant regression is concentrated entirely in `stale_snippet`:
+- V11 `16/18`
+- V12 `13/18`
+- delta `-3`
 
-Next:
-1. address malformed generative output via constrained/structured decoding or a sequence-classification head;
-2. design V12 teacher-student/hard-example training using new sibling examples, not frozen rows;
-3. include representation-invariance augmentation: harmless metadata padding/dropout, field-order/layout changes and equivalent compact/full views;
-4. freeze a new untouched holdout after V12;
-5. keep BLIND50/frozen108 untouched for tuning.
+Wrong transitions:
+- V11: PAYMENT->INVOICE x2; RETURN->REFUNDED x1
+- V12: those same three plus DELAYED->DELIVERED x1; INVOICE->PAYMENT x1; SHIPPED->IN_TRANSIT x1
 
----
+Decision: **V12 promotion FAIL**. The untouched holdout is the promotion authority. Do not promote V12 over V11 and never tune from this frozen holdout. Keep V11 as the better-supported adapter for now. Any future model cycle requires a new versioned untouched holdout.
 
-## 2026-09-01 — Input-view add-back scored; causality diagnostic prepared
+Protocol:
+`protocols/V12-STAGE4-UNTOUCHED-HOLDOUT-RESULT-2026-09-02.md`
 
-Local add-back v1 completed on the only FULL-correct / SEMANTIC-wrong holdout case:
-- `IVH2-0057`
-- expected `IN_TRANSIT`
-- Semantic predicted `OUT_FOR_DELIVERY`
-- raw_html: `0/1` recovered, +6 tokens
-- recipients: `1/1`, +23
-- headers_auth: `1/1`, +51
-- provider_meta: `0/1`, +33
-- raw_links: `1/1`, +37
-- raw_attachments: `0/1`, +4
-- pipeline_meta: `0/1`, +36
-- all: `1/1`, +190
-
-Because semantically unrelated groups independently flipped the row, a causality diagnostic was added instead of treating those fields as lifecycle evidence.
+This closes the V12 promotion gate. Next phase is the full BuyFlow module audit:
+`MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`.
 
 ---
 
-## 2026-09-01 — V11 untouched input-view holdout v2 scored
+## 2026-09-02 — V12 Stage 4 holdout FROZEN; one-shot compare prepared
 
-First untouched 180-case score:
-- FULL: `170/180 = 94.44%`, invalid `6`, unsafe `1`, critical `4`, mean tokens `404.4`
-- SEMANTIC: `169/180 = 93.89%`, invalid `6`, unsafe `2`, critical `5`, mean tokens `259.2`
-- MINIMAL: `168/180 = 93.33%`, invalid `6`, unsafe `2`, critical `6`, mean tokens `178.2`
-
-Frozen SHA: `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. No training; holdout remains non-trainable.
-
----
-
-## 2026-09-01 — V11 SemanticEmailView A/B diagnostic scored
-
-On the earlier locked Fresh Blind fixture: FULL `163/180`, SEMANTIC `163/180`; invalid `7 -> 7`; unsafe `1 -> 0`; critical `10 -> 10`; net paired gain `0`. Useful signal but not enough to choose representation.
+Frozen before scoring:
+- SHA `03892ba760b46fbe32f64c1915dce77b67ccb162917e3119d78eaca14a3c8aba`
+- 108 rows
+- 18 labels x 6
+- six languages, six representation variants
+- model loaded at freeze `False`
+- training/tuning eligible `False`
+- protected holdouts/training corpus/hard siblings read `False`
 
 ---
 
-## 2026-08-31 — V11 Fresh Blind v1
+## 2026-09-02 — V12 all-18 retention PASS: 288/288 for V11 and V12
 
-First score: exact `163/180 = 90.56%`, commerce `173/180 = 96.11%`, invalid `7`, unsafe `1`, critical `10`, gate `FAIL`. Frozen rows remain non-trainable.
+Development retention comparison:
+- V11 `288/288 = 100%`
+- V12 `288/288 = 100%`
+- all 18 labels `16/16` for both
+- invalid `0/0`
+- wrong transitions none/none
+
+This was clean retention evidence but not broad improvement proof.
 
 ---
 
-## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
+## 2026-09-02 — V12 hard-sibling post-train: 71/72
 
-Branch: `codex/modern-email-source-foundation-v1` / PR #295 (draft). Direct Gmail/OAuth/history/watch/Pub/Sub/read-only shadow foundation implemented behind disabled-by-default flags; no live provider cutover claimed.
+Exact V12 post-training evaluation on the same fixed 72 hard-sibling validation rows:
+- V11 `70/72`
+- V12 `71/72`
+- delta `+1`
+- ORDER_PROCESSING `34/36 -> 36/36`
+- ORDER_PACKING `36/36 -> 35/36`
+- one V12 `ORDER_PACKING -> ORDER_PROCESSING` stale-snippet error
 
 ---
 
-## 2026-08-31 — Mobile Architecture Cleanup v1
+## 2026-09-02 — V12 continuation QLoRA COMPLETE
 
-Branch: `codex/mobile-architecture-cleanup-v1` / PR #297 (draft). Exact code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286/1286 API tests; browser visual smoke remains pending.
+- Qwen3-8B / AMD Radeon RX 9060 XT
+- TRAIN 1296 / validation 360
+- 324/324 optimizer steps
+- LR `2e-5`, 1 epoch, grad_accum 4, max_seq 768
+- train loss `0.000222`, validation loss `0.000007`
+- V12 best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
+- parent V11 unchanged
+- frozen holdouts read `False`
+
+---
+
+## 2026-08-31 — Direct Gmail / mobile status
+
+Direct Gmail foundation remains disabled by default with no live provider cutover. Mobile cleanup code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286 API tests; browser visual smoke remains pending.
