@@ -20,6 +20,7 @@
     "nylas:discover": "tsx src/scripts/nylas-discover.ts",
     "eml:audit": "tsx src/scripts/eml-audit.ts",
     "identity:v9-real-gmail-shadow": "tsx src/scripts/v9-real-gmail-identity-shadow-audit.ts",
+    "eventmind:v11-gate-fixture": "tsx src/scripts/eventmind-v11-untouched-fixture-v1.ts",
     "eventmind:v11-gate": "tsx src/scripts/eventmind-v11-representation-gate.ts"
   },
   "dependencies": {
