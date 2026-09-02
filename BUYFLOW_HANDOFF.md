@@ -104,7 +104,7 @@ Local metrics:
 
 Interpretation: the validation set reproduces the exact confirmed weak boundary and leaves only two errors, so it is suitable as a before/after development metric. It is not a production holdout.
 
-## V12 STAGE 2C — RETENTION REPLAY MERGE PREPARED
+## V12 STAGE 2C — RETENTION REPLAY MERGE PREPARED / DISCOVERY FIXED
 
 Do **not** train on the 144 two-class hard rows alone. Preserve the other 16 lifecycle classes with deterministic V11 replay anchors.
 
@@ -126,11 +126,13 @@ Builder contract:
 - record source and merged hashes;
 - no training in this gate.
 
+First local attempt failed **before any training** with `V11_CORPUS_DISCOVERY_FAILED: train_matches=0 validation_matches=0`. The code was only scanning `local-data/lora-v11`; the only matching file there was the run `training_config.json`, so the original V11 corpus was outside that too-narrow subtree. The discovery code is now widened to safe project data roots (`local-data`, `data`, `training-data`, `artifacts`) while preserving the protected/holdout exclusions and exact 5760/576 + 320/32-per-event structural signatures. No model weights or corpora were modified by the failed run.
+
 ## NEXT ACTION
 
 1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate test worktree.
-2. Run `scripts/BuyFlow-V12-RETENTION-REPLAY.cmd`.
-3. Preserve the full `# BUYFLOW V12 RETENTION REPLAY V1` block and hashes.
+2. Rerun `scripts/BuyFlow-V12-RETENTION-REPLAY.cmd`.
+3. Preserve the full `# BUYFLOW V12 RETENTION REPLAY V1` block and hashes, or the expanded discovery diagnostics if it still cannot locate the original corpus.
 4. Only if status is `V12_RETENTION_REPLAY_V1_READY` with expected counts, prepare V12 continuation training from the unchanged V11 adapter as a separate child run.
 5. Keep hard-sibling VALIDATION rows out of training.
 6. Never train on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
