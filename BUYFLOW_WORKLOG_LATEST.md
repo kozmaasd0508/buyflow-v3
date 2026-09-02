@@ -1,52 +1,61 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 retention replay PASS; continuation training prepared
+## 2026-09-02 — V12 continuation QLoRA COMPLETE; post-train exact evaluator prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-The direct canonical V11 corpus resolver succeeded locally:
-- V11 corpus root: `local-data/training-v11-normalized-semantic`
-- train rows `5760`
-- validation rows `576`
-- signature `PASS_18_EVENTS_BALANCED`
-
-Retention merge result:
-- status `V12_RETENTION_REPLAY_V1_READY`
-- replay TRAIN `1152`
-- hard TRAIN `144`
-- merged TRAIN `1296`
-- replay validation `288`
-- hard validation `72`
-- merged validation `360`
-- TRAIN ORDER_PROCESSING `136`
-- TRAIN ORDER_PACKING `136`
-- every other TRAIN event `64`
-- validation ORDER_PROCESSING `52`
-- validation ORDER_PACKING `52`
-- every other validation event `16`
-- exact TRAIN/validation overlap `0`
-- frozen holdouts read `False`
+Local Stage 3 continuation training completed successfully:
+- status `V12_TRAINING_COMPLETE`
+- model `Qwen/Qwen3-8B`
+- GPU `AMD Radeon RX 9060 XT`
+- parent V11 adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+- parent V11 unchanged `True`
 - merged TRAIN SHA `81c4a92bcdb22d58215ee51f1fc193415ab72c54141d6e97d12dd3766f60f00a`
 - merged validation SHA `d2c6a2d60c9739d81c0afda7e051c558578e93933ee72e2f82fd66ba27bfbfd6`
-- training started `False`
+- TRAIN `1296`
+- validation `360`
+- all 18 events retained
+- epochs `1`
+- LR `2e-5`
+- grad_accum `4`
+- max_seq `768`
+- optimizer steps `324/324`
+- train loss `0.000222`
+- validation loss `0.000007`
+- best epoch `1`
+- training time `66.36 min`
+- GPU peak `10.13 GiB`
+- best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
+- adapter saved `True`
+- frozen holdouts read `False`
+- frozen108 trained `False`
+- BLIND50 trained `False`
 
-The prior recursive discovery failures/interruption happened before model loading/training and did not mutate V11 or V12 weights.
+Best adapter:
+`local-data/lora-v12/runs/20260902T085426Z-qwen3-8b-buyflow-v12-retention-robustness/best`
 
-Prepared Stage 3 continuation trainer:
-- `scripts/train-v12-retention-qwen-v1.py`
-- `scripts/run-v12-retention-train-v1.ps1`
-- `scripts/BuyFlow-V12-RETENTION-TRAIN.cmd`
-- `protocols/V12-STAGE3-RETENTION-CONTINUATION-TRAIN-V1-2026-09-02.md`
+Training itself PASS. Validation loss is not treated as proof of behavioral improvement.
 
-Trainer safety:
-- requires exact merged TRAIN/validation hashes above;
-- requires exact parent V11 best adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`;
-- loads V11 best adapter as trainable parent but saves a distinct V12 child run under `local-data/lora-v12/runs/...`;
-- verifies all 18 labels and exact class counts before training;
-- one conservative epoch, LR `2e-5`, grad_accum `4`, max_seq `768`, Qwen3-8B NF4;
-- no Fresh Blind/Input View Holdout/frozen108/BLIND50/locked-test read or training.
+Prepared the exact post-training before/after gate:
+- `scripts/v12-hard-siblings-posttrain-v1.py`
+- `scripts/run-v12-hard-siblings-posttrain-v1.ps1`
+- `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`
 
-Next: pull latest branch and run `scripts/BuyFlow-V12-RETENTION-TRAIN.cmd`. This next command **does perform real QLoRA training**. After successful save, evaluate exact behavior with constrained decoding; validation loss alone is not enough to claim improvement.
+The evaluator:
+- requires exact V12 best adapter SHA `5addcbce...f630`;
+- uses the same fixed 72 hard-sibling validation rows and exact corpus SHA;
+- uses constrained output;
+- does not train or mutate the corpus;
+- does not read frozen holdouts;
+- reports delta against the fixed V11 baseline `70/72`.
+
+Next: run `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`. Only after this exact score should we claim whether the target ORDER_PROCESSING/ORDER_PACKING boundary improved. Then run a separate all-18-label retention check before a brand-new untouched V12 holdout.
+
+---
+
+## 2026-09-02 — V12 retention replay PASS
+
+Canonical V11 corpus signature passed. Built merged retention corpus: 1152 V11 replay + 144 hard TRAIN = 1296; 288 V11 replay + 72 hard validation = 360; all 18 labels retained; exact overlap 0; frozen holdouts read False.
 
 ---
 
