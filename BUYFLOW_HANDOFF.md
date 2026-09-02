@@ -97,10 +97,10 @@ Safety behavior:
 - unavailable/OOM/timeout/HTTP/malformed/metadata mismatch/invalid model output all fail closed;
 - no identity authority is granted on any failure.
 
-Verified branch head including runtime/gate preparation:
-`3d03313750f842de89e439738eae6709cb41ff71`
+Final exact branch verification before local GPU gate:
+`af99492f4e852250b5a8fb05f1167336dd50c419`
 
-GitHub Actions CI #1165 / run `33635558885`:
+GitHub Actions CI #1167 / run `33635810471`:
 - EventMind Python runtime syntax PASS;
 - EventMind PowerShell launcher syntax PASS;
 - API typecheck PASS;
@@ -109,44 +109,39 @@ GitHub Actions CI #1165 / run `33635558885`:
 - mobile typecheck PASS;
 - mobile web build PASS.
 
-### Fresh MailLens/EventMind V11 gate — PREPARED, NOT GPU-RUN YET
+Temporary PR #304 was closed unmerged.
 
-A new local 90-case gate is prepared. It has 5 cases for each of the 18 labels and includes multilingual messages, stale subject/snippet traps, quoted old states and structured noise.
+### Fresh MailLens/EventMind V11 gate — PASS
 
-It explicitly rejects the already-viewed 180-case fixture SHA:
-`6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`.
+First untouched local GPU inference completed on 2026-09-02.
 
-Before inference the new fixture is SHA-256 frozen and stored only under Git-ignored `local-data/`. A previously consumed local fixture hash cannot be reused silently.
+Frozen fixture:
+- cases: **90**
+- 18 labels: **all represented**
+- fixture SHA-256: `4d70c774b332edbc7aabe19d754f51ac2e47762c3d17cc018f25d4786d91fd0e`
+- real V11 adapter SHA-256: `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
 
-Gate PASS requires:
-- all 18 labels;
-- >=90 cases;
-- invalid output 0;
-- incoherent output 0;
-- unsafe lifecycle promotion 0;
-- OTHER -> commerce FP 0;
-- exact >=90%;
-- macro event >=85%.
+First result, preserved unchanged:
+- Exact: **90/90 = 100.00%**
+- Macro event: **100.00%**
+- Invalid: **0**
+- Unsafe promotions: **0**
+- Gate: **PASS**
 
-### One command for the user's PC
+Local result directory:
+`local-data/eventmind-v11-representation-gate/runs/20260902T150955Z`
 
-Run:
+The fixture must **never be used for training** after this evaluation.
 
-`scripts/BuyFlow-EVENTMIND-V11-GATE.cmd`
-
-It creates the fresh fixture, starts the local V11 model, verifies model + actual adapter SHA + thinking OFF, runs the gate, prints PASS/FAIL, then stops the model server.
-
-It does **not** train V11 and does **not** enable production EventMind.
+Important: this is strong runtime/representation evidence for the pinned MailLens -> EventMind V11 path, but it is still a synthetic gate and is **not** complete real-mailbox generalization proof.
 
 Protocol: `protocols/EVENTMIND-AUDIT-2026-09-02.md`.
 
 Current status:
 - **EventMind identity/input boundary: PASS**
 - **EventMind V11 runtime safety code: PASS**
-- **Fresh V11 model gate: PREPARED / NOT RUN ON LOCAL GPU**
-- **Production EventMind: BLOCKED**
-
-Important: a synthetic 90-case PASS proves the new runtime/representation gate is healthy; it must not be overstated as complete real-mailbox generalization proof.
+- **Fresh V11 model gate: PASS — 90/90**
+- **Production EventMind: BLOCKED / OFF**
 
 ## DEPLOYMENT STATE
 
@@ -162,13 +157,12 @@ Still conservative:
 
 ## NEXT ACTION
 
-1. Keep PR #295 draft and all live/source/AI flags OFF.
-2. Run `scripts/BuyFlow-EVENTMIND-V11-GATE.cmd` on the user's Windows/WSL machine where the real V11 adapter and GPU exist.
-3. Preserve the first PASS/FAIL result unchanged; do not train on that fixture.
-4. Review that result before any EventMind enablement.
-5. If EventMind evidence is clean, continue the module audit with **TrustLink**.
-6. MailGate/RawVault production smokes are still required before source cutover.
-7. Do not promote V12.
+1. Preserve the EventMind first gate result unchanged and never train on that fixture.
+2. Keep PR #295 draft and all live/source/AI flags OFF.
+3. Continue the module audit with **TrustLink**.
+4. MailGate/RawVault production smokes are still required before source cutover.
+5. Do not enable production EventMind based only on this synthetic gate.
+6. Do not promote V12.
 
 ## RESUME CONTRACT
 
