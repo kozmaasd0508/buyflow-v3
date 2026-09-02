@@ -1,5 +1,38 @@
 # BuyFlow worklog latest
 
+## 2026-09-02 — MailLens audit completed; remediation required
+
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+MailLens was audited as the third module in the full BuyFlow audit.
+
+Verdict:
+- **MailLens code: BLOCKED pending remediation**
+- production remains blocked; all related live/source flags remain OFF.
+
+Primary blockers:
+- the versioned normalized MailLens document is currently created by the archive path, while deterministic parsing and universal grammar run earlier directly from `NormalizedEmail`, so there is no single canonical downstream representation;
+- plain-text-only messages can lose their full body because `normalizedEmailToDeterministicInput()` and `buildEmailDocumentV1()` use HTML when present and otherwise `snippet`, ignoring `bodyText`;
+- because direct-Gmail candidate gating relies on those consumers, a legitimate plain-text commerce email can be dropped before persistence when it has no Purchases label/schema/strong subject signal;
+- Gmail body assembly currently collects every nested `text/plain`/`text/html` MIME part, including real attachments/nested content, so attachment text can contaminate lifecycle semantics;
+- regex HTML conversion does not separate hidden/preheader text or quoted history from current visible content;
+- authentication normalization reads arbitrary `Authentication-Results`/ARC headers without trusted authserv-id/provider provenance and therefore cannot be hard trust evidence.
+
+Additional hardening required:
+- complete/bounded HTML entity parsing;
+- explicit semantic-text provenance + truncation flags;
+- useful microdata property/value extraction;
+- bounded JSON-LD traversal and provenance-aware compatibility parsing;
+- adversarial tests for plain-text-only commerce, hidden stale preheaders, quoted history, text/HTML attachments, auth-header spoofing, malformed/deep JSON-LD and truncation.
+
+Protocol:
+`protocols/MAILLENS-AUDIT-2026-09-02.md`
+
+Next: remediate MailLens, make the canonical document the input to candidate gating + deterministic/universal semantic consumers + future EventMind, run exact-head CI, then reassess for PASS before moving to EventMind.
+
+---
+
 ## 2026-09-02 — RawVault audit blockers remediated; code CI GREEN
 
 Branch: `codex/modern-email-source-foundation-v1`  
