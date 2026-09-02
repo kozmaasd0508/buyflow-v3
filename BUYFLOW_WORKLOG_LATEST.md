@@ -1,95 +1,70 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — Retention replay first attempt failed before training; discovery widened
+## 2026-09-02 — V12 retention replay PASS; continuation training prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-First local `BuyFlow-V12-RETENTION-REPLAY.cmd` attempt stopped before any training or corpus mutation:
+The direct canonical V11 corpus resolver succeeded locally:
+- V11 corpus root: `local-data/training-v11-normalized-semantic`
+- train rows `5760`
+- validation rows `576`
+- signature `PASS_18_EVENTS_BALANCED`
 
-`V11_CORPUS_DISCOVERY_FAILED: train_matches=0 validation_matches=0`
+Retention merge result:
+- status `V12_RETENTION_REPLAY_V1_READY`
+- replay TRAIN `1152`
+- hard TRAIN `144`
+- merged TRAIN `1296`
+- replay validation `288`
+- hard validation `72`
+- merged validation `360`
+- TRAIN ORDER_PROCESSING `136`
+- TRAIN ORDER_PACKING `136`
+- every other TRAIN event `64`
+- validation ORDER_PROCESSING `52`
+- validation ORDER_PACKING `52`
+- every other validation event `16`
+- exact TRAIN/validation overlap `0`
+- frozen holdouts read `False`
+- merged TRAIN SHA `81c4a92bcdb22d58215ee51f1fc193415ab72c54141d6e97d12dd3766f60f00a`
+- merged validation SHA `d2c6a2d60c9739d81c0afda7e051c558578e93933ee72e2f82fd66ba27bfbfd6`
+- training started `False`
 
-The diagnostic showed only:
-`local-data/lora-v11/runs/20260830T194827Z-qwen3-8b-buyflow-v11-normalized-semantic/training_config.json -> rows=0 labels=0`
+The prior recursive discovery failures/interruption happened before model loading/training and did not mutate V11 or V12 weights.
 
-Cause: the replay builder searched only `local-data/lora-v11`, but the original V11 5760/576 corpus is not stored in that narrow run subtree.
+Prepared Stage 3 continuation trainer:
+- `scripts/train-v12-retention-qwen-v1.py`
+- `scripts/run-v12-retention-train-v1.ps1`
+- `scripts/BuyFlow-V12-RETENTION-TRAIN.cmd`
+- `protocols/V12-STAGE3-RETENTION-CONTINUATION-TRAIN-V1-2026-09-02.md`
 
-Fix committed in `scripts/v12-build-retention-replay-v1.py`:
-- corpus discovery now searches safe project data roots: `local-data`, `data`, `training-data`, `artifacts` when present;
-- protected paths remain excluded (`fresh-blind`, `input-view`, holdout, frozen108, BLIND50, locked tests, teacher candidates);
-- a source is accepted only if it matches the exact original V11 structural signature: TRAIN 5760 with 320/event or validation 576 with 32/event across all 18 labels;
-- expanded diagnostics print every inspected candidate if discovery still fails;
-- no fallback guessing and no training if unique source files are not proven.
+Trainer safety:
+- requires exact merged TRAIN/validation hashes above;
+- requires exact parent V11 best adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`;
+- loads V11 best adapter as trainable parent but saves a distinct V12 child run under `local-data/lora-v12/runs/...`;
+- verifies all 18 labels and exact class counts before training;
+- one conservative epoch, LR `2e-5`, grad_accum `4`, max_seq `768`, Qwen3-8B NF4;
+- no Fresh Blind/Input View Holdout/frozen108/BLIND50/locked-test read or training.
 
-The failed attempt did not load/train the model and did not modify V11/V12 corpora.
-
-Next: pull latest branch and rerun the same retention command. If it still fails, preserve the expanded candidate list so the real original corpus location can be resolved without guessing.
-
----
-
-## 2026-09-02 — V12 hard-sibling baseline scored; retention replay prepared
-
-The unchanged V11 adapter + constrained decoder was scored on the 72 validation-only rows from hard-siblings-v2.
-
-Result:
-- corpus SHA `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`
-- exact `70/72 = 97.22%`
-- invalid `0`
-- wrong `2`
-- ORDER_PACKING `36/36`
-- ORDER_PROCESSING `34/36`
-
-By representation:
-- clean_plain `12/12`
-- html_body `12/12`
-- metadata_order_shift `11/12`
-- misleading_subject `11/12`
-- quoted_old_state `12/12`
-- stale_snippet `12/12`
-
-Wrong transitions:
-- `ORDER_PROCESSING -> ORDER_PACKING`: `2`
-
-Local metrics:
-`local-data/lora-v12/hard-siblings-v2/baseline-v11/runs/20260902T082059Z/metrics.json`
-
-Replay target if discovery succeeds:
-- deterministic V11 replay TRAIN: 64/event = 1152;
-- deterministic V11 replay validation: 16/event = 288;
-- add 144 hard TRAIN + 72 hard validation;
-- expected merged TRAIN 1296: processing 136, packing 136, other 16 labels 64 each;
-- expected merged validation 360: processing 52, packing 52, other 16 labels 16 each;
-- exact train/validation overlap zero;
-- no training in the merge step.
+Next: pull latest branch and run `scripts/BuyFlow-V12-RETENTION-TRAIN.cmd`. This next command **does perform real QLoRA training**. After successful save, evaluate exact behavior with constrained decoding; validation loss alone is not enough to claim improvement.
 
 ---
 
-## 2026-09-02 — V12 hard-sibling corpus gate PASS
+## 2026-09-02 — V12 hard-sibling baseline
 
-Deterministic corpus build: 216 rows = 144 TRAIN + 72 VALIDATION, six languages, six representation variants, balanced ORDER_PROCESSING/ORDER_PACKING, semantic-group overlap 0, frozen/stage1 row reuse false, privacy PASS, SHA `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`.
-
----
-
-## 2026-09-02 — Human teacher review complete
-
-14 synthetic/deidentified queue rows manually reviewed in-chat: seed labels 14/14 approved, 12/12 agreements correct, 2/2 disagreements were real Qwen errors. Both errors were ORDER_PROCESSING→ORDER_PACKING caused by stale/misleading subject overriding explicit current body evidence.
+Unchanged V11 + constrained decoder on 72 hard-sibling validation rows: `70/72 = 97.22%`, invalid 0. ORDER_PACKING 36/36, ORDER_PROCESSING 34/36; only wrong transition ORDER_PROCESSING→ORDER_PACKING x2.
 
 ---
 
-## 2026-09-01 — V12 student hard-case mine scored
+## 2026-09-02 — Human teacher + hard siblings
 
-144 new hard cases: V11 + constrained `142/144`, disagreements 2, unsafe 0; order_processing_vs_packing `22/24`, all other pilot families `24/24`.
-
----
-
-## 2026-09-01 — V12 full constrained-output confirmation scored
-
-Frozen diagnostic 180: `176/180`, invalid 0, unsafe 1, changed-from-valid-baseline 0. Frozen rows remain non-trainable.
+14-row human teacher review approved all seed labels; both student disagreements were true ORDER_PROCESSING→ORDER_PACKING errors. Built 216 new synthetic/deidentified hard siblings: 144 TRAIN + 72 validation, six languages, six representation variants, no frozen/stage1 row reuse.
 
 ---
 
-## 2026-09-01 — V11 untouched input-view holdout v2 scored
+## 2026-09-01 — Constrained-output baseline
 
-FULL `170/180`, SEMANTIC `169/180`, MINIMAL `168/180`; no training, holdout remains non-trainable.
+Frozen diagnostic 180 with unchanged V11 + constrained output: `176/180`, invalid 0, unsafe 1. Frozen rows remain non-trainable.
 
 ---
 
