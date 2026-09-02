@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
   "suite": "core",
-  "reason": "retry TestLab bootstrap after execution-policy-safe workflow fix",
+  "reason": "retry TestLab bootstrap after Node24 and npm-install alignment",
   "production_cutover_authorized": false
 }
