@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: EventMind V11 runtime syntax
+        run: python3 -m py_compile scripts/eventmind-v11-runtime.py
+
       - name: API typecheck
         run: npm run typecheck --workspace @buyflow/api
 
