@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { env, requireGmailPubSubPushConfig } from '../config.js';
+import { runDirectGmailMaintenance } from '../email/gmail-direct-maintenance.js';
 import { GooglePubSubOidcVerifier } from '../email/google-pubsub-oidc.js';
 import { parseGmailPubSubEnvelope } from '../email/gmail-push-notification.js';
 import {
@@ -8,6 +9,7 @@ import {
 } from '../email/gmail-sync-inbox.js';
 
 let cachedVerifier: GooglePubSubOidcVerifier | null = null;
+let maintenanceRunning = false;
 
 function verifier(): GooglePubSubOidcVerifier {
   if (cachedVerifier) return cachedVerifier;
@@ -34,6 +36,37 @@ function scheduleDrain(app: FastifyInstance, reason: 'push' | 'startup' | 'recov
       errorType: error instanceof Error ? error.name : 'UnknownError',
       reason,
     }, 'Gmail sync inbox drain failed; durable recovery will retry');
+  });
+}
+
+function scheduleMaintenance(app: FastifyInstance, reason: 'startup' | 'periodic') {
+  if (maintenanceRunning) return;
+  maintenanceRunning = true;
+  void runDirectGmailMaintenance().then((result) => {
+    if (
+      result.syncScanned > 0
+      || result.watchScanned > 0
+      || result.syncFailed > 0
+      || result.watchFailed > 0
+    ) {
+      app.log.info({
+        reason,
+        syncScanned: result.syncScanned,
+        syncSucceeded: result.syncSucceeded,
+        syncFailed: result.syncFailed,
+        resetRecovered: result.resetRecovered,
+        watchScanned: result.watchScanned,
+        watchRenewed: result.watchRenewed,
+        watchFailed: result.watchFailed,
+      }, 'Direct Gmail maintenance completed');
+    }
+  }).catch((error) => {
+    app.log.error({
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+      reason,
+    }, 'Direct Gmail maintenance failed; next periodic sweep will retry');
+  }).finally(() => {
+    maintenanceRunning = false;
   });
 }
 
@@ -97,12 +130,20 @@ export async function registerGmailPushRoutes(app: FastifyInstance) {
     }
   });
 
-  // Pub/Sub is only a wake-up mechanism. The DB inbox is the durability layer,
-  // so recover pending/retry/stale-processing rows even if the process crashed
-  // after acknowledging Google but before immediate processing started.
+  // Pub/Sub is the low-latency path, not the only recovery mechanism. Keep the
+  // durable inbox drain, plus a periodic cursor-based fallback sync and watch
+  // renewal so a missed push or expired watch cannot silently stop ingestion.
   if (env.BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED) {
     setImmediate(() => scheduleDrain(app, 'startup'));
-    const timer = setInterval(() => scheduleDrain(app, 'recovery'), 60_000);
-    timer.unref();
+    const recoveryTimer = setInterval(() => scheduleDrain(app, 'recovery'), 60_000);
+    recoveryTimer.unref();
+
+    const maintenanceStartup = setTimeout(() => scheduleMaintenance(app, 'startup'), 5_000);
+    maintenanceStartup.unref();
+    const maintenanceTimer = setInterval(
+      () => scheduleMaintenance(app, 'periodic'),
+      30 * 60_000,
+    );
+    maintenanceTimer.unref();
   }
 }
