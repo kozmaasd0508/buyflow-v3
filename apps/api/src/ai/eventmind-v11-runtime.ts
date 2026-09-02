@@ -179,9 +179,8 @@ export async function runEventMindV11(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
 
-  let response: Response;
   try {
-    response = await fetchImpl(config.endpoint, {
+    const response = await fetchImpl(config.endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -195,6 +194,47 @@ export async function runEventMindV11(
       }),
       signal: controller.signal,
     });
+
+    if (!response.ok) {
+      return { ok: false, reason: 'RUNTIME_HTTP_ERROR', detail: `HTTP ${response.status}` };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = await response.json();
+    } catch {
+      if (controller.signal.aborted) return { ok: false, reason: 'RUNTIME_TIMEOUT' };
+      return { ok: false, reason: 'INVALID_RUNTIME_RESPONSE' };
+    }
+
+    const runtime = runtimeResponse(parsed);
+    if (!runtime) return { ok: false, reason: 'INVALID_RUNTIME_RESPONSE' };
+    if (!metadataMatches(runtime, config)) {
+      return { ok: false, reason: 'RUNTIME_METADATA_MISMATCH' };
+    }
+
+    const decoded = decodeEventMindPredictionV1(runtime.output);
+    if (!decoded.ok) {
+      return { ok: false, reason: 'INVALID_MODEL_OUTPUT', detail: decoded.reason };
+    }
+    const semantic = eventMindSemanticOverrideFromV1(decoded.prediction);
+    if (!semantic.ok) {
+      return { ok: false, reason: 'INVALID_MODEL_OUTPUT', detail: semantic.reason };
+    }
+
+    return {
+      ok: true,
+      prediction: decoded.prediction,
+      override: semantic.override,
+      runtime: {
+        modelId: runtime.model_id,
+        adapterSha256: runtime.adapter_sha256.toLowerCase(),
+        runtimeVersion: runtime.runtime_version,
+        templateVersion: runtime.template_version,
+        thinkingEnabled: false,
+        deterministic: true,
+      },
+    };
   } catch (error) {
     if (controller.signal.aborted) return { ok: false, reason: 'RUNTIME_TIMEOUT' };
     return {
@@ -205,44 +245,4 @@ export async function runEventMindV11(
   } finally {
     clearTimeout(timer);
   }
-
-  if (!response.ok) {
-    return { ok: false, reason: 'RUNTIME_HTTP_ERROR', detail: `HTTP ${response.status}` };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = await response.json();
-  } catch {
-    return { ok: false, reason: 'INVALID_RUNTIME_RESPONSE' };
-  }
-
-  const runtime = runtimeResponse(parsed);
-  if (!runtime) return { ok: false, reason: 'INVALID_RUNTIME_RESPONSE' };
-  if (!metadataMatches(runtime, config)) {
-    return { ok: false, reason: 'RUNTIME_METADATA_MISMATCH' };
-  }
-
-  const decoded = decodeEventMindPredictionV1(runtime.output);
-  if (!decoded.ok) {
-    return { ok: false, reason: 'INVALID_MODEL_OUTPUT', detail: decoded.reason };
-  }
-  const semantic = eventMindSemanticOverrideFromV1(decoded.prediction);
-  if (!semantic.ok) {
-    return { ok: false, reason: 'INVALID_MODEL_OUTPUT', detail: semantic.reason };
-  }
-
-  return {
-    ok: true,
-    prediction: decoded.prediction,
-    override: semantic.override,
-    runtime: {
-      modelId: runtime.model_id,
-      adapterSha256: runtime.adapter_sha256.toLowerCase(),
-      runtimeVersion: runtime.runtime_version,
-      templateVersion: runtime.template_version,
-      thinkingEnabled: false,
-      deterministic: true,
-    },
-  };
 }
