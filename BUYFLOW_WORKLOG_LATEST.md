@@ -1,5 +1,65 @@
 # BuyFlow worklog latest
 
+## 2026-09-02 — RawVault audit blockers remediated; code CI GREEN
+
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+RawVault was audited as the second module in the full BuyFlow audit. The first pass found production blockers around retention enforcement, object/DB crash consistency, account-deletion cleanup, dedupe integrity and metadata immutability.
+
+Remediation:
+- immutable raw + normalized artifacts are fully prepared and hashed before object writes;
+- an opaque durable `email_source_archive_manifests` row is staged before any object write;
+- manifest identity uses SHA-256 + deterministic trace UUID and stores no user id, provider message id, subject or body;
+- source-row insert failure leaves a durable pending manifest for retry/orphan cleanup instead of untracked Storage objects;
+- same provider message id now verifies incoming raw SHA-256 against the stored raw hash and fails closed on mismatch;
+- empty raw bytes are rejected;
+- invalid or already-expired retention boundaries are rejected before object writes;
+- raw and normalized documents have separate explicit retention boundaries;
+- no retention duration is guessed: archive writes require explicit `BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS` and `BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS`;
+- periodic RawVault maintenance heals pending/committed races, deletes stale pending orphans, enforces raw/normalized retention independently, and removes archived objects after source/user cascade deletion;
+- DB triggers make archive object identity/hash/retention metadata immutable while deletion timestamps remain writable for audit;
+- private bucket and all source/live flags remain unchanged/off by default.
+
+Migration:
+`supabase/migrations/20260902115500_harden_email_source_archive_v1.sql`
+
+Regression coverage added/updated for:
+- opaque immutable archive keys/hashes;
+- retry idempotency;
+- explicit raw + normalized retention;
+- empty raw rejection;
+- expired/invalid retention rejection;
+- manifest stage/commit flow;
+- changed raw bytes under same provider id -> conflict;
+- stale orphan cleanup;
+- source/user deletion cleanup;
+- independent raw retention deletion;
+- pending manifest healing.
+
+Exact behavior code head:
+`9480e6d4e8d5c3e0a771b43671503cda593971c2`
+
+Temporary CI-only PR #296 / GitHub Actions CI #1147:
+- API typecheck PASS
+- API tests PASS
+- API build PASS
+- mobile typecheck PASS
+- mobile web build PASS
+
+PR #296 was closed unmerged after verification.
+
+Protocol:
+`protocols/RAWVAULT-AUDIT-REMEDIATION-2026-09-02.md`
+
+Verdict:
+- **RawVault code audit remediation: PASS**
+- **Production RawVault: BLOCKED** pending controlled staging migration, explicit retention policy configuration, live private-storage cleanup smoke and source enablement only for a controlled shadow account.
+
+Next: continue the module audit with **MailLens**. MailGate controlled real-Gmail smoke and RawVault controlled storage smoke remain separate production gates.
+
+---
+
 ## 2026-09-02 — MailGate direct-Gmail audit blockers remediated; code CI GREEN
 
 Branch: `codex/modern-email-source-foundation-v1`  
@@ -51,8 +111,6 @@ Verdict:
 - **MailGate code audit remediation: PASS**
 - **Production MailGate: BLOCKED pending controlled real-Gmail read-only shadow smoke**
 
-Next: keep flags OFF; run controlled `gmail:direct-shadow-smoke` only when staging Google/Supabase credentials are available. Continue module audit with RawVault in parallel; do not treat earlier source-archive CI as a completed RawVault audit.
-
 ---
 
 ## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke foundation
@@ -65,4 +123,4 @@ Historical verification before the 2026-09-02 audit remediation: CI #1132 GREEN 
 
 ## 2026-08-30 — Modern email source archive + rich normalizer v1
 
-Added `NormalizedEmailDocumentV1`, structured markup/link/auth extraction, immutable raw + normalized object archive with SHA-256/opaque keys, additive source metadata migration, and disabled-by-default archive wiring. Historical CI #1092 GREEN. RawVault/MailLens still require the new module-level audit before any PASS verdict.
+Added `NormalizedEmailDocumentV1`, structured markup/link/auth extraction, immutable raw + normalized object archive with SHA-256/opaque keys, additive source metadata migration, and disabled-by-default archive wiring. Historical CI #1092 GREEN.
