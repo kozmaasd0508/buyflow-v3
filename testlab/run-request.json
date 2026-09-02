@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "suite": "core",
+  "reason": "initial TestLab bootstrap verification",
+  "production_cutover_authorized": false
+}
