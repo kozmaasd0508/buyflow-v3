@@ -131,14 +131,13 @@ async function main() {
   console.log('==============================================================');
   console.log(`Frozen ID count: ${ids.length}`);
   console.log(`Frozen ID SHA256: ${idSetSha256}`);
-  console.log('Message content is not printed or stored in this report.');
+  console.log('Message content and raw Gmail ids are not printed or stored in this report.');
   console.log('');
 
   for (let index = 0; index < ids.length; index += 1) {
     const gmailId = ids[index]!;
     const row: any = {
       index: index + 1,
-      gmail_id: gmailId,
       gmail_id_sha256: sha256(gmailId),
       ok: false,
       prediction: null,
@@ -187,7 +186,7 @@ async function main() {
   }
 
   const report = {
-    suite: 'EVENTMIND_V11_REAL_GMAIL_BLIND120_PREDICTION_FREEZE_V1',
+    suite: 'EVENTMIND_V11_REAL_GMAIL_BLIND120_PREDICTION_FREEZE_V2',
     created_at: new Date().toISOString(),
     selection: {
       source: 'real_gmail_category_purchases',
@@ -212,6 +211,7 @@ async function main() {
       document_writes: 0,
       production_flags_enabled: false,
       message_content_persisted_in_report: false,
+      raw_gmail_ids_persisted_in_report: false,
     },
     results,
   };
