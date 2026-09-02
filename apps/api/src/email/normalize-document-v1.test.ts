@@ -19,7 +19,7 @@ function baseEmail(overrides: Partial<NormalizedEmail> = {}): NormalizedEmail {
   };
 }
 
-test('normalizes HTML, JSON-LD, schema microdata, links and auth before extraction', () => {
+test('normalizes HTML, JSON-LD, schema microdata, links and diagnostic auth before extraction', () => {
   const email = baseEmail({
     bodyHtml: `
       <html><body>
@@ -39,9 +39,13 @@ test('normalizes HTML, JSON-LD, schema microdata, links and auth before extracti
   const document = normalizeEmailDocumentV1(email, { traceId: 'trace-1' });
   assert.equal(document.traceId, 'trace-1');
   assert.match(document.bodyText ?? '', /Package/);
+  assert.equal(document.semanticText, document.bodyText);
+  assert.equal(document.normalization.bodyTextSource, 'html_derived');
   assert.equal(document.authentication.dkim, 'pass');
   assert.equal(document.authentication.spf, 'pass');
   assert.equal(document.authentication.dmarc, 'pass');
+  assert.equal(document.authentication.trusted, false);
+  assert.equal(document.authentication.source, 'authentication_results');
   assert.deepEqual(document.structuredData.map((record) => record.schemaType).sort(), ['Order', 'ParcelDelivery']);
   assert.ok(document.links.some((link) => link.href.includes('/orders/A-123')));
   assert.ok(document.links.every((link) => !link.href.startsWith('javascript:')));
@@ -60,9 +64,11 @@ test('prefers provider plain text and fails closed on conflicting auth verdicts'
 
   const document = normalizeEmailDocumentV1(email);
   assert.equal(document.bodyText, 'FULL PROVIDER PLAIN TEXT https://shop.example/order/1');
+  assert.equal(document.normalization.bodyTextSource, 'provider_plain');
   assert.equal(document.authentication.dkim, 'unknown');
   assert.equal(document.authentication.spf, 'unknown');
   assert.equal(document.authentication.dmarc, 'unknown');
+  assert.equal(document.authentication.trusted, false);
 });
 
 test('malformed or oversized structured data never becomes a parsed record', () => {
@@ -71,4 +77,41 @@ test('malformed or oversized structured data never becomes a parsed record', () 
   });
   const document = normalizeEmailDocumentV1(email);
   assert.deepEqual(document.structuredData, []);
+});
+
+test('hidden HTML preheader is preserved in raw HTML but excluded from MailLens text evidence', () => {
+  const email = baseEmail({
+    bodyHtml: `
+      <div style="display:none">DELIVERED stale preheader</div>
+      <p>Your order is still being processed.</p>
+    `,
+  });
+  const document = normalizeEmailDocumentV1(email);
+  assert.match(document.bodyHtml ?? '', /DELIVERED stale preheader/);
+  assert.doesNotMatch(document.bodyText ?? '', /DELIVERED stale preheader/);
+  assert.match(document.semanticText ?? '', /still being processed/i);
+  assert.equal(document.normalization.hiddenHtmlRemoved, true);
+});
+
+test('quoted history remains archived in bodyText but is excluded from semanticText', () => {
+  const email = baseEmail({
+    bodyText: [
+      'Current status: package is being prepared now.',
+      '----- Original Message -----',
+      'Old status: delivered.',
+    ].join('\n'),
+  });
+  const document = normalizeEmailDocumentV1(email);
+  assert.match(document.bodyText ?? '', /Old status: delivered/);
+  assert.match(document.semanticText ?? '', /being prepared now/);
+  assert.doesNotMatch(document.semanticText ?? '', /Old status: delivered/);
+  assert.equal(document.normalization.quotedHistoryDetected, true);
+});
+
+test('body truncation is explicit instead of silent', () => {
+  const email = baseEmail({ bodyText: 'A'.repeat(1500) });
+  const document = normalizeEmailDocumentV1(email, { maxBodyTextChars: 1000 });
+  assert.equal(document.bodyText?.length, 1000);
+  assert.equal(document.normalization.bodyTextTruncated, true);
+  assert.equal(document.normalization.semanticTextTruncated, true);
 });
