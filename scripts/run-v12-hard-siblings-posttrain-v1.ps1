@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $project = "$env:USERPROFILE\Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $distro = "Ubuntu-24.04"
-$runner = Join-Path $here "v12-hard-siblings-posttrain-v1.py"
+$runner = Join-Path $here "v12-hard-siblings-posttrain-resolved-v2.py"
 
 Write-Host ""
 Write-Host "==============================================================" -ForegroundColor Cyan
@@ -13,6 +13,7 @@ Write-Host "==============================================================" -For
 Write-Host ""
 Write-Host "Ez NEM tanit es NEM modositja a corpust." -ForegroundColor Green
 Write-Host "A 72 fix validation siblingen meri a most elmentett V12 best adaptert." -ForegroundColor Green
+Write-Host "A V12 LATEST pointert, metrics statust, adapter SHA-t es a valtozatlan V11 parent SHA-t ellenorzi." -ForegroundColor Green
 Write-Host "V11 baseline: 70/72. Frozen holdoutot nem olvas." -ForegroundColor Gray
 Write-Host ""
 
