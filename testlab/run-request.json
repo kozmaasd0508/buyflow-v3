@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
   "suite": "core",
-  "reason": "initial TestLab bootstrap verification",
+  "reason": "retry TestLab bootstrap after execution-policy-safe workflow fix",
   "production_cutover_authorized": false
 }
