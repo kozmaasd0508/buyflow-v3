@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeEmailDocumentV1 } from '../email/normalize-document-v1.js';
@@ -94,6 +94,29 @@ function stamp(): string {
   return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
 
+async function assertNotPreviouslyUsedLocally(runsRoot: string, fixtureSha256: string): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(runsRoot, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const manifest = JSON.parse(await readFile(resolve(runsRoot, entry.name, 'manifest.json'), 'utf-8')) as Record<string, unknown>;
+      if (manifest.fixtureSha256 === fixtureSha256) {
+        throw new Error('EVENTMIND_GATE_FIXTURE_ALREADY_USED_LOCALLY');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'EVENTMIND_GATE_FIXTURE_ALREADY_USED_LOCALLY') throw error;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+  }
+}
+
 async function main() {
   const fixtureArg = process.argv[2];
   if (!fixtureArg) {
@@ -111,11 +134,13 @@ async function main() {
     eventTypes: rows.map((row) => row.expected.event_type),
   });
 
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const runsRoot = resolve(repoRoot, 'local-data', 'eventmind-v11-representation-gate', 'runs');
+  await assertNotPreviouslyUsedLocally(runsRoot, fixtureSha256);
+
   const runtimeConfig = eventMindV11RuntimeConfigFromEnvironment();
   if (!runtimeConfig.enabled) throw new Error('EVENTMIND_V11_RUNTIME_DISABLED');
 
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
-  const runsRoot = resolve(repoRoot, 'local-data', 'eventmind-v11-representation-gate', 'runs');
   await mkdir(runsRoot, { recursive: true });
   const runDir = resolve(runsRoot, stamp());
   await mkdir(runDir, { recursive: false });
