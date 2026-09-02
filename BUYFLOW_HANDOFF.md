@@ -16,190 +16,150 @@
 - Direct Gmail runtime defaults OFF.
 - Source archive defaults OFF.
 - Mailgun source persistence defaults OFF.
-- No direct-Gmail/source migration has been applied live from this development flow.
-- No provider production cutover.
-- No raw customer email bodies/secrets committed to Git.
-- Pub/Sub/OAuth/provider cursor/archive state has zero Purchase authority.
+- EventMind V11 production runtime defaults OFF.
+- No provider production cutover or Purchase/Shipment/Document/Identity authority change has been made from this audit.
+- Raw/private email fixtures and local model results stay out of Git.
 
 ## MODULE AUDIT ORDER
 
 `MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`
 
-The full audit started on 2026-09-02 after the V12 promotion gate failed. V11 remains the better current semantic model; V12 is not promoted.
+V11 remains the reference semantic model. V12 is not promoted.
 
 ## MAILGATE
 
-Role: provider authorization/source acquisition only. It must read Gmail safely, maintain complete durable incremental sync, protect personal-mailbox privacy, and never create/link Purchase identity.
+Code remediation: **PASS**.
 
-Audit blockers were remediated on behavior head `e67b908e07d072e3737611eca4ee804d7d905c26`:
-- complete discovery snapshot before cursor commit;
-- detached Gmail text/html body hydration;
-- no fabricated 1970 timestamp;
-- bounded retry/concurrency;
-- expired-history automatic recovery snapshot;
-- automatic watch renewal;
-- periodic cursor fallback independent of Pub/Sub;
-- rejection of unexpected/broad Gmail OAuth authority.
+Implemented safe initial snapshot/cursor handling, detached Gmail body hydration, timestamp fail-closed behavior, bounded retry/concurrency, expired-history recovery, watch renewal/fallback sync and strict OAuth authority.
 
-CI #1142 on exact behavior head: API typecheck/tests/build + mobile typecheck/web build all PASS.
+Production MailGate: **BLOCKED** pending controlled real-Gmail read-only shadow smoke.
 
-Protocol: `protocols/MAILGATE-DIRECT-GMAIL-AUDIT-REMEDIATION-2026-09-02.md`
-
-Status:
-- **MailGate code audit remediation: PASS**
-- **Production MailGate: BLOCKED** pending controlled real-Gmail read-only shadow smoke.
+Behavior head: `e67b908e07d072e3737611eca4ee804d7d905c26`.
 
 ## RAWVAULT
 
-Role: immutable source evidence storage only. It owns exact raw provider/MIME bytes when available, versioned normalized source documents, integrity metadata, opaque object identities, retention and crash/orphan/account-deletion cleanup. It has zero Purchase/Identity authority.
+Code remediation: **PASS**.
 
-Behavior code head verified by CI:
-`9480e6d4e8d5c3e0a771b43671503cda593971c2`
+Immutable raw/normalized archive, SHA-256 identity, pre-write manifest, explicit retention, crash/orphan/account-deletion cleanup, raw-hash conflict detection and DB immutability are implemented.
 
-Current RawVault design:
-- artifacts are fully prepared/hashes computed before writes;
-- opaque durable `email_source_archive_manifests` row is staged before object writes;
-- manifest contains no user id, provider message id, subject or body;
-- raw + normalized object identities/hashes/retention are DB-immutable;
-- separate raw and normalized retention boundaries;
-- no retention duration is guessed: archive writes fail closed until both retention settings are explicit;
-- empty raw and expired/invalid retention fail before object writes;
-- duplicate provider message raw SHA mismatch fails closed;
-- pending manifests survive source-insert failure and provide a crash-safe retry/cleanup journal;
-- periodic maintenance heals commit races, deletes stale orphans, enforces raw/normalized retention independently, and removes archived objects after source/user deletion;
-- object/hash identity remains in audit metadata while deletion timestamps record cleanup;
-- bucket remains private and archive remains OFF by default.
+Production RawVault: **BLOCKED** pending controlled staging migration + explicit retention policy + real private-storage cleanup smoke.
 
-Migration:
-`supabase/migrations/20260902115500_harden_email_source_archive_v1.sql`
-
-Protocol:
-`protocols/RAWVAULT-AUDIT-REMEDIATION-2026-09-02.md`
-
-Temporary CI-only PR #296 / CI #1147 on exact behavior head:
-- API typecheck PASS
-- API tests PASS
-- API build PASS
-- mobile typecheck PASS
-- mobile web build PASS
-
-Status:
-- **RawVault code audit remediation: PASS**
-- **Production RawVault: BLOCKED** until controlled staging migration + explicit retention policy + real private-storage retention/orphan smoke.
+Behavior head: `9480e6d4e8d5c3e0a771b43671503cda593971c2`.
 
 ## MAILLENS
 
-Role: one provider-neutral evidence normalization contract between MailGate/RawVault and candidate gating, deterministic parsing, universal semantics and EventMind. MailLens may normalize representation but has zero identity authority.
+Code remediation: **PASS**.
 
-Initial blockers were remediated on exact behavior head:
-`f69195404831323f2783464a61f6f7b7435698b5`
+MailLens `normalized-email-document-v1.1` is the single semantic normalization boundary. It keeps bounded full `bodyText` plus current `semanticText`, excludes safely detected quoted history from current semantics, filters common hidden/preheader HTML, prevents attachment body injection and keeps header auth diagnostic-only (`trusted:false`).
 
-Current MailLens contract:
-- normalizer version `normalized-email-document-v1.1`;
-- full bounded `bodyText` and separate current `semanticText`;
-- explicit body-source/truncation/hidden/quoted-history metadata;
-- provider plain text preferred, HTML-derived text fallback, snippet last resort;
-- archived raw HTML stays preserved while legacy semantic consumers receive the MailLens semantic text view;
-- deterministic parser, legacy email document, Gmail privacy candidate gate, normalized inbound planning/universal grammar and diagnostic identity shadow are routed through the MailLens semantic view;
-- common hidden/preheader HTML is removed from derived semantic text without deleting source HTML;
-- strong quoted/reply history is excluded from current semantic text but remains in full body evidence;
-- Gmail text/HTML attachments cannot contaminate authored message body; detached real body parts still hydrate;
-- raw `Authentication-Results`/ARC/Received-SPF parsing is explicitly diagnostic-only (`trusted:false`) with source provenance;
-- JSON-LD audit is bounded/iterative; raw JSON parses first, compatibility entity decoding is provenance-tagged;
-- microdata itemtype is type-hint-only (`fieldEvidence:false`) until real bounded itemprop extraction exists;
-- numeric HTML entities are handled in semantic/link/structured-data compatibility paths.
+MailLens behavior head: `f69195404831323f2783464a61f6f7b7435698b5`.
 
-Protocol:
-`protocols/MAILLENS-AUDIT-2026-09-02.md`
+CI #1151 / run `33631564933`: API typecheck/tests/build + mobile typecheck/build PASS.
 
-Temporary CI-only PR #296 / GitHub Actions CI #1151, run `33631564933`, exact behavior head `f69195404831323f2783464a61f6f7b7435698b5`:
-- API typecheck PASS
-- API tests PASS
-- API build PASS
-- mobile typecheck PASS
-- mobile web build PASS
-
-PR #296 was closed unmerged after verification.
-
-Status:
-- **MailLens code audit remediation: PASS**
-- **Production source path: BLOCKED** behind controlled MailGate + RawVault staging/live smokes and explicit enablement.
-
-Important limitations remain fail-closed/non-authoritative:
-- arbitrary HTML/CSS is not claimed to be browser-perfect rendered;
-- type-only microdata is not field evidence;
-- header-derived email-auth verdicts are never hard trust evidence by themselves.
+Production source path remains blocked behind MailGate + RawVault live/staging gates.
 
 ## EVENTMIND
 
-Role: semantic commerce/lifecycle classification only: **“Mi történt ebben az emailben?”** It must not answer **“Melyik vásárláshoz tartozik?”**
+Role: answer **“Mi történt ebben az emailben?”**, never **“Melyik vásárláshoz tartozik?”**
 
-Current reference semantic model remains V11 Qwen3-8B QLoRA. V12 remains unpromoted because its untouched post-training holdout regressed versus V11:
-- V11: 105/108 = 97.22%
-- V12: 102/108 = 94.44%
-- V12 wins: 0; V11 wins: 3.
+### Identity/input boundary — PASS
 
-EventMind authority/input remediation is verified on exact behavior head:
-`1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`
+`apps/api/src/ai/eventmind-v1.ts` is the only production-side EventMind input/decoder contract.
 
-Implemented:
-- `apps/api/src/ai/eventmind-v1.ts` is the only production-side EventMind input/decoder contract;
-- EventMind consumes an already-normalized MailLens `NormalizedEmailDocumentV1`, never reparses raw provider body/HTML;
-- input uses current `semanticText`, sender/subject/time, truncation/quote flags and bounded lifecycle structured hints;
-- provider/thread ids, recipients, snippet, full body, raw HTML, raw headers/auth, folders, links, attachment metadata, raw archive refs, trace ids and internal Purchase candidate/id values are omitted;
-- identity-bearing structured keys/URLs are removed while lifecycle status/state hints may remain;
-- prompt explicitly denies Purchase create/link/merge/select/identify authority;
-- fixed 18-event taxonomy is shared and locked;
-- decoder accepts exactly `is_commerce` + `event_type`; any extra field invalidates the response;
-- decoder rejects invalid event values and commerce/event incoherence;
-- shared semantic overlay accepts/returns semantics + provenance only, never identity;
-- legacy V9 semantic overlay remains backwards compatible through the shared contract;
-- existing Purchase Identity Graph boundary remains authoritative: all order/tracking/invoice/payment/merchant/carrier identity stays deterministic, hard conflicts remain REVIEW/PENDING, and NEW_PURCHASE requires separate deterministic purchase-creation authority.
+- input comes from MailLens;
+- current `semanticText` is used instead of stale quoted history;
+- fixed 18-event taxonomy;
+- prompt denies Purchase identity authority;
+- decoder accepts exactly `is_commerce` + `event_type`;
+- extra identity output such as `purchase_id` invalidates the whole response;
+- semantic overlay carries only event semantics + model provenance;
+- Purchase Identity Graph v2 remains the sole identity/linking/creation authority.
 
-Regression coverage proves stale quoted history/snippet/raw/provider/archive/attachment/identity values cannot enter the EventMind contract, and attempted model identity output is rejected.
+Initial boundary behavior head: `1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`.
 
-Protocol:
-`protocols/EVENTMIND-AUDIT-2026-09-02.md`
+CI #1152 / run `33632992124` PASS. Temporary PR #303 closed unmerged.
 
-Temporary CI-only PR #303 / GitHub Actions CI #1152, run `33632992124`, exact behavior head `1b7b3c29d40a2f9f62f6cecd73df5affe35d38e6`:
-- API typecheck PASS
-- API tests PASS
-- API build PASS
-- mobile typecheck PASS
-- mobile web build PASS
+### V11 runtime safety — IMPLEMENTED, STILL OFF
 
-PR #303 was closed unmerged after verification.
+Added a pinned local V11 runtime:
+- `apps/api/src/ai/eventmind-v11-runtime.ts`
+- `scripts/eventmind-v11-runtime.py`
 
-Status:
-- **EventMind code contract / identity-authority remediation: PASS**
-- **Production EventMind runtime: BLOCKED**
+Safety behavior:
+- EventMind runtime flag defaults OFF;
+- exact adapter SHA-256 required when enabled;
+- model must report `Qwen/Qwen3-8B`;
+- runtime/template versions must match;
+- thinking must be explicitly OFF; no silent compatibility fallback;
+- deterministic generation (`do_sample=false`, max 48 new tokens);
+- local server checks V11 training completion + holdout-isolation flags and calculates the real adapter SHA;
+- timeout covers request + response parsing;
+- unavailable/OOM/timeout/HTTP/malformed/metadata mismatch/invalid model output all fail closed;
+- no identity authority is granted on any failure.
 
-Production blockers before any Qwen enablement:
-- actual V11 runtime must be wired only through `buildEventMindInputV1(...)` + `decodeEventMindPredictionV1(...)`;
-- exact base model/tokenizer/template and adapter SHA-256 must be pinned; no mutable `LATEST.txt` authority;
-- thinking must be explicitly disabled with no silent compatibility fallback;
-- model unavailable/OOM/timeout/invalid output must fail closed with no semantic or identity authority escalation;
-- a new untouched representation gate must validate the exact MailLens/EventMind V1 input because the already-used 180-case SemanticEmailView A/B is diagnostic only;
-- observability must record model/adapter/contract versions, latency and failure/event metadata without raw private email bodies.
+Runtime safety behavior head before documentation commits:
+`a3539e08927b9d6013c0b15ff6b4222df8c26211`.
+
+### Fresh MailLens/EventMind V11 gate — PREPARED, NOT GPU-RUN YET
+
+A new local 90-case gate is prepared. It has 5 cases for each of the 18 labels and includes multilingual messages, stale subject/snippet traps, quoted old states and structured noise.
+
+It explicitly rejects the already-viewed 180-case fixture SHA:
+`6cc9775867862bec4c90d8037ccd674db4b0308d8e2470c164695fa317a55251`.
+
+Before inference the new fixture is SHA-256 frozen and stored only under Git-ignored `local-data/`. A previously consumed local fixture hash cannot be reused silently.
+
+Gate PASS requires:
+- all 18 labels;
+- >=90 cases;
+- invalid output 0;
+- incoherent output 0;
+- unsafe lifecycle promotion 0;
+- OTHER -> commerce FP 0;
+- exact >=90%;
+- macro event >=85%.
+
+### One command for the user's PC
+
+Run:
+
+`scripts/BuyFlow-EVENTMIND-V11-GATE.cmd`
+
+It creates the fresh fixture, starts the local V11 model, verifies model + actual adapter SHA + thinking OFF, runs the gate, prints PASS/FAIL, then stops the model server.
+
+It does **not** train V11 and does **not** enable production EventMind.
+
+Protocol: `protocols/EVENTMIND-AUDIT-2026-09-02.md`.
+
+Current status:
+- **EventMind identity/input boundary: PASS**
+- **EventMind V11 runtime safety code: PASS once exact final branch CI is recorded**
+- **Fresh V11 model gate: PREPARED / NOT RUN ON LOCAL GPU**
+- **Production EventMind: BLOCKED**
+
+Important: a synthetic 90-case PASS proves the new runtime/representation gate is healthy; it must not be overstated as complete real-mailbox generalization proof.
 
 ## DEPLOYMENT STATE
 
 Still conservative:
-- direct Gmail runtime OFF by default;
-- source archive OFF by default;
-- Mailgun source persistence OFF by default;
-- EventMind/Qwen production runtime not wired/enabled;
-- new migrations committed only, not applied live here;
-- no Google OAuth credentials/archive secrets/customer raw email committed;
-- no Purchase/Shipment/Document/Identity authority change.
+- direct Gmail runtime OFF;
+- source archive OFF;
+- Mailgun source persistence OFF;
+- EventMind V11 runtime OFF;
+- no live migration applied from this flow;
+- no provider cutover;
+- no AI identity authority;
+- no Purchase/Shipment/Document/Identity production authority change.
 
 ## NEXT ACTION
 
 1. Keep PR #295 draft and all live/source/AI flags OFF.
-2. Controlled Gmail/RawVault staging smokes remain required before production source cutover.
-3. Prepare the exact **V11 runtime integration + untouched MailLens/EventMind V1 representation gate** without consuming frozen evaluation data for tuning.
-4. After EventMind runtime evidence is clean, continue module audit with **TrustLink**.
-5. Do not promote V12; V11 remains the reference model unless new untouched evidence justifies a future version.
+2. Run `scripts/BuyFlow-EVENTMIND-V11-GATE.cmd` on the user's Windows/WSL machine where the real V11 adapter and GPU exist.
+3. Preserve the first PASS/FAIL result unchanged; do not train on that fixture.
+4. Review that result before any EventMind enablement.
+5. If EventMind evidence is clean, continue the module audit with **TrustLink**.
+6. MailGate/RawVault production smokes are still required before source cutover.
+7. Do not promote V12.
 
 ## RESUME CONTRACT
 
