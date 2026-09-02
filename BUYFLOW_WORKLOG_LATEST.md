@@ -1,107 +1,87 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 hard-sibling corpus gate PASS; pre-train V11 baseline prepared
+## 2026-09-02 — V12 hard-sibling baseline scored; retention replay prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-The first deterministic hard-sibling/representation-robustness corpus build completed locally after the manual human-teacher verdict.
+The unchanged V11 adapter + constrained decoder was scored on the 72 validation-only rows from hard-siblings-v2.
 
 Result:
-- status `V12_HARD_SIBLINGS_V2_CORPUS_READY`
-- rows `216`
-- TRAIN `144`
-- VALIDATION `72`
-- languages `hu,en,de,pl,fr,es`
-- events `ORDER_PROCESSING,ORDER_PACKING`
-- representation variants `6`
-- semantic-group split overlap `0`
-- frozen/stage1 row reuse `False`
-- privacy gate `PASS_SYNTHETIC_DEIDENTIFIED`
-- SHA-256 `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`
-- training started `False`
+- corpus SHA `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`
+- exact `70/72 = 97.22%`
+- invalid `0`
+- wrong `2`
+- ORDER_PACKING `36/36`
+- ORDER_PROCESSING `34/36`
 
-Local corpus:
-`local-data/lora-v12/hard-siblings-v2/`
+By representation:
+- clean_plain `12/12`
+- html_body `12/12`
+- metadata_order_shift `11/12`
+- misleading_subject `11/12`
+- quoted_old_state `12/12`
+- stale_snippet `12/12`
 
-The generator produced new sibling rows only; it does not copy `V12C1-0002`, `V12C1-0018`, any Input View Holdout row, Fresh Blind row, frozen108, or BLIND50.
+Wrong transitions:
+- `ORDER_PROCESSING -> ORDER_PACKING`: `2`
 
-Before changing weights, prepared a pre-train V11 baseline on only the 72 sibling VALIDATION rows:
-- `scripts/v12-hard-siblings-baseline-v2.py`
-- `scripts/run-v12-hard-siblings-baseline-v2.ps1`
-- `scripts/BuyFlow-V12-HARD-SIBLINGS-BASELINE.cmd`
+Local metrics:
+`local-data/lora-v12/hard-siblings-v2/baseline-v11/runs/20260902T082059Z/metrics.json`
 
-The runner verifies the corpus SHA, uses unchanged V11 + constrained output, records accuracy by label/language/representation variant and wrong transitions, does not train, does not mutate the corpus, and does not read frozen holdouts.
+Interpretation: the validation split reproduces the exact human-confirmed weak boundary. There is only a two-case headroom on this development set, so training must be conservative and must protect the other 16 lifecycle labels.
 
-Next: run the 72-case baseline and preserve the first result. Then construct the V12 training merge with V11 replay/retention anchors plus the 144 new hard-sibling TRAIN rows. Do not fine-tune on the two-class hard corpus alone because retention of the other 16 lifecycle classes must be protected.
+Prepared retention/replay merge gate rather than training on the two-class hard corpus alone:
+- `scripts/v12-build-retention-replay-v1.py`
+- `scripts/run-v12-retention-replay-v1.ps1`
+- `scripts/BuyFlow-V12-RETENTION-REPLAY.cmd`
+- `protocols/V12-STAGE2-RETENTION-REPLAY-V1-2026-09-02.md`
+
+Replay contract:
+- locate only original V11 TRAIN 5760 (320/event) and validation 576 (32/event);
+- protected/frozen path families are excluded from corpus discovery;
+- deterministic V11 replay TRAIN: 64/event = 1152;
+- deterministic V11 replay validation: 16/event = 288;
+- add 144 hard TRAIN + 72 hard validation;
+- expected merged TRAIN 1296: processing 136, packing 136, other 16 labels 64 each;
+- expected merged validation 360: processing 52, packing 52, other 16 labels 16 each;
+- exact train/validation overlap must be zero;
+- record original-source and merged-file hashes;
+- no training in this step.
+
+Next: run `BuyFlow-V12-RETENTION-REPLAY.cmd`. Only after a clean `V12_RETENTION_REPLAY_V1_READY` result should a separate V12 child-adapter continuation run be prepared from V11.
 
 ---
 
-## 2026-09-02 — Human teacher review complete; V12 hard-sibling corpus prepared
+## 2026-09-02 — V12 hard-sibling corpus gate PASS
 
-The 14-row Stage 1 synthetic/deidentified teacher queue was reviewed manually in-chat rather than through an external API.
+Deterministic corpus build: 216 rows = 144 TRAIN + 72 VALIDATION, six languages, six representation variants, balanced ORDER_PROCESSING/ORDER_PACKING, semantic-group overlap 0, frozen/stage1 row reuse false, privacy PASS, SHA `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`.
 
-Verdict:
-- reviewed `14/14`
-- seed labels approved `14/14`
-- agreement audits `12/12` student correct
-- disagreements `2/2` student wrong, seed correct
-- no external teacher API call
-- no training
+---
 
-Confirmed student errors:
-- `V12C1-0002`: expected ORDER_PROCESSING, student ORDER_PACKING
-- `V12C1-0018`: expected ORDER_PROCESSING, student ORDER_PACKING
+## 2026-09-02 — Human teacher review complete
 
-Both share the same failure: stale/misleading subject claims packing while the current body explicitly says processing and that packing has not started.
-
-Recorded protocol: `protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`.
+14 synthetic/deidentified queue rows manually reviewed in-chat: seed labels 14/14 approved, 12/12 agreements correct, 2/2 disagreements were real Qwen errors. Both errors were ORDER_PROCESSING→ORDER_PACKING caused by stale/misleading subject overriding explicit current body evidence.
 
 ---
 
 ## 2026-09-01 — V12 student hard-case mine scored
 
-First V12 Stage 1 mine on 144 new synthetic/deidentified cases with unchanged V11 + constrained output:
-- exact `142/144`
-- disagreements `2`
-- unsafe `0`
-- teacher queue `14`
-- `order_processing_vs_packing` `22/24`
-- all other pilot families `24/24`
-
-Local run: `local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`.
+144 new hard cases: V11 + constrained `142/144`, disagreements 2, unsafe 0; order_processing_vs_packing `22/24`, all other pilot families `24/24`.
 
 ---
 
 ## 2026-09-01 — V12 full constrained-output confirmation scored
 
-Full 180 constrained run on unchanged V11 adapter: `176/180` exact, invalid `0`, unsafe `1`, changed-from-valid-baseline `0`. All six formerly-invalid ORDER_PROCESSING rows became exact. Four real semantic errors remained. Frozen holdout remains non-trainable.
-
----
-
-## 2026-09-01 — V12 constrained output invalid-only PASS
-
-Six previously-invalid FULL rows were rerun with constrained output on unchanged V11 weights: `6/6` exact, invalid `0`, unsafe `0`.
-
----
-
-## 2026-09-01 — V12 teacher + robustness foundation prepared
-
-Direction: constrained output first, then new teacher-reviewed hard-example siblings, representation-invariance augmentation, V12 training only on approved new data, and a brand-new untouched holdout after training.
-
----
-
-## 2026-09-01 — Input-view causality v1 scored
-
-Causality testing showed dummy/neutral prompt additions could flip the same lifecycle decision. Do not treat random technical fields as lifecycle evidence based on one row. Keep FULL normalized input as V11 baseline and train representation robustness separately.
+Frozen diagnostic 180: `176/180`, invalid 0, unsafe 1, changed-from-valid-baseline 0. Frozen rows remain non-trainable.
 
 ---
 
 ## 2026-09-01 — V11 untouched input-view holdout v2 scored
 
-FULL `170/180`, SEMANTIC `169/180`, MINIMAL `168/180`; frozen SHA `8ef40626b99b5ff1bc567829f484f74f6b539320ec13f9728bba648ef605b352`. No training; holdout remains non-trainable.
+FULL `170/180`, SEMANTIC `169/180`, MINIMAL `168/180`; no training, holdout remains non-trainable.
 
 ---
 
 ## 2026-08-31 — Direct Gmail / mobile status
 
-Direct Gmail/OAuth/history/watch/Pub/Sub foundation remains behind disabled-by-default flags with no live provider cutover. Mobile cleanup code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286 API tests; browser visual smoke remains pending.
+Direct Gmail foundation remains disabled by default with no live provider cutover. Mobile cleanup code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286 API tests; browser visual smoke remains pending.
