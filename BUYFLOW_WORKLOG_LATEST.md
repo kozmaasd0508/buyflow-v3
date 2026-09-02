@@ -1,8 +1,32 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — V12 hard-sibling baseline scored; retention replay prepared
+## 2026-09-02 — Retention replay first attempt failed before training; discovery widened
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
+
+First local `BuyFlow-V12-RETENTION-REPLAY.cmd` attempt stopped before any training or corpus mutation:
+
+`V11_CORPUS_DISCOVERY_FAILED: train_matches=0 validation_matches=0`
+
+The diagnostic showed only:
+`local-data/lora-v11/runs/20260830T194827Z-qwen3-8b-buyflow-v11-normalized-semantic/training_config.json -> rows=0 labels=0`
+
+Cause: the replay builder searched only `local-data/lora-v11`, but the original V11 5760/576 corpus is not stored in that narrow run subtree.
+
+Fix committed in `scripts/v12-build-retention-replay-v1.py`:
+- corpus discovery now searches safe project data roots: `local-data`, `data`, `training-data`, `artifacts` when present;
+- protected paths remain excluded (`fresh-blind`, `input-view`, holdout, frozen108, BLIND50, locked tests, teacher candidates);
+- a source is accepted only if it matches the exact original V11 structural signature: TRAIN 5760 with 320/event or validation 576 with 32/event across all 18 labels;
+- expanded diagnostics print every inspected candidate if discovery still fails;
+- no fallback guessing and no training if unique source files are not proven.
+
+The failed attempt did not load/train the model and did not modify V11/V12 corpora.
+
+Next: pull latest branch and rerun the same retention command. If it still fails, preserve the expanded candidate list so the real original corpus location can be resolved without guessing.
+
+---
+
+## 2026-09-02 — V12 hard-sibling baseline scored; retention replay prepared
 
 The unchanged V11 adapter + constrained decoder was scored on the 72 validation-only rows from hard-siblings-v2.
 
@@ -28,27 +52,14 @@ Wrong transitions:
 Local metrics:
 `local-data/lora-v12/hard-siblings-v2/baseline-v11/runs/20260902T082059Z/metrics.json`
 
-Interpretation: the validation split reproduces the exact human-confirmed weak boundary. There is only a two-case headroom on this development set, so training must be conservative and must protect the other 16 lifecycle labels.
-
-Prepared retention/replay merge gate rather than training on the two-class hard corpus alone:
-- `scripts/v12-build-retention-replay-v1.py`
-- `scripts/run-v12-retention-replay-v1.ps1`
-- `scripts/BuyFlow-V12-RETENTION-REPLAY.cmd`
-- `protocols/V12-STAGE2-RETENTION-REPLAY-V1-2026-09-02.md`
-
-Replay contract:
-- locate only original V11 TRAIN 5760 (320/event) and validation 576 (32/event);
-- protected/frozen path families are excluded from corpus discovery;
+Replay target if discovery succeeds:
 - deterministic V11 replay TRAIN: 64/event = 1152;
 - deterministic V11 replay validation: 16/event = 288;
 - add 144 hard TRAIN + 72 hard validation;
 - expected merged TRAIN 1296: processing 136, packing 136, other 16 labels 64 each;
 - expected merged validation 360: processing 52, packing 52, other 16 labels 16 each;
-- exact train/validation overlap must be zero;
-- record original-source and merged-file hashes;
-- no training in this step.
-
-Next: run `BuyFlow-V12-RETENTION-REPLAY.cmd`. Only after a clean `V12_RETENTION_REPLAY_V1_READY` result should a separate V12 child-adapter continuation run be prepared from V11.
+- exact train/validation overlap zero;
+- no training in the merge step.
 
 ---
 
