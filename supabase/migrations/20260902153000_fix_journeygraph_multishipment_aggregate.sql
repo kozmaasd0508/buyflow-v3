@@ -225,7 +225,11 @@ begin
         and current_state in ('ready_for_pickup', 'delivered') then 'processing'
       else current_state
     end,
-    shipped_at = coalesce(v_aggregate_shipped_at, shipped_at),
+    shipped_at = case
+      when shipped_at is null then v_aggregate_shipped_at
+      when v_aggregate_shipped_at is null then shipped_at
+      else least(shipped_at, v_aggregate_shipped_at)
+    end,
     delivered_at = case
       when v_aggregate_state <> 'delivered' then null
       when v_delivered_timestamp_count <> v_shipment_count then null
