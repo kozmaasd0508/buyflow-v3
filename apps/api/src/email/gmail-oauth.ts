@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+const GMAIL_SCOPE_PREFIX = 'https://www.googleapis.com/auth/gmail.';
 
 type FetchLike = typeof fetch;
 
@@ -62,6 +63,12 @@ function normalizeScopes(value: string | undefined): string[] {
 export function assertGmailReadonlyScope(scopes: string[]): void {
   if (!scopes.includes(GMAIL_READONLY_SCOPE)) {
     throw new Error('Google OAuth credential is missing required Gmail readonly scope');
+  }
+  const unexpectedGmailScopes = scopes.filter(
+    (scope) => scope.startsWith(GMAIL_SCOPE_PREFIX) && scope !== GMAIL_READONLY_SCOPE,
+  );
+  if (unexpectedGmailScopes.length > 0) {
+    throw new Error('Google OAuth credential contains unexpected Gmail authority');
   }
 }
 
