@@ -1,5 +1,6 @@
 import type { NormalizedEmailDocumentV1 } from '../email/document-v1.js';
-import { semanticEventOverrideFromPrediction, type SemanticEventType } from '../purchase-identity-v2/semantic-event-overlay.js';
+import type { SemanticEventOverride } from '../purchase-identity-v2/extraction-v2-adapter.js';
+import { semanticEventOverrideFromPrediction } from '../purchase-identity-v2/semantic-event-overlay.js';
 import {
   buildEventMindInputV1,
   decodeEventMindPredictionV1,
@@ -72,12 +73,7 @@ export type EventMindV13Result =
   | {
       ok: true;
       prediction: EventMindPredictionV1;
-      override: {
-        eventType: SemanticEventType;
-        semanticLabel: SemanticEventType;
-        sourceId: string;
-        sourceVersion: string;
-      };
+      override: SemanticEventOverride;
       runtime: {
         modelId: string;
         adapterSha256: string;
