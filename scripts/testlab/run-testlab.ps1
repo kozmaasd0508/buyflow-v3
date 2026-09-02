@@ -72,17 +72,13 @@ if($Suite -in @('full','identity')){
 }
 
 if($Suite -in @('full','eventmind')){
-  $secretNames=@('BUYFLOW_TESTLAB_GMAIL_CLIENT_ID','BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET','BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN')
-  $missingSecrets=@($secretNames | Where-Object {[string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))})
   $real120Ids=Join-Path $privateRoot 'real120-ids.json'
-  if($missingSecrets.Count -gt 0){
-    Add-Stage 'eventmind-real120' 'BLOCKED' ('GitHub TestLab secrets not configured: ' + ($missingSecrets -join ', ')) 0
-  } elseif(-not (Test-Path -LiteralPath $real120Ids)){
+  if(-not (Test-Path -LiteralPath $real120Ids)){
     Add-Stage 'eventmind-real120' 'BLOCKED' ('local frozen id set not found: ' + $real120Ids) 0
   } elseif(-not (Test-Path -LiteralPath (Join-Path $modelRoot 'local-data\lora-v11\LATEST.txt'))){
     Add-Stage 'eventmind-real120' 'BLOCKED' 'local V11 model not found on runner' 0
   } else {
-    & (Join-Path $PSScriptRoot 'run-eventmind-real120.ps1') -ReportDir $ReportDir
+    & (Join-Path $PSScriptRoot 'run-eventmind-real120-local-oauth.ps1') -ReportDir $ReportDir
     $realExit=$LASTEXITCODE
     if($realExit -eq 0){Add-Stage 'eventmind-real120' 'PASS' '120 real Gmail predictions completed' 0}else{Add-Stage 'eventmind-real120' 'FAIL' "runner exit $realExit" $realExit}
   }
