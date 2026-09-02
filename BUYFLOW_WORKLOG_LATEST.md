@@ -1,42 +1,61 @@
 # BuyFlow worklog latest
 
-## 2026-09-01 — V12 student hard-case mine scored; independent Sol teacher review prepared
+## 2026-09-02 — Human teacher review complete; V12 hard-sibling corpus prepared
 
 Branch: `codex/v12-teacher-robustness-foundation` / PR #302 (draft)
 
-Completed the first V12 Stage 1 student mine on 144 new synthetic/deidentified hard-boundary cases using the unchanged V11 adapter plus constrained output.
+The 14-row Stage 1 synthetic/deidentified teacher queue was reviewed manually in-chat rather than through an external API.
 
-Result:
-- candidate SHA-256: `05d0ca898b2ccf5f75897d2930a500f960e29b1591a0ec1bb0c8996accae08fa`
-- student exact vs seed: `142/144`
-- disagreements: `2`
-- unsafe: `0`
-- teacher queue: `14` = 2 disagreements + 12 agreement audits
-- `order_processing_vs_packing`: `22/24`, 2 disagreements
-- every other pilot family: `24/24`
-- no teacher API call and no training in this run
+Verdict:
+- reviewed `14/14`
+- seed labels approved `14/14`
+- agreement audits `12/12` student correct
+- disagreements `2/2` student wrong, seed correct
+- no external teacher API call
+- no training
+
+Confirmed student errors:
+- `V12C1-0002`: expected ORDER_PROCESSING, student ORDER_PACKING
+- `V12C1-0018`: expected ORDER_PROCESSING, student ORDER_PACKING
+
+Both have the same underlying failure: stale/misleading subject claims packing, while the current body explicitly says processing and explicitly says packing has not started. This occurred in Hungarian and French, indicating a general evidence-priority problem rather than one-language wording noise.
+
+Recorded protocol:
+`protocols/V12-STAGE1-HUMAN-TEACHER-VERDICT-2026-09-02.md`
+
+Prepared Stage 2 corpus generator instead of copying the two error rows:
+- `scripts/v12-hard-siblings-v2.py`
+- `scripts/run-v12-hard-siblings-v2.ps1`
+- `scripts/BuyFlow-V12-HARD-SIBLINGS-V2.cmd`
+
+Planned first corpus gate:
+- 216 new synthetic/deidentified rows
+- 144 TRAIN candidates / 72 VALIDATION
+- hu/en/de/pl/fr/es
+- ORDER_PROCESSING and ORDER_PACKING balanced
+- validation separated by wording family, not just row hash
+- six representation variants: clean, misleading subject, HTML body, stale snippet, quoted old state, metadata/order shift
+- no `IVH2-` / `V12C1-` / old candidate row reuse
+- no frozen fixture hash reuse
+- semantic-group train/validation overlap must be zero
+- no training in this step
+
+Next: run `BuyFlow-V12-HARD-SIBLINGS-V2.cmd`, preserve corpus SHA and validation summary, then build the V12 training merge only if corpus gate passes.
+
+---
+
+## 2026-09-01 — V12 student hard-case mine scored
+
+First V12 Stage 1 mine on 144 new synthetic/deidentified cases with unchanged V11 + constrained output:
+- exact `142/144`
+- disagreements `2`
+- unsafe `0`
+- teacher queue `14`
+- `order_processing_vs_packing` `22/24`
+- all other pilot families `24/24`
 
 Local run:
 `local-data/lora-v12/teacher-candidates-v1/runs/20260901T193717Z/`
-
-Prepared the next independent teacher gate:
-- `scripts/v12-teacher-review-openai-v1.py`
-- `scripts/run-v12-teacher-review-openai-v1.ps1`
-- `scripts/BuyFlow-V12-TEACHER-REVIEW.cmd`
-- `protocols/V12-STAGE1-OPENAI-TEACHER-REVIEW-V1-2026-09-01.md`
-
-Teacher contract:
-- default `gpt-5.6-sol` through Responses API;
-- strict JSON-schema output;
-- teacher receives only case id, boundary family, language hint and synthetic/deidentified document;
-- seed expected label and Qwen prediction are deliberately hidden from the teacher until after independent classification;
-- `store=false`;
-- `OPENAI_API_KEY` environment-only, never persisted;
-- checkpoint/resume per case;
-- only seed-match + evidence sufficient + HIGH confidence is approved for later augmentation;
-- even approved rows remain `train_eligible=false` until the later corpus-build stage.
-
-Next: run the 14-case teacher review, preserve first summary and inspect any teacher-vs-seed conflict before creating representation-invariance siblings or V12 training data.
 
 ---
 
@@ -72,4 +91,4 @@ FULL `170/180`, SEMANTIC `169/180`, MINIMAL `168/180`; frozen SHA `8ef40626b99b5
 
 ## 2026-08-31 — Direct Gmail / mobile status
 
-Direct Gmail/OAuth/history/watch/Pub/Sub foundation remains behind disabled-by-default flags with no live provider cutover. Mobile cleanup code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 / 1286 API tests; browser visual smoke remains pending.
+Direct Gmail/OAuth/history/watch/Pub/Sub foundation remains behind disabled-by-default flags with no live provider cutover. Mobile cleanup code head `b90670c9c7e4654537c060f99733b6d56ddb8553` passed CI #1139 including 1286 API tests; browser visual smoke remains pending.
