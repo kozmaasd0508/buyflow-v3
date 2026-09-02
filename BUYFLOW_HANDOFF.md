@@ -81,7 +81,7 @@ Protocol: `protocols/TRUSTLINK-AUDIT-2026-09-02.md`.
 
 Real trusted provider-authentication provenance is still not wired, so merchant-scoped production promotion remains BLOCKED.
 
-## JOURNEYGRAPH — PASS / migration not applied
+## JOURNEYGRAPH — PASS / DB smoke PASS / production migration not applied
 
 State audit PASS.
 
@@ -99,20 +99,20 @@ Verified behavior head: `8ef8d36bb9f0ee7ebce3477c13e30f510df30e4f`.
 CI #1183 / run `33651035053`: PASS.
 Temporary PR #306 closed unmerged.
 
-Prepared migration only:
+Prepared migration:
 `supabase/migrations/20260902153000_fix_journeygraph_multishipment_aggregate.sql`
 
-Migration NOT APPLIED. Production DB remediation remains BLOCKED pending controlled staging + multi-shipment smoke.
-Protocol: `protocols/JOURNEYGRAPH-AUDIT-2026-09-02.md`.
+Controlled isolated Supabase smoke on 2026-09-02: **PASS**. Two-parcel aggregation and ready-for-pickup monotonic behavior passed. Production migration remains NOT APPLIED.
+Protocol: `protocols/JOURNEYGRAPH-AUDIT-2026-09-02.md` and `protocols/STAGING-SMOKE-2026-09-02.md`.
 
-## DOCVAULT — PASS / migration not applied
+## DOCVAULT — PASS / DB smoke PASS / production migration not applied
 
 Document/content safety audit PASS.
 
 Real issues found and fixed:
 - same Purchase + invoice number could silently replace the stored PDF/hash;
 - attachment storage path was provider-identity based while using `upsert: true`, so changed bytes after an interrupted retry could overwrite the old object;
-- base `documents.user_id` is required while legacy controlled document insert paths did not populate it directly;
+- live `documents` schema predates direct `user_id` / `source_email_id`, so a bridge migration is required before hardening;
 - admin-client document reads were Purchase-scoped but did not independently filter `documents.user_id` before signed URL creation.
 
 Current behavior:
@@ -121,69 +121,55 @@ Current behavior:
 - malformed SHA cannot produce a storage path;
 - document owner is forced to equal Purchase owner;
 - source ownership is checked when a source is attached;
-- any pre-existing cross-user document row makes the migration fail closed for explicit review;
-- once a document has a SHA-256, its physical content/storage/provenance identity is immutable;
-- an email-body invoice placeholder may be upgraded once to a physical PDF;
+- once a document has a SHA-256, physical content/storage/provenance identity is immutable;
 - same invoice + different PDF SHA -> hard conflict, never silent replacement;
-- new attachment-backed documents explicitly include `user_id` + `source_email_id`;
-- document list/detail reads explicitly require `documents.user_id = authenticated user.id`;
-- private PDF signed URLs remain 60 seconds and detail responses are `Cache-Control: no-store`.
+- document list/detail reads require `documents.user_id = authenticated user.id`;
+- private PDF signed URLs remain 60 seconds and detail responses remain `Cache-Control: no-store`.
 
 Verified behavior head: `e77a226f403c6d5141e91d32d277bc99ce91ac21`.
 CI #1184 / run `33652929490`: PASS.
 Temporary PR #307 closed unmerged.
 
-Prepared migration only:
+Prepared migrations:
+`supabase/migrations/20260902161000_prepare_docvault_owner_columns.sql`
 `supabase/migrations/20260902162000_harden_docvault_content_identity.sql`
 
-Migration NOT APPLIED. Production DB remediation remains BLOCKED pending controlled staging + document storage/ownership smoke.
-Protocol: `protocols/DOCVAULT-AUDIT-2026-09-02.md`.
+Controlled isolated Supabase smoke on 2026-09-02: **PASS**. Legacy owner backfill, same-PDF idempotency, different-PDF hash conflict, cross-user ownership blocking and hashed storage immutability all passed. Production migrations remain NOT APPLIED.
+Protocol: `protocols/DOCVAULT-AUDIT-2026-09-02.md` and `protocols/STAGING-SMOKE-2026-09-02.md`.
 
-## CORE — PASS / legacy Purchase writes OFF / migration not applied
+## CORE — PASS / DB smoke PASS / legacy Purchase writes OFF / production migration not applied
 
 Purchase authority audit PASS.
 
 Real issues found and remediated:
 - old `trg_apply_trusted_merchant_lifecycle_source` trusted the visible `From:` domain and directly changed Purchase state, bypassing TrustLink sender authority and JourneyGraph multi-shipment aggregation;
 - old `controlled_create_purchase_with_sources` did not independently prove the current trusted-sender authority contract at the database boundary;
-- old order/payment RPCs accepted caller-supplied financial JSON after source validation, so a valid source could act as a bearer token for values not independently re-derived in SQL.
+- old order/payment RPCs accepted caller-supplied financial JSON after source validation.
 
 Current source behavior:
 - `LEGACY_CORE_PURCHASE_WRITES_ENABLED = false`;
-- automatic Purchase creation remains fail-closed even for formerly high-confidence candidates;
-- automatic `payment_completed` evidence is fail-closed from the legacy Core lane;
+- automatic Purchase creation remains fail-closed;
+- automatic payment evidence is fail-closed from the legacy Core lane;
 - separately audited Shipment and DocVault controlled write lanes remain available.
 
-Prepared migration only:
+Prepared migration:
 `supabase/migrations/20260902170000_harden_core_purchase_authority.sql`
-
-The migration drops the old visible-From lifecycle trigger/function and replaces legacy Purchase create/enrich/payment RPCs with explicit fail-closed functions.
 
 Verified head: `326b6481fc74c9f367a841f334ecd22928030012`.
 CI #1185 / run `33658358024`: PASS.
 Temporary PR #308 closed unmerged.
-Protocol: `protocols/CORE-AUDIT-2026-09-02.md`.
 
-Migration NOT APPLIED. Production Core DB remediation remains BLOCKED pending controlled staging migration + existing Purchase/state smoke.
+Controlled isolated Supabase smoke on 2026-09-02: **PASS**. Legacy lifecycle trigger removed, create/enrich/payment RPCs fail closed, Shipment/DocVault lanes preserved, and tested RPC EXECUTE is service-role-only. Production migration remains NOT APPLIED.
+Protocol: `protocols/CORE-AUDIT-2026-09-02.md` and `protocols/STAGING-SMOKE-2026-09-02.md`.
 
 ## PULSE — PASS / read-only projection
 
 User-facing status/next-step authority audit PASS.
 
-Real issues fixed:
-- Purchase cards previously let the first Shipment visually override the whole Purchase, so one delivered parcel could make a multi-parcel Purchase look delivered;
-- detail status could promote `deliveredAt`, `paidAt` or any Shipment presence even while the Purchase was REVIEW/PENDING;
-- `ready_for_pickup` was not represented correctly;
-- home movement counters counted `ordered`/`processing` instead of physical Shipment progress;
-- timeline timestamps could overstate payment/shipping/delivery certainty.
-
 Current behavior:
 - server-side `apps/api/src/api/purchase-pulse.ts` is the single user-facing status projection;
-- Pulse derives from persisted Purchase state + all linked Shipment states;
 - REVIEW/PENDING wins over optimistic timestamps or child hints;
 - one delivered parcel cannot complete a multi-parcel Purchase;
-- aggregate delivered with any undelivered parcel fails closed to REVIEW;
-- all child parcels delivered without aggregate delivery also fails closed to REVIEW;
 - `deliveredAt` alone cannot promote delivery;
 - `paidAt` alone cannot promote an ordered Purchase;
 - `ready_for_pickup` and `out_for_delivery` are explicit states;
@@ -193,12 +179,30 @@ Current behavior:
 - no live push notification engine was added or enabled.
 
 Verified head: `df75e04989afd89df080942adcf31cb4ee4ec2d4`.
-Initial CI #1186 caught a test-only TypeScript cast and stopped before tests/build. The assertion was corrected without changing Pulse behavior.
 Final CI #1187 / run `33660311868`: PASS.
 Temporary PR #309 closed unmerged.
 Protocol: `protocols/PULSE-AUDIT-2026-09-02.md`.
 
-Pulse introduces no database migration and no production write or notification authority.
+## CONTROLLED DATABASE SMOKE — PASS
+
+Protocol: `protocols/STAGING-SMOKE-2026-09-02.md`.
+
+Because the old `BuyFlow-Staging` project is on an incompatible/stale schema lineage, it was not mutated. A separate zero-cost `BuyFlow-Smoke-Test` project was built from the production-equivalent required schema and synthetic data only.
+
+Results:
+- JourneyGraph migration: PASS;
+- DocVault schema bridge: PASS;
+- DocVault hardening: PASS;
+- Core hardening: PASS;
+- service-role-only RPC privilege checks: PASS;
+- read-only production preflight: 9 documents, 0 orphan documents, 0 existing conflicting invoice-hash groups, 1 multi-shipment Purchase, 0 inconsistent multi-shipment aggregate states.
+
+Cleanup:
+- `BuyFlow-Smoke-Test`: INACTIVE;
+- original `BuyFlow-Staging`: restored to ACTIVE_HEALTHY;
+- production `buyflow-v3`: not modified.
+
+Supabase production security advisor currently has only pre-existing INFO notices for private/backend RLS tables without client policies plus a WARN that leaked-password protection is disabled. No hardening-specific advisor error was observed.
 
 ## DEPLOYMENT STATE
 
@@ -209,27 +213,24 @@ Still conservative:
 - EventMind V11 runtime OFF;
 - TrustLink production writes OFF;
 - legacy automatic Purchase creation/payment Core writes OFF;
-- JourneyGraph migration NOT APPLIED;
-- DocVault migration NOT APPLIED;
-- Core migration NOT APPLIED;
+- JourneyGraph production migration NOT APPLIED;
+- DocVault production migrations NOT APPLIED;
+- Core production migration NOT APPLIED;
 - no live push notification engine enabled;
-- no live migration applied from this flow;
 - no provider cutover;
 - no AI identity authority;
-- no Purchase/Shipment/Document/Identity production authority change.
+- no production Purchase/Shipment/Document/Identity authority change.
 
-## NEXT ACTION — CONTROLLED STAGING / SMOKE PHASE
+## NEXT ACTION — REMAINING PRE-PRODUCTION GATES
 
 1. Keep PR #295 draft and all live/source/AI/write flags OFF.
-2. Preserve the EventMind first gate result unchanged and never train on that fixture.
-3. Run MailGate real-Gmail read-only shadow smoke before any source cutover.
-4. Run RawVault controlled staging migration + retention/private-storage/orphan cleanup smoke.
-5. Implement and separately verify real trusted provider-authentication provenance before merchant-scoped TrustLink promotion can be enabled.
-6. Apply and smoke-test the prepared database remediations in controlled staging only, respecting dependencies: JourneyGraph -> DocVault -> Core.
-7. Verify multi-shipment, PDF ownership/content identity and existing Purchase/state behavior after staging migration.
-8. Do not promote V12.
-9. Only after every staging/source/authentication gate passes should a separate production-cutover decision be considered.
+2. Run MailGate real-Gmail **read-only shadow smoke** before any source cutover.
+3. Run RawVault controlled retention/private-storage/orphan/account-deletion cleanup smoke.
+4. Implement and separately verify real trusted provider-authentication provenance before merchant-scoped TrustLink promotion can be enabled.
+5. Keep the database migration set production-unapplied until those upstream gates are complete and a separate production-cutover decision is made.
+6. Consider enabling Supabase Auth leaked-password protection separately; it is an existing advisor warning, not introduced by this audit.
+7. Do not promote V12.
 
 ## RESUME CONTRACT
 
-**Folytasd a BuyFlowot a GitHubból. A 9 modulos kódaudit kész; következő fázis a kontrollált staging/smoke ellenőrzés, nem production bekapcsolás.**
+**Folytasd a BuyFlowot a GitHubból. A 9 modulos kódaudit és a JourneyGraph/DocVault/Core izolált DB smoke PASS. Következő: MailGate real-Gmail read-only shadow smoke, majd RawVault storage/retention smoke és trusted provider-auth provenance. Production továbbra is OFF.**
