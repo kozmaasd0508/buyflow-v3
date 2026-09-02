@@ -16,10 +16,23 @@ export type EmailAuthenticationVerdict =
   | 'permerror'
   | 'unknown';
 
+export type EmailAuthenticationSource =
+  | 'authentication_results'
+  | 'arc_authentication_results'
+  | 'received_spf'
+  | 'mixed'
+  | 'none';
+
 export interface EmailAuthenticationResults {
   dkim: EmailAuthenticationVerdict;
   spf: EmailAuthenticationVerdict;
   dmarc: EmailAuthenticationVerdict;
+  /**
+   * MailLens parses header evidence but does not authenticate the authserv-id.
+   * Therefore these verdicts are diagnostic only and never hard trust evidence.
+   */
+  trusted: boolean;
+  source: EmailAuthenticationSource;
   rawHeader?: string | null;
 }
 
@@ -37,6 +50,21 @@ export interface NormalizedEmailLink {
   text?: string | null;
   rel?: string[];
   source: 'body_html' | 'body_text' | 'structured_data';
+}
+
+export type EmailBodyTextSource =
+  | 'provider_plain'
+  | 'html_derived'
+  | 'snippet_fallback'
+  | 'none'
+  | 'legacy';
+
+export interface EmailNormalizationMetadataV1 {
+  bodyTextSource: EmailBodyTextSource;
+  bodyTextTruncated: boolean;
+  semanticTextTruncated: boolean;
+  hiddenHtmlRemoved: boolean;
+  quotedHistoryDetected: boolean;
 }
 
 /**
@@ -63,7 +91,10 @@ export interface NormalizedEmailDocumentV1 {
   bcc: EmailAddress[];
   receivedAt: string;
   snippet: string | null;
+  /** Full bounded body evidence chosen by MailLens. */
   bodyText: string | null;
+  /** Current authored/visible semantic text with quoted history excluded when safely detectable. */
+  semanticText: string | null;
   bodyHtml: string | null;
   headers: EmailHeader[];
   folders: string[];
@@ -71,6 +102,7 @@ export interface NormalizedEmailDocumentV1 {
   structuredData: EmailStructuredDataRecord[];
   links: NormalizedEmailLink[];
   authentication: EmailAuthenticationResults;
+  normalization: EmailNormalizationMetadataV1;
   rawRef: RawEmailReference | null;
   normalizerVersion: string;
   traceId: string | null;
@@ -78,9 +110,11 @@ export interface NormalizedEmailDocumentV1 {
 
 export interface UpgradeNormalizedEmailOptions {
   bodyText?: string | null;
+  semanticText?: string | null;
   structuredData?: EmailStructuredDataRecord[];
   links?: NormalizedEmailLink[];
   authentication?: Partial<EmailAuthenticationResults>;
+  normalization?: Partial<EmailNormalizationMetadataV1>;
   rawRef?: RawEmailReference | null;
   normalizerVersion?: string;
   traceId?: string | null;
@@ -90,7 +124,25 @@ const UNKNOWN_AUTHENTICATION: EmailAuthenticationResults = {
   dkim: 'unknown',
   spf: 'unknown',
   dmarc: 'unknown',
+  trusted: false,
+  source: 'none',
 };
+
+function legacyNormalization(email: NormalizedEmail): EmailNormalizationMetadataV1 {
+  return {
+    bodyTextSource: email.bodyText
+      ? 'provider_plain'
+      : email.bodyHtml
+        ? 'legacy'
+        : email.snippet
+          ? 'snippet_fallback'
+          : 'none',
+    bodyTextTruncated: false,
+    semanticTextTruncated: false,
+    hiddenHtmlRemoved: false,
+    quotedHistoryDetected: false,
+  };
+}
 
 /**
  * Backwards-compatible adapter for the current provider contract.
@@ -101,6 +153,7 @@ export function upgradeNormalizedEmailToDocumentV1(
   email: NormalizedEmail,
   options: UpgradeNormalizedEmailOptions = {},
 ): NormalizedEmailDocumentV1 {
+  const bodyText = options.bodyText ?? email.bodyText ?? null;
   return {
     schemaVersion: '1',
     provider: email.provider,
@@ -113,7 +166,8 @@ export function upgradeNormalizedEmailToDocumentV1(
     bcc: email.bcc,
     receivedAt: email.receivedAt,
     snippet: email.snippet ?? null,
-    bodyText: options.bodyText ?? email.bodyText ?? null,
+    bodyText,
+    semanticText: options.semanticText ?? bodyText,
     bodyHtml: email.bodyHtml ?? null,
     headers: email.headers ?? [],
     folders: email.folders,
@@ -123,6 +177,10 @@ export function upgradeNormalizedEmailToDocumentV1(
     authentication: {
       ...UNKNOWN_AUTHENTICATION,
       ...options.authentication,
+    },
+    normalization: {
+      ...legacyNormalization(email),
+      ...options.normalization,
     },
     rawRef: options.rawRef ?? null,
     normalizerVersion: options.normalizerVersion ?? 'email-document-v1',
