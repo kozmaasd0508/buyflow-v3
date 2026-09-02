@@ -15,6 +15,12 @@ test('JourneyGraph migration completes a Purchase only when every Shipment is de
   assert.doesNotMatch(migration, /when p_status = 'delivered' then 'delivered'/);
 });
 
+test('JourneyGraph physical parcel progress outranks stale non-terminal Purchase state', () => {
+  assert.match(migration, /when current_state in \('cancelled', 'refunded', 'returned'\) then current_state/);
+  assert.match(migration, /when v_aggregate_state = 'in_transit' then 'in_transit'/);
+  assert.doesNotMatch(migration, /v_aggregate_state = 'in_transit'[\s\S]{0,120}current_state in \('processing', 'ordered', 'paid'/);
+});
+
 test('JourneyGraph migration uses the final parcel delivery time for whole-Purchase completion', () => {
   assert.match(migration, /max\(delivered_at\) filter \(where status = 'delivered'\)/);
   assert.match(migration, /when v_aggregate_state <> 'delivered' then null/);
