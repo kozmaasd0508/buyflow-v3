@@ -219,8 +219,8 @@ begin
       when current_state in ('cancelled', 'refunded', 'returned') then current_state
       when v_aggregate_state = 'delivered' then 'delivered'
       when v_aggregate_state = 'ready_for_pickup' then 'ready_for_pickup'
-      when v_aggregate_state = 'in_transit'
-        and current_state in ('processing', 'ordered', 'paid', 'in_transit', 'ready_for_pickup', 'delivered') then 'in_transit'
+      -- Confirmed physical parcel progress outranks stale order/payment/delay state.
+      when v_aggregate_state = 'in_transit' then 'in_transit'
       when v_aggregate_state = 'processing'
         and current_state in ('ready_for_pickup', 'delivered') then 'processing'
       else current_state
