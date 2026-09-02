@@ -1,5 +1,9 @@
-import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extractor.js';
-import type { NormalizedEmail } from '../email/types.js';
+import type { EmailExtraction } from '../ai/openai-email-extractor.js';
+import {
+  mailLensSemanticEmailV1,
+  normalizeEmailDocumentV1,
+} from '../email/normalize-document-v1.js';
+import type { EmailAddress, NormalizedEmail } from '../email/types.js';
 import { isExpressOneOutboundPickupNoise } from './commerce-email-filter.js';
 import {
   parseDeterministicCommerceEmail,
@@ -25,9 +29,9 @@ export interface DeterministicNormalizedEmailInput {
   bodyText: string;
 }
 
-function senderDomains(email: NormalizedEmail): string[] {
+function senderDomains(addresses: EmailAddress[]): string[] {
   return [...new Set(
-    email.from
+    addresses
       .map((address) => address.email.trim().toLowerCase())
       .map((address) => address.slice(address.lastIndexOf('@') + 1))
       .filter((domain) => Boolean(domain) && !domain.includes('@')),
@@ -46,14 +50,11 @@ export function normalizedEmailToDeterministicInput(
   email: NormalizedEmail,
   maxChars = DEFAULT_BODY_MAX_CHARS,
 ): DeterministicNormalizedEmailInput {
-  const bodyText = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml, maxChars)
-    : (email.snippet ?? '').trim().slice(0, maxChars);
-
+  const document = normalizeEmailDocumentV1(email, { maxBodyTextChars: maxChars });
   return {
-    senderDomains: senderDomains(email),
-    subject: email.subject ?? null,
-    bodyText,
+    senderDomains: senderDomains(document.from),
+    subject: document.subject,
+    bodyText: document.semanticText ?? document.bodyText ?? '',
   };
 }
 
@@ -203,27 +204,29 @@ function genericShadowExtraction(email: NormalizedEmail): DeterministicCommerceP
 export function parseNormalizedDeterministicEmail(
   email: NormalizedEmail,
 ): DeterministicCommerceParseResult | null {
-  if (isExpressOneOutboundPickupNoise(email)) return null;
-  if (isProviderLifecycleV6Noise(email)) return null;
+  const semanticEmail = mailLensSemanticEmailV1(email, DEFAULT_BODY_MAX_CHARS);
 
-  const providerLifecycle = parseProviderLifecycleV6(email);
+  if (isExpressOneOutboundPickupNoise(semanticEmail)) return null;
+  if (isProviderLifecycleV6Noise(semanticEmail)) return null;
+
+  const providerLifecycle = parseProviderLifecycleV6(semanticEmail);
   if (providerLifecycle) {
     return guardReplyThreadOrderCreation(
-      email,
-      enrichProviderFieldsV1(email, providerLifecycle),
+      semanticEmail,
+      enrichProviderFieldsV1(semanticEmail, providerLifecycle),
     );
   }
 
   const deterministic = parseDeterministicCommerceEmail(
-    normalizedEmailToDeterministicInput(email),
+    normalizedEmailToDeterministicInput(semanticEmail),
   );
   const parsed = deterministic
-    ?? genericShadowExtraction(email)
-    ?? parseGenericCommerceV5SubjectFallback(email);
+    ?? genericShadowExtraction(semanticEmail)
+    ?? parseGenericCommerceV5SubjectFallback(semanticEmail);
 
   if (!parsed) return null;
   return guardReplyThreadOrderCreation(
-    email,
-    enrichProviderFieldsV1(email, parsed),
+    semanticEmail,
+    enrichProviderFieldsV1(semanticEmail, parsed),
   );
 }
