@@ -1,0 +1,86 @@
+name: BuyFlow TestLab
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite to run
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - eventmind
+          - identity
+          - core
+  push:
+    branches:
+      - codex/buyflow-testlab-v1
+    paths:
+      - testlab/run-request.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buyflow-testlab
+  cancel-in-progress: false
+
+jobs:
+  testlab:
+    name: BuyFlow TestLab
+    runs-on: [self-hosted, Windows, X64, buyflow-testlab]
+    timeout-minutes: 120
+    env:
+      BUYFLOW_TESTLAB_PRIVATE_ROOT: ${{ env.USERPROFILE }}\Desktop\buyflow\.testlab-private
+      BUYFLOW_V11_MODEL_ROOT: ${{ env.USERPROFILE }}\Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation
+      BUYFLOW_N8N_USER_FOLDER: ${{ env.USERPROFILE }}\Desktop\buyflow\.n8n-local-ai-data
+
+    steps:
+      - name: Checkout exact TestLab commit
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Resolve requested suite
+        id: request
+        shell: powershell
+        run: |
+          $suite = '${{ inputs.suite }}'
+          if ([string]::IsNullOrWhiteSpace($suite)) {
+            $request = Get-Content -Raw -LiteralPath 'testlab/run-request.json' | ConvertFrom-Json
+            $suite = [string]$request.suite
+          }
+          if ($suite -notin @('full','eventmind','identity','core')) { throw "INVALID_TESTLAB_SUITE: $suite" }
+          "suite=$suite" >> $env:GITHUB_OUTPUT
+          Write-Host "TestLab suite: $suite"
+
+      - name: Node and WSL preflight
+        shell: powershell
+        run: |
+          node --version
+          npm --version
+          git --version
+          wsl.exe -l -q
+
+      - name: Install repository dependencies
+        shell: powershell
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run BuyFlow TestLab
+        shell: powershell
+        run: |
+          $reportDir = Join-Path $env:RUNNER_TEMP 'buyflow-testlab-report'
+          New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
+          & .\scripts\testlab\run-testlab.ps1 -Suite '${{ steps.request.outputs.suite }}' -ReportDir $reportDir
+          exit $LASTEXITCODE
+
+      - name: Publish TestLab report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buyflow-testlab-${{ github.run_id }}
+          path: ${{ runner.temp }}\buyflow-testlab-report\**
+          if-no-files-found: warn
+          retention-days: 30
