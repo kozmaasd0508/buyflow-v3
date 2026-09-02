@@ -119,7 +119,7 @@ Best adapter:
 
 ## V12 STAGE 3B — POST-TRAIN HARD-SIBLING RESULT
 
-Exact post-train evaluation on the same fixed 72 hard-sibling validation rows completed:
+Exact post-train evaluation on the same fixed 72 hard-sibling validation rows:
 - V11 baseline `70/72 = 97.22%`
 - V12 `71/72 = 98.61%`
 - delta `+1`
@@ -137,33 +137,40 @@ Metrics:
 Protocol:
 `protocols/V12-STAGE3B-POSTTRAIN-HARD-SIBLING-RESULT-2026-09-02.md`
 
-Interpretation: narrow net improvement on the development set, but not perfect and not broad proof. Do not tune again from the 72 rows before retention evidence.
+Interpretation: narrow net improvement on the development set, but not perfect and not broad proof.
 
-## V12 STAGE 3C — ALL-18 RETENTION COMPARE PREPARED
+## V12 STAGE 3C — ALL-18 RETENTION PASS
 
-Prepared:
-- `scripts/v12-retention-compare-v1.py`
-- `scripts/run-v12-retention-compare-v1.ps1`
-- `scripts/BuyFlow-V12-RETENTION-COMPARE.cmd`
-
-The evaluator compares exact unchanged V11 vs V12 on only the 288 `V11_REPLAY_VALIDATION` rows:
+Exact V11 vs V12 retention comparison completed on only the 288 `V11_REPLAY_VALIDATION` rows:
 - 18 labels x 16 rows
-- constrained output
-- exact V11/V12 adapter SHA gates
-- no training
-- no corpus mutation
-- no Fresh Blind / Input View Holdout / frozen108 / BLIND50 read
+- V11 `288/288 = 100.00%`
+- V12 `288/288 = 100.00%`
+- delta `+0`
+- invalid V11 `0`
+- invalid V12 `0`
+- every event `16/16` for both models
+- wrong transitions: none for V11, none for V12
+- training `False`
+- corpus mutation `False`
+- frozen holdouts read `False`
 
-This is development retention evidence, not a new untouched holdout.
+Metrics:
+`local-data/lora-v12/retention-replay-v1/retention-compare/runs/20260902T103814Z/metrics.json`
+
+Protocol:
+`protocols/V12-STAGE3C-ALL18-RETENTION-RESULT-2026-09-02.md`
+
+Interpretation: clean development-retention PASS with no measurable forgetting across the 18 labels. Because both models score 100% here, this does not prove broad V12 improvement.
 
 ## NEXT ACTION
 
-1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate V11 test worktree.
-2. Run `scripts/BuyFlow-V12-RETENTION-COMPARE.cmd`.
-3. Review overall delta, every label delta and wrong-transition changes.
-4. Do not tune on or read Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
-5. If retention is acceptable, build a brand-new untouched V12 post-training holdout.
-6. Only after that untouched holdout should V12 be considered for promotion beyond development evidence.
+1. Do not tune again on the 72 hard-sibling development rows or the 288 retention rows.
+2. Create a brand-new post-V12 untouched holdout with entirely new rows/wording/representation families and all 18 labels.
+3. SHA-lock that fixture before any model inference.
+4. Compare exact unchanged V11 vs exact V12 using constrained decoding once on the locked holdout.
+5. Do not read/tune on Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50 during this step.
+6. Only the new untouched result should decide whether V12 is ready for promotion beyond development evidence.
+7. After the V12 gate is closed, begin the full BuyFlow module audit (MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse).
 
 ## RESUME CONTRACT
 
