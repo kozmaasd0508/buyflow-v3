@@ -1,5 +1,64 @@
 # BuyFlow worklog latest
 
+## 2026-09-02 — JourneyGraph state audit PASS
+
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
+
+JourneyGraph timeline/state reduction was reviewed across the Purchase Identity Graph, deterministic lifecycle reconciliation, controlled Shipment RPC, carrier bridge and controlled post-write verification.
+
+Real findings fixed:
+- one delivered parcel could falsely complete a multi-parcel Purchase;
+- whole-Purchase delivery time could become the first parcel delivery time instead of final parcel completion;
+- stale order/delay evidence could downgrade `ready_for_pickup`;
+- proven physical Shipment progress could leave stale `payment_failed` / `delayed` as the visible journey state;
+- controlled Shipment verification used the old single-parcel assumption and could report failure after a correct write;
+- an older controlled replay could be treated as a status mismatch even though the database correctly preserves monotonic Shipment progress.
+
+Remediation:
+- all Shipments under a Purchase are reduced together;
+- Purchase is `delivered` only if every linked Shipment is delivered;
+- whole-Purchase `delivered_at` uses the latest parcel delivery timestamp and stays null until completion is proven;
+- earliest known whole-Purchase `shipped_at` is preserved;
+- `ready_for_pickup` is protected physical progress;
+- proven physical progress outranks stale non-terminal order/payment/delay journey state;
+- cancelled/refunded/returned remain protected terminal states;
+- controlled verification recomputes the aggregate after the RPC;
+- individual Shipment replay is monotonic;
+- pre-advice / `shipment_created` is fail-closed from the physical controlled-write lane.
+
+No alternate Purchase-state bypass was found: the carrier-parcel-sender bridge uses the same controlled Shipment RPC, while Foxpost repair only changes source-email evidence.
+
+Prepared migration only:
+`supabase/migrations/20260902153000_fix_journeygraph_multishipment_aggregate.sql`
+
+The migration was **not applied** to staging or production.
+
+Final verified code head:
+`8ef8d36bb9f0ee7ebce3477c13e30f510df30e4f`
+
+Final GitHub Actions CI #1183 / run `33651035053`: **PASS**.
+- EventMind Python runtime syntax PASS;
+- EventMind PowerShell launcher syntax PASS;
+- API typecheck PASS;
+- API tests PASS;
+- API build PASS;
+- mobile typecheck PASS;
+- mobile web build PASS.
+
+Temporary verification PR #306 was closed unmerged.
+
+Verdict:
+- **JourneyGraph code/state audit: PASS**;
+- multi-shipment safety: **PASS**;
+- production database migration: **NOT APPLIED / BLOCKED** pending controlled staging migration + multi-shipment smoke.
+
+Protocol: `protocols/JOURNEYGRAPH-AUDIT-2026-09-02.md`.
+
+Next module audit: **DocVault**.
+
+---
+
 ## 2026-09-02 — TrustLink zero-trust audit PASS
 
 Branch: `codex/modern-email-source-foundation-v1`  
