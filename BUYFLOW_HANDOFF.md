@@ -23,21 +23,26 @@
 
 `MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`
 
-### MailGate — code PASS / live read PASS / cursor-history BLOCKED
+### MailGate — PASS / real Gmail RAW + history gate PASS / production runtime OFF
 - Code remediation head: `e67b908e07d072e3737611eca4ee804d7d905c26`; CI #1142 PASS.
-- 2026-09-02 real Gmail read-only smoke: six bounded recent commerce/lifecycle messages, exact RAW MIME **6/6**, observed normal body parity PASS, Gmail mutation safety PASS.
+- 2026-09-02 first real Gmail read-only smoke: six bounded recent commerce/lifecycle messages, exact RAW MIME **6/6**, observed normal body parity PASS, Gmail mutation safety PASS.
 - A sampled UNREAD message remained UNREAD after RAW inspection.
-- Since smoke start: **0 source emails, 0 Purchase updates, 0 Shipment updates, 0 Documents, 0 AI runs** in production.
-- No detached renderable text body happened to occur in the six-message live slice; detached-body hydration remains regression-covered, not claimed as live evidence.
-- **Real `historyId` capture + `history.list` replay are still BLOCKED / NOT RUN.** The connected Gmail tool has no history endpoint, and production does not yet have `email_provider_credentials` / `email_sync_states` or a direct Gmail runtime connection.
-- Direct Gmail production runtime remains OFF.
-- Protocol: `protocols/MAILGATE-REAL-GMAIL-SHADOW-SMOKE-2026-09-02.md` and `protocols/MAILGATE-DIRECT-GMAIL-AUDIT-REMEDIATION-2026-09-02.md`.
+- Since that smoke start: **0 source emails, 0 Purchase updates, 0 Shipment updates, 0 Documents, 0 AI runs** in production.
+- No detached renderable text body happened to occur in that six-message live slice; detached-body hydration remains regression-covered, not claimed as live evidence.
+- 2026-09-02 real Gmail cursor/history smoke using the already-authorized local n8n Gmail OAuth credential: RAW MIME **6/6**, real Gmail `historyId` capture **PASS**, real `users.history.list` replay **PASS**, observed history records **0**, mailbox writes **0**, BuyFlow DB writes **0**, AI calls **0**, overall **GATE PASS**.
+- Zero history records are valid: the gate proves successful authenticated replay from a real Gmail `historyId`; it does not require manufacturing a mailbox mutation.
+- Verified local n8n profile for the smoke: `C:\Users\kozma\Desktop\buyflow\.n8n-local-ai-data`, n8n `2.37.3`.
+- Direct Gmail production runtime remains OFF; no durable cursor/checkpoint or production source/archive/domain write was committed by the smoke.
+- Protocols: `protocols/MAILGATE-REAL-GMAIL-SHADOW-SMOKE-2026-09-02.md`, `protocols/MAILGATE-DIRECT-GMAIL-AUDIT-REMEDIATION-2026-09-02.md`, `protocols/MAILGATE-HISTORY-SMOKE-2026-09-02.md`.
 
 ### RawVault — code PASS / storage-retention smoke still required
 - Immutable raw/normalized archive, SHA-256/opaque keys, durable manifest, retention/crash/orphan/account-deletion cleanup and DB immutability implemented.
 - Behavior head: `9480e6d4e8d5c3e0a771b43671503cda593971c2`.
 - Production source archive remains OFF.
-- Remaining: controlled private-storage + retention/orphan/account-deletion cleanup smoke.
+- Remaining: controlled private-storage + independent retention + stale pending orphan + source/user/account deletion cleanup smoke against real Supabase Storage objects.
+- The inactive `BuyFlow-Smoke-Test` cannot be restored while production + actively-used old staging occupy the Free-plan active-project slots.
+- A Supabase development branch was considered; quoted cost was **$0.01344/hour** and explicitly approved, but branch creation was rejected because branching requires Pro or higher. No paid branch was created and no branch charge is running.
+- Do not pause the actively-used old staging merely to force this test, and do not fake real Storage behavior by writing directly to `storage.objects`.
 
 ### MailLens — PASS
 - `normalized-email-document-v1.1` is the provider-neutral normalization boundary.
@@ -58,7 +63,7 @@
 - Spoofed authserv-id, DMARC fail, domain mismatch, non-Gmail source and later-header spoofing all fail closed.
 - Exact verified provider-auth head `2424d1d19bd975b7d2905f47352520abab93c50d`; CI #1188 / run `33666543307` PASS; verification PR #310 closed unmerged.
 - Protocol: `protocols/TRUSTLINK-PROVIDER-AUTH-2026-09-02.md`.
-- This closes the prior code-level direct-Gmail provenance gap in shadow/readiness evaluation. TrustLink production writes remain OFF until the Direct Gmail runtime/cursor gate passes and a separate production cutover is explicitly approved.
+- The prior direct-Gmail provenance code gap and the real Gmail cursor/history pre-production gate are both closed. TrustLink production writes still remain OFF until a separate explicit production cutover decision.
 
 ### JourneyGraph — PASS / isolated DB smoke PASS
 - Multi-shipment aggregation, final delivery timestamp and monotonic physical progress fixed.
@@ -107,14 +112,22 @@ Still OFF / conservative:
 - no AI identity authority;
 - no production Purchase/Shipment/Document/Identity authority change.
 
-## NEXT ACTION — REMAINING PRE-PRODUCTION GATES
+## FINAL PRE-PRODUCTION READINESS
 
-1. **RawVault controlled storage/retention/orphan/account-deletion cleanup smoke** remains required. The separate Smoke-Test project is currently INACTIVE and cannot be restored while production + the actively-used old staging consume the Free-plan active-project slots; do not stop an active environment merely to force this test.
-2. **MailGate cursor/history gate:** prepare a controlled readonly Direct Gmail runtime environment containing the committed runtime-state migration + readonly OAuth; then prove live `historyId` capture and `history.list` replay with **no checkpoint/source/archive/AI/domain writes**.
-3. After gates 1–2 pass, perform a final release/cutover review. Production database migrations and TrustLink writes remain OFF until that explicit decision.
-4. Other mailbox/provider adapters must define their own trusted provider-authentication policy; they must not inherit Gmail authority automatically.
-5. Do not promote V12.
+**PASS:** MailGate, MailLens, EventMind, TrustLink, JourneyGraph, DocVault, Core, Pulse.  
+**RawVault:** code/audit PASS, but real private Supabase Storage + retention/orphan/account-deletion cleanup smoke remains environment-blocked.  
+**Production:** unchanged and OFF.
+
+## NEXT ACTION — ONE REMAINING ENVIRONMENT GATE
+
+1. **RawVault controlled real Storage smoke** remains the only unresolved pre-production evidence gate.
+2. Do not stop the active old staging merely to create room on the Free plan.
+3. Do not upgrade/pay merely to force the smoke unless explicitly chosen later; a Pro-only Supabase branch attempt was rejected and no paid branch exists.
+4. Once a safe isolated Storage-capable environment is available, run: private object upload/download, immutable hash/metadata verification, independent raw/normalized retention, stale pending orphan cleanup, source deletion cleanup and user/account cascade cleanup.
+5. After RawVault PASS, perform the **final production cutover review**. Production migrations, Direct Gmail runtime, source archive, EventMind runtime and TrustLink writes remain OFF until that separate explicit decision.
+6. Other mailbox/provider adapters must define their own trusted provider-authentication policy; they must not inherit Gmail authority automatically.
+7. Do not promote V12.
 
 ## RESUME CONTRACT
 
-**Folytasd a BuyFlowot a GitHubból. 9 modulos audit PASS; JourneyGraph/DocVault/Core isolated DB smoke PASS; TrustLink direct-Gmail provider-auth code path PASS on CI #1188; MailGate real Gmail RAW/read-only smoke PASS 6/6 but live historyId/history.list remains BLOCKED because Direct Gmail runtime state/OAuth is not deployed; RawVault real private-storage/retention cleanup smoke also remains. Production remains OFF. Next: finish RawVault + MailGate environment-dependent gates, then final cutover review.**
+**Folytasd a BuyFlowot a GitHubból. 9 modulos code audit complete; MailGate real Gmail RAW + historyId/history.list gate PASS; JourneyGraph/DocVault/Core isolated DB smoke PASS; TrustLink Gmail provider-auth PASS; MailLens/EventMind/Pulse PASS. Az egyetlen fennmaradó pre-production evidence gate a RawVault valódi private Supabase Storage + retention/orphan/account-deletion smoke, amely jelenleg környezeti okból BLOCKED (Free-plan slotok foglaltak, Supabase branch Pro-only; paid branch nem jött létre). Production továbbra is OFF és érintetlen. Következő: RawVault smoke biztonságos izolált környezetben, utána final production cutover review.**
