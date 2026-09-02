@@ -9,6 +9,7 @@ $runtimeRoot = Join-Path $project 'local-data\eventmind-v11-runtime'
 $stdout = Join-Path $runtimeRoot 'server.out.log'
 $stderr = Join-Path $runtimeRoot 'server.err.log'
 $serverPid = $null
+$finalExit = 0
 
 function Convert-ToWslPath([string]$p) {
     $full = [System.IO.Path]::GetFullPath($p)
@@ -99,6 +100,7 @@ try {
         Write-Host 'EVENTMIND V11 FRISS TESZT: PASS' -ForegroundColor Green
     } elseif ($gateExit -eq 2) {
         Write-Host 'EVENTMIND V11 FRISS TESZT: FAIL' -ForegroundColor Red
+        $finalExit = 2
     } else {
         throw "EVENTMIND_V11_GATE_ERROR: $gateExit"
     }
@@ -110,3 +112,5 @@ try {
     Stop-EventMindServer
     Pop-Location
 }
+
+exit $finalExit
