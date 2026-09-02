@@ -44,11 +44,8 @@ Hard sibling corpus:
 - semantic-group overlap `0`
 - corpus SHA `f5e255b42bf460d02c9854ca5dced93b774ffc785dec8680a1408a52d6cea9cf`
 
-Pre-train V11 on the fixed 72:
-- `70/72 = 97.22%`
-- ORDER_PROCESSING `34/36`
-- ORDER_PACKING `36/36`
-- only error direction `ORDER_PROCESSING -> ORDER_PACKING` x2
+Pre-train V11 on fixed 72: `70/72 = 97.22%`.
+Post-train V12 on same 72: `71/72 = 98.61%` (+1), but one reverse `ORDER_PACKING -> ORDER_PROCESSING` stale-snippet error appeared.
 
 ## V12 RETENTION REPLAY + TRAINING
 
@@ -66,23 +63,11 @@ V12 continuation QLoRA complete:
 - optimizer steps `324/324`
 - train loss `0.000222`
 - validation loss `0.000007`
-- training time `66.36 min`
-- GPU peak `10.13 GiB`
 - V12 best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
 - parent V11 unchanged `True`
 - frozen/protected holdouts read `False`
 
-## V12 POST-TRAIN DEVELOPMENT RESULTS
-
-Fixed 72 hard siblings:
-- V11 `70/72`
-- V12 `71/72`
-- delta `+1`
-- ORDER_PROCESSING `34/36 -> 36/36`
-- ORDER_PACKING `36/36 -> 35/36`
-- remaining V12 error: `ORDER_PACKING -> ORDER_PROCESSING` x1 on `stale_snippet`
-
-All-18 retention compare on 288 V11 replay validation rows:
+All-18 development retention compare on 288 V11 replay validation rows:
 - V11 `288/288 = 100%`
 - V12 `288/288 = 100%`
 - every label `16/16` for both
@@ -90,60 +75,55 @@ All-18 retention compare on 288 V11 replay validation rows:
 - wrong transitions none/none
 - conclusion: clean development retention PASS, but not broad improvement proof
 
-## V12 STAGE 4 — UNTOUCHED HOLDOUT FROZEN
+## V12 STAGE 4 — UNTOUCHED HOLDOUT FINAL RESULT
 
-The post-training holdout was created and SHA-frozen before any V11/V12 scoring.
-
-Freeze evidence:
-- status `V12_POSTTRAIN_HOLDOUT_V1_FROZEN`
-- SHA `03892ba760b46fbe32f64c1915dce77b67ccb162917e3119d78eaca14a3c8aba`
-- rows `108`
-- 18 labels x 6 rows
+Frozen before inference:
+- holdout SHA `03892ba760b46fbe32f64c1915dce77b67ccb162917e3119d78eaca14a3c8aba`
+- 108 rows, 18 labels x 6
 - languages `hu,en,de,pl,fr,es`
 - variants `clean_plain`, `stale_subject`, `html_only`, `stale_snippet`, `quoted_history`, `metadata_noise`
-- complete event x language matrix
-- complete event x variant matrix
-- synthetic/deidentified `True`
-- source rows copied `False`
 - training/tuning eligible `False`
-- model loaded at freeze `False`
-- V11 scored at freeze `False`
-- V12 scored at freeze `False`
-- protected holdouts read `False`
-- prior training corpus read `False`
-- prior hard-sibling rows read `False`
+- no model loaded at freeze
+- no protected holdout/training/hard-sibling corpus read
 
-Local fixture:
-`local-data/lora-v12/posttrain-holdout-v1/cases.jsonl`
+One-shot unchanged V11 vs exact V12:
+- V11 `105/108 = 97.22%`
+- V12 `102/108 = 94.44%`
+- delta `-3`
+- invalid `0/0`
+- V12 wins `0`
+- V11 wins `3`
+- both wrong `3`
+- all three new regressions are `stale_snippet` cases
+- per-event regressions: `DELAYED -1`, `INVOICE -1`, `SHIPPED -1`
+- language regressions: English `-1`, Spanish `-2`
+
+Wrong transitions:
+- V11: `PAYMENT -> INVOICE` x2; `RETURN -> REFUNDED` x1
+- V12: same three plus `DELAYED -> DELIVERED` x1, `INVOICE -> PAYMENT` x1, `SHIPPED -> IN_TRANSIT` x1
+
+**Decision: V12 promotion FAIL.**
+The untouched holdout is the promotion authority. V12 is not promoted. V11 remains the better-supported adapter for now. Never tune from the frozen Stage 4 holdout; any future model cycle requires a new versioned holdout.
 
 Protocol:
-`protocols/V12-STAGE4-HOLDOUT-FROZEN-AND-COMPARE-PREP-2026-09-02.md`
+`protocols/V12-STAGE4-UNTOUCHED-HOLDOUT-RESULT-2026-09-02.md`
 
-## ONE-SHOT V11 VS V12 COMPARE PREPARED
+## NEXT ACTION — FULL BUYFLOW AUDIT
 
-Prepared only after the SHA was frozen:
-- `scripts/v12-posttrain-holdout-compare-v1.py`
-- `scripts/run-v12-posttrain-holdout-compare-v1.ps1`
-- `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-COMPARE.cmd`
+The V12 promotion gate is closed. Begin the planned module-by-module audit independently:
 
-Compare contract:
-- exact holdout SHA required
-- exact V11 and V12 adapter SHAs required
-- constrained decoding
-- no training or corpus mutation
-- no Fresh Blind / Input View Holdout / frozen108 / BLIND50 reads
-- no per-case result shown until both models complete
-- reports overall, per-event, per-language, per-variant, invalids and wrong transitions
-- refuses a second completed run if `FINAL_RESULT.json` already exists
+`MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`
 
-## NEXT ACTION
+For each module:
+1. define exact role / must / must-not contract;
+2. map all relevant code and runtime boundaries;
+3. trace input -> output and failure paths;
+4. inspect loss, unsafe fallback, duplication, retry/idempotency and privacy/security behavior;
+5. run unit + edge/adversarial + realistic integration tests;
+6. classify findings `PASS / FIX / BLOCKED` with exact evidence;
+7. move to the next module only when the current audit gate is explicit.
 
-1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate V11 test worktree.
-2. Run `scripts/BuyFlow-V12-POSTTRAIN-HOLDOUT-COMPARE.cmd` **once**.
-3. Preserve the full `# SUMMARY`, `# BY_EVENT`, `# BY_LANGUAGE`, `# BY_VARIANT`, and both WRONG_TRANSITIONS blocks.
-4. Never tune from this frozen holdout. Any future model change requires a new versioned holdout.
-5. Decide V12 promotion only after this untouched result.
-6. After the V12 gate closes, start the full BuyFlow module audit: MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse.
+Do not interpret `100%` as universal future-email accuracy; it means 100% of the defined contract/test gate plus fail-safe handling of uncertainty.
 
 ## RESUME CONTRACT
 
