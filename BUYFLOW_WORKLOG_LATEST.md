@@ -1,35 +1,65 @@
 # BuyFlow worklog latest
 
-## 2026-09-02 — MailLens audit completed; remediation required
+## 2026-09-02 — MailLens blockers remediated; code CI GREEN
 
 Branch: `codex/modern-email-source-foundation-v1`  
 Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
 
-MailLens was audited as the third module in the full BuyFlow audit.
+MailLens was the third module in the full BuyFlow audit. Its initial audit found representation drift, plain-text body loss, MIME attachment contamination, hidden/quoted stale-content risk, unauthenticated auth-header trust ambiguity and structured-data bounds/provenance gaps.
 
-Verdict:
-- **MailLens code: BLOCKED pending remediation**
-- production remains blocked; all related live/source flags remain OFF.
+Remediation:
+- `NormalizedEmailDocumentV1` now has bounded full `bodyText`, separate current `semanticText`, and explicit normalization metadata;
+- normalizer version is `normalized-email-document-v1.1`;
+- full provider plain text is preferred; rendered HTML is fallback; snippet is last resort;
+- candidate gating, deterministic parsing, legacy `EmailDocumentV1`, normalized inbound universal semantics and diagnostic identity shadow use the canonical MailLens semantic view;
+- raw HTML remains preserved in source/archive, while legacy semantic consumers do not receive raw HTML and therefore cannot bypass MailLens hidden/quote filtering;
+- common hidden/preheader HTML is removed from derived semantic text while source HTML stays untouched;
+- strong quoted/reply history is excluded from current semantic text while remaining in full body evidence;
+- Gmail named/attachment-disposition text/HTML parts no longer enter authored message body; detached real body parts still hydrate;
+- raw auth headers are diagnostic-only with `trusted:false` + provenance;
+- JSON-LD traversal is iterative/bounded; raw JSON parse is preferred; entity compatibility fallback is provenance-tagged;
+- microdata itemtype is explicitly type-hint-only (`fieldEvidence:false`), not field evidence;
+- truncation is explicit rather than silent;
+- link/structured compatibility paths gained numeric entity handling.
 
-Primary blockers:
-- the versioned normalized MailLens document is currently created by the archive path, while deterministic parsing and universal grammar run earlier directly from `NormalizedEmail`, so there is no single canonical downstream representation;
-- plain-text-only messages can lose their full body because `normalizedEmailToDeterministicInput()` and `buildEmailDocumentV1()` use HTML when present and otherwise `snippet`, ignoring `bodyText`;
-- because direct-Gmail candidate gating relies on those consumers, a legitimate plain-text commerce email can be dropped before persistence when it has no Purchases label/schema/strong subject signal;
-- Gmail body assembly currently collects every nested `text/plain`/`text/html` MIME part, including real attachments/nested content, so attachment text can contaminate lifecycle semantics;
-- regex HTML conversion does not separate hidden/preheader text or quoted history from current visible content;
-- authentication normalization reads arbitrary `Authentication-Results`/ARC headers without trusted authserv-id/provider provenance and therefore cannot be hard trust evidence.
+Regression coverage includes:
+- plain-text-only commerce with stale/short snippet;
+- Gmail privacy candidate acceptance based on full plain body;
+- hidden stale preheader;
+- quoted old lifecycle state;
+- text attachment injection;
+- detached body hydration;
+- auth spoof/conflict/Received-SPF provenance;
+- raw vs compatibility JSON-LD provenance;
+- deep JSON-LD bound safety;
+- explicit truncation and microdata type-hint semantics.
 
-Additional hardening required:
-- complete/bounded HTML entity parsing;
-- explicit semantic-text provenance + truncation flags;
-- useful microdata property/value extraction;
-- bounded JSON-LD traversal and provenance-aware compatibility parsing;
-- adversarial tests for plain-text-only commerce, hidden stale preheaders, quoted history, text/HTML attachments, auth-header spoofing, malformed/deep JSON-LD and truncation.
+Exact behavior code head:
+`f69195404831323f2783464a61f6f7b7435698b5`
+
+Temporary CI-only PR #296 / GitHub Actions CI #1151, run `33631564933`:
+- API typecheck PASS
+- API tests PASS
+- API build PASS
+- mobile typecheck PASS
+- mobile web build PASS
+
+PR #296 was closed unmerged after verification.
 
 Protocol:
 `protocols/MAILLENS-AUDIT-2026-09-02.md`
 
-Next: remediate MailLens, make the canonical document the input to candidate gating + deterministic/universal semantic consumers + future EventMind, run exact-head CI, then reassess for PASS before moving to EventMind.
+Verdict:
+- **MailLens code audit remediation: PASS**
+- **Production source path: BLOCKED** pending controlled MailGate real-Gmail and RawVault staging/storage/retention gates.
+
+Safety unchanged:
+- source/runtime flags remain OFF by default;
+- no live migration or provider cutover;
+- no Purchase/Shipment/Document/Identity authority change;
+- AI remains non-authoritative for identity.
+
+Next: **EventMind** full code/model/prompt/runtime audit against MailLens v1.1. Current reference semantic model remains V11; V12 is not promoted after its untouched post-training holdout regression.
 
 ---
 
@@ -88,8 +118,6 @@ Protocol:
 Verdict:
 - **RawVault code audit remediation: PASS**
 - **Production RawVault: BLOCKED** pending controlled staging migration, explicit retention policy configuration, live private-storage cleanup smoke and source enablement only for a controlled shadow account.
-
-Next: continue the module audit with **MailLens**. MailGate controlled real-Gmail smoke and RawVault controlled storage smoke remain separate production gates.
 
 ---
 
