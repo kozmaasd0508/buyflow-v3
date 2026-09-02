@@ -88,6 +88,11 @@ interface GmailWatchResponse {
 type FetchLike = typeof fetch;
 type AccessTokenSupplier = () => string | Promise<string>;
 
+const MAX_COMPLETE_SNAPSHOT_MESSAGES = 50_000;
+const MAX_SNAPSHOT_PAGES = 1_000;
+const DEFAULT_MESSAGE_FETCH_CONCURRENCY = 10;
+const DEFAULT_RETRY_DELAYS_MS = [250, 1_000, 3_000] as const;
+
 export interface GmailIncrementalEmailProviderConfig {
   getAccessToken: AccessTokenSupplier;
   userId?: string;
@@ -95,6 +100,10 @@ export interface GmailIncrementalEmailProviderConfig {
   watchLabelIds?: string[];
   apiBaseUrl?: string;
   fetchImpl?: FetchLike;
+  /** Test/operational override; production defaults to bounded exponential retry. */
+  retryDelaysMs?: number[];
+  /** Bound full-message fan-out so one list page cannot burst hundreds of gets. */
+  messageFetchConcurrency?: number;
 }
 
 export class GmailApiError extends Error {
@@ -105,6 +114,10 @@ export class GmailApiError extends Error {
     super(`Gmail API ${operation} failed with HTTP ${status}`);
     this.name = 'GmailApiError';
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function encodeBase64UrlToBuffer(value: string): Buffer {
@@ -210,6 +223,23 @@ function collectBodyParts(
   for (const child of part.parts ?? []) collectBodyParts(child, output, depth + 1);
 }
 
+function collectDetachedBodyParts(
+  part: GmailPartLike | undefined,
+  output: GmailPartLike[],
+  depth = 0,
+) {
+  if (!part || depth > 30 || output.length >= 200) return;
+  const mime = part.mimeType?.toLowerCase();
+  if (
+    (mime === 'text/plain' || mime === 'text/html')
+    && !part.body?.data
+    && part.body?.attachmentId?.trim()
+  ) {
+    output.push(part);
+  }
+  for (const child of part.parts ?? []) collectDetachedBodyParts(child, output, depth + 1);
+}
+
 function boundedJoin(values: string[], maxChars = 500_000): string | undefined {
   if (values.length === 0) return undefined;
   return values.join('\n').slice(0, maxChars) || undefined;
@@ -223,21 +253,51 @@ function collectAttachments(
   if (!part || depth > 30 || output.length >= 200) return;
   const attachmentId = part.body?.attachmentId?.trim();
   const filename = part.filename?.trim();
-  if (attachmentId) {
+  const partHeaders = headersOf(part);
+  const disposition = firstHeader(partHeaders, 'Content-Disposition');
+  const mime = part.mimeType?.toLowerCase();
+  const detachedBodyOnly = Boolean(
+    attachmentId
+    && (mime === 'text/plain' || mime === 'text/html')
+    && !filename
+    && !disposition,
+  );
+  if (attachmentId && !detachedBodyOnly) {
     output.push({
       id: attachmentId,
       filename: filename || `gmail-attachment-${output.length}`,
       contentType: part.mimeType?.trim() || 'application/octet-stream',
       ...(part.body?.size !== undefined ? { size: part.body.size } : {}),
-      ...(firstHeader(headersOf(part), 'Content-ID')
-        ? { contentId: firstHeader(headersOf(part), 'Content-ID')!.replace(/^<|>$/g, '') }
+      ...(firstHeader(partHeaders, 'Content-ID')
+        ? { contentId: firstHeader(partHeaders, 'Content-ID')!.replace(/^<|>$/g, '') }
         : {}),
-      ...(firstHeader(headersOf(part), 'Content-Disposition')?.toLowerCase().includes('inline')
+      ...(disposition?.toLowerCase().includes('inline')
         ? { isInline: true }
         : {}),
     });
   }
   for (const child of part.parts ?? []) collectAttachments(child, output, depth + 1);
+}
+
+function validIsoFromMilliseconds(value: number): string | null {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function resolveReceivedAt(message: GmailMessageLike, headers: EmailHeader[]): string {
+  const internal = validIsoFromMilliseconds(Number(message.internalDate));
+  if (internal) return internal;
+
+  const dateHeader = firstHeader(headers, 'Date');
+  if (dateHeader) {
+    const parsed = Date.parse(dateHeader);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+
+  // Missing provider time is evidence absence, not 1970. Fail closed so a
+  // fabricated timestamp can never influence lifecycle ordering/correlation.
+  throw new Error('Gmail message is missing a valid received timestamp');
 }
 
 export function normalizeGmailMessage(message: GmailMessageLike): NormalizedEmail {
@@ -248,10 +308,7 @@ export function normalizeGmailMessage(message: GmailMessageLike): NormalizedEmai
   collectBodyParts(message.payload, bodies);
   const attachments: EmailAttachmentMetadata[] = [];
   collectAttachments(message.payload, attachments);
-  const receivedAtMs = Number(message.internalDate);
-  const receivedAt = Number.isFinite(receivedAtMs) && receivedAtMs > 0
-    ? new Date(receivedAtMs).toISOString()
-    : new Date(0).toISOString();
+  const receivedAt = resolveReceivedAt(message, headers);
   const bodyText = boundedJoin(bodies.plain);
   const bodyHtml = boundedJoin(bodies.html);
 
@@ -287,6 +344,24 @@ function positiveInteger(value: number | undefined, fallback: number, max: numbe
   return Math.min(Math.max(Math.trunc(value), 1), max);
 }
 
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function responseRetryDelay(response: Response, fallback: number): number {
+  const retryAfter = response.headers.get('retry-after')?.trim();
+  if (!retryAfter) return fallback;
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(Math.trunc(seconds * 1000), 30_000);
+  }
+  const date = Date.parse(retryAfter);
+  if (Number.isFinite(date)) {
+    return Math.min(Math.max(date - Date.now(), 0), 30_000);
+  }
+  return fallback;
+}
+
 export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, EmailProvider {
   readonly name = 'gmail' as const;
 
@@ -295,6 +370,8 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
   private readonly watchLabelIds: string[];
   private readonly apiBaseUrl: string;
   private readonly fetchImpl: FetchLike;
+  private readonly retryDelaysMs: number[];
+  private readonly messageFetchConcurrency: number;
 
   constructor(private readonly config: GmailIncrementalEmailProviderConfig) {
     this.userId = config.userId?.trim() || 'me';
@@ -302,6 +379,14 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
     this.watchLabelIds = [...new Set((config.watchLabelIds ?? []).map((value) => value.trim()).filter(Boolean))];
     this.apiBaseUrl = (config.apiBaseUrl?.trim() || 'https://gmail.googleapis.com/gmail/v1').replace(/\/$/, '');
     this.fetchImpl = config.fetchImpl ?? fetch;
+    this.retryDelaysMs = (config.retryDelaysMs ?? [...DEFAULT_RETRY_DELAYS_MS])
+      .map((value) => Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0)
+      .slice(0, 5);
+    this.messageFetchConcurrency = positiveInteger(
+      config.messageFetchConcurrency,
+      DEFAULT_MESSAGE_FETCH_CONCURRENCY,
+      25,
+    );
   }
 
   private async requestJson<T>(
@@ -311,18 +396,37 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
   ): Promise<T> {
     const token = (await this.config.getAccessToken()).trim();
     if (!token) throw new Error('Gmail access token supplier returned an empty token');
-    const response = await this.fetchImpl(`${this.apiBaseUrl}${path}`, {
-      ...init,
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(init.headers ?? {}),
-      },
-    });
-    if (!response.ok) throw new GmailApiError(response.status, operation);
-    if (response.status === 204) return undefined as T;
-    return await response.json() as T;
+
+    for (let attempt = 0; ; attempt += 1) {
+      let response: Response;
+      try {
+        response = await this.fetchImpl(`${this.apiBaseUrl}${path}`, {
+          ...init,
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+            ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+            ...(init.headers ?? {}),
+          },
+        });
+      } catch (error) {
+        if (attempt < this.retryDelaysMs.length) {
+          await sleep(this.retryDelaysMs[attempt] ?? 0);
+          continue;
+        }
+        throw error;
+      }
+
+      if (!response.ok) {
+        if (isRetryableStatus(response.status) && attempt < this.retryDelaysMs.length) {
+          await sleep(responseRetryDelay(response, this.retryDelaysMs[attempt] ?? 0));
+          continue;
+        }
+        throw new GmailApiError(response.status, operation);
+      }
+      if (response.status === 204) return undefined as T;
+      return await response.json() as T;
+    }
   }
 
   private userPath(suffix: string): string {
@@ -333,6 +437,21 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
     return this.requestJson('profile.get', this.userPath('/profile'));
   }
 
+  private async hydrateDetachedBodies(messageId: string, message: GmailMessageLike): Promise<void> {
+    const parts: GmailPartLike[] = [];
+    collectDetachedBodyParts(message.payload, parts);
+    for (let offset = 0; offset < parts.length; offset += this.messageFetchConcurrency) {
+      const batch = parts.slice(offset, offset + this.messageFetchConcurrency);
+      await Promise.all(batch.map(async (part) => {
+        const attachmentId = part.body?.attachmentId?.trim();
+        if (!attachmentId) return;
+        const bytes = await this.downloadAttachment(messageId, attachmentId);
+        part.body ??= {};
+        part.body.data = bytes.toString('base64url');
+      }));
+    }
+  }
+
   async searchMessages(input: SearchMessagesInput): Promise<SearchMessagesPage> {
     const params = new URLSearchParams({
       q: input.query,
@@ -340,9 +459,12 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
     });
     if (input.cursor) params.set('pageToken', input.cursor);
     const list = await this.requestJson<GmailListResponse>('messages.list', this.userPath(`/messages?${params}`));
-    const messages = await Promise.all(
-      (list.messages ?? []).flatMap((item) => item.id ? [this.getMessage(item.id)] : []),
-    );
+    const refs = (list.messages ?? []).flatMap((item) => item.id ? [item.id] : []);
+    const messages: NormalizedEmail[] = [];
+    for (let offset = 0; offset < refs.length; offset += this.messageFetchConcurrency) {
+      const batch = refs.slice(offset, offset + this.messageFetchConcurrency);
+      messages.push(...await Promise.all(batch.map((id) => this.getMessage(id))));
+    }
     return {
       messages,
       ...(list.nextPageToken ? { nextCursor: list.nextPageToken } : {}),
@@ -356,6 +478,7 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
       'messages.get',
       this.userPath(`/messages/${encodeURIComponent(id)}?format=full`),
     );
+    await this.hydrateDetachedBodies(id, message);
     return normalizeGmailMessage(message);
   }
 
@@ -389,22 +512,37 @@ export class GmailIncrementalEmailProvider implements IncrementalEmailProvider, 
     const profile = await this.getProfile();
     if (!profile.historyId) throw new Error('Gmail profile did not contain historyId');
 
-    const limit = positiveInteger(input.limit, 100, 5000);
+    const completeSnapshot = input.completeSnapshot === true;
+    const totalLimit = positiveInteger(input.limit, 100, 5000);
+    const pageSize = completeSnapshot
+      ? positiveInteger(input.limit, 500, 500)
+      : Math.min(500, totalLimit);
     const messages: NormalizedEmail[] = [];
     let pageToken: string | undefined;
-    while (messages.length < limit) {
+    let pages = 0;
+
+    do {
+      pages += 1;
+      if (pages > MAX_SNAPSHOT_PAGES) {
+        throw new Error('Gmail initial snapshot exceeded safe pagination limit; cursor was not advanced');
+      }
       const page = await this.searchMessages({
         query: input.query,
-        limit: Math.min(500, limit - messages.length),
+        limit: completeSnapshot ? pageSize : Math.min(pageSize, totalLimit - messages.length),
         ...(pageToken ? { cursor: pageToken } : {}),
       });
       messages.push(...page.messages);
+
+      if (completeSnapshot && messages.length > MAX_COMPLETE_SNAPSHOT_MESSAGES) {
+        throw new Error('Gmail initial snapshot exceeded safe message limit; cursor was not advanced');
+      }
+      if (!completeSnapshot && messages.length >= totalLimit) break;
       if (!page.nextCursor) break;
       pageToken = page.nextCursor;
-    }
+    } while (pageToken);
 
     return {
-      messages: messages.slice(0, limit),
+      messages: completeSnapshot ? messages : messages.slice(0, totalLimit),
       cursor: cursor(profile.historyId),
     };
   }
