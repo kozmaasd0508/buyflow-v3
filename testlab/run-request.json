@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
   "suite": "eventmind",
-  "reason": "run frozen 120 real Gmail EventMind V11 blind predictions via TestLab",
+  "reason": "run EventMind V13 candidate on frozen REAL120 development set for comparison with V11 baseline",
   "production_cutover_authorized": false
 }
