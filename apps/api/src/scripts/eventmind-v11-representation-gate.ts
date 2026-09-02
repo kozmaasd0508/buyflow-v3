@@ -115,7 +115,9 @@ async function main() {
   if (!runtimeConfig.enabled) throw new Error('EVENTMIND_V11_RUNTIME_DISABLED');
 
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
-  const runDir = resolve(repoRoot, 'local-data', 'eventmind-v11-representation-gate', 'runs', stamp());
+  const runsRoot = resolve(repoRoot, 'local-data', 'eventmind-v11-representation-gate', 'runs');
+  await mkdir(runsRoot, { recursive: true });
+  const runDir = resolve(runsRoot, stamp());
   await mkdir(runDir, { recursive: false });
 
   // Freeze the exact private fixture before the first inference call. local-data/
