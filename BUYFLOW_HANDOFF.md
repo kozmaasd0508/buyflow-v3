@@ -20,9 +20,11 @@
 - Raw/private email fixtures and local model results stay out of Git.
 - V11 remains the reference semantic model. V12 is not promoted.
 
-## MODULE AUDIT ORDER
+## MODULE AUDIT ORDER — COMPLETE
 
 `MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`
+
+All nine code-audit modules have now been reviewed. This does **not** mean production cutover is approved; the staging/source/authentication gates listed below remain mandatory.
 
 ## MAILGATE — PASS / production blocked
 
@@ -109,8 +111,8 @@ Document/content safety audit PASS.
 
 Real issues found and fixed:
 - same Purchase + invoice number could silently replace the stored PDF/hash;
-- attachment storage path was provider-identity based while using `upsert: true`, so changed bytes after an interrupted retry could overwrite old storage content;
-- base `documents.user_id` is required while legacy controlled insert paths did not populate it directly;
+- attachment storage path was provider-identity based while using `upsert: true`, so changed bytes after an interrupted retry could overwrite the old object;
+- base `documents.user_id` is required while legacy controlled document insert paths did not populate it directly;
 - admin-client document reads were Purchase-scoped but did not independently filter `documents.user_id` before signed URL creation.
 
 Current behavior:
@@ -164,6 +166,40 @@ Protocol: `protocols/CORE-AUDIT-2026-09-02.md`.
 
 Migration NOT APPLIED. Production Core DB remediation remains BLOCKED pending controlled staging migration + existing Purchase/state smoke.
 
+## PULSE — PASS / read-only projection
+
+User-facing status/next-step authority audit PASS.
+
+Real issues fixed:
+- Purchase cards previously let the first Shipment visually override the whole Purchase, so one delivered parcel could make a multi-parcel Purchase look delivered;
+- detail status could promote `deliveredAt`, `paidAt` or any Shipment presence even while the Purchase was REVIEW/PENDING;
+- `ready_for_pickup` was not represented correctly;
+- home movement counters counted `ordered`/`processing` instead of physical Shipment progress;
+- timeline timestamps could overstate payment/shipping/delivery certainty.
+
+Current behavior:
+- server-side `apps/api/src/api/purchase-pulse.ts` is the single user-facing status projection;
+- Pulse derives from persisted Purchase state + all linked Shipment states;
+- REVIEW/PENDING wins over optimistic timestamps or child hints;
+- one delivered parcel cannot complete a multi-parcel Purchase;
+- aggregate delivered with any undelivered parcel fails closed to REVIEW;
+- all child parcels delivered without aggregate delivery also fails closed to REVIEW;
+- `deliveredAt` alone cannot promote delivery;
+- `paidAt` alone cannot promote an ordered Purchase;
+- `ready_for_pickup` and `out_for_delivery` are explicit states;
+- movement counts only physical Shipment progress;
+- unknown states fail closed;
+- Purchase cards, home counters, detail overview and timeline all consume the same Pulse projection;
+- no live push notification engine was added or enabled.
+
+Verified head: `df75e04989afd89df080942adcf31cb4ee4ec2d4`.
+Initial CI #1186 caught a test-only TypeScript cast and stopped before tests/build. The assertion was corrected without changing Pulse behavior.
+Final CI #1187 / run `33660311868`: PASS.
+Temporary PR #309 closed unmerged.
+Protocol: `protocols/PULSE-AUDIT-2026-09-02.md`.
+
+Pulse introduces no database migration and no production write or notification authority.
+
 ## DEPLOYMENT STATE
 
 Still conservative:
@@ -176,23 +212,24 @@ Still conservative:
 - JourneyGraph migration NOT APPLIED;
 - DocVault migration NOT APPLIED;
 - Core migration NOT APPLIED;
+- no live push notification engine enabled;
 - no live migration applied from this flow;
 - no provider cutover;
 - no AI identity authority;
 - no Purchase/Shipment/Document/Identity production authority change.
 
-## NEXT ACTION
+## NEXT ACTION — CONTROLLED STAGING / SMOKE PHASE
 
-1. Continue the module audit with **Pulse**.
-2. Keep PR #295 draft and all live/source/AI/write flags OFF.
-3. Preserve the EventMind first gate result unchanged and never train on that fixture.
-4. MailGate/RawVault production smokes are still required before source cutover.
-5. Trusted provider-authentication provenance must be implemented and separately verified before merchant-scoped TrustLink promotion can be enabled.
-6. JourneyGraph migration must first pass controlled staging + multi-shipment smoke.
-7. DocVault migration must first pass controlled staging + PDF ownership/content smoke.
-8. Core migration must first pass controlled staging + existing Purchase/state smoke.
-9. Do not promote V12.
+1. Keep PR #295 draft and all live/source/AI/write flags OFF.
+2. Preserve the EventMind first gate result unchanged and never train on that fixture.
+3. Run MailGate real-Gmail read-only shadow smoke before any source cutover.
+4. Run RawVault controlled staging migration + retention/private-storage/orphan cleanup smoke.
+5. Implement and separately verify real trusted provider-authentication provenance before merchant-scoped TrustLink promotion can be enabled.
+6. Apply and smoke-test the prepared database remediations in controlled staging only, respecting dependencies: JourneyGraph -> DocVault -> Core.
+7. Verify multi-shipment, PDF ownership/content identity and existing Purchase/state behavior after staging migration.
+8. Do not promote V12.
+9. Only after every staging/source/authentication gate passes should a separate production-cutover decision be considered.
 
 ## RESUME CONTRACT
 
-**Folytasd a BuyFlowot a GitHubból.**
+**Folytasd a BuyFlowot a GitHubból. A 9 modulos kódaudit kész; következő fázis a kontrollált staging/smoke ellenőrzés, nem production bekapcsolás.**
