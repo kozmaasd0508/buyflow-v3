@@ -9,6 +9,7 @@ $repoRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modelRoot=if($env:BUYFLOW_V11_MODEL_ROOT){$env:BUYFLOW_V11_MODEL_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation'}
 $privateRoot=if($env:BUYFLOW_TESTLAB_PRIVATE_ROOT){$env:BUYFLOW_TESTLAB_PRIVATE_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\.testlab-private'}
 $idFile=Join-Path $privateRoot 'real120-ids.json'
+$expectedIdSha='88072442a01f0519ad4f02cf02f37825b6d933c18e199c6e7b8d1e97a506b470'
 $distro='Ubuntu-24.04'
 $tempRoot=Join-Path $env:TEMP ('buyflow-testlab-real120-' + [guid]::NewGuid().ToString('N'))
 $stdout=Join-Path $tempRoot 'eventmind.out.log'
@@ -18,6 +19,13 @@ $localDataTarget=Join-Path $repoRoot 'local-data'
 $localDataJunction=$false
 
 function Fail([string]$Message){throw $Message}
+function Get-Sha256Text([string]$Text){
+  $sha=[Security.Cryptography.SHA256]::Create()
+  try {
+    $bytes=[Text.Encoding]::UTF8.GetBytes($Text)
+    return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()
+  } finally {$sha.Dispose()}
+}
 function Convert-ToWslPath([string]$p){
   $full=[IO.Path]::GetFullPath($p)
   if($full -notmatch '^([A-Za-z]):\\(.*)$'){Fail "WSL_PATH_UNSUPPORTED: $full"}
@@ -38,6 +46,10 @@ try {
   if(-not (Test-Path -LiteralPath $idFile)){Fail "TESTLAB_REAL120_IDS_MISSING:$idFile"}
   $ids=Get-Content -Raw -LiteralPath $idFile | ConvertFrom-Json
   if(@($ids).Count -ne 120){Fail "TESTLAB_REAL120_EXPECTED_120_IDS_GOT_$(@($ids).Count)"}
+  $canonical=[string]::Join("`n",[string[]]$ids)
+  $actualIdSha=Get-Sha256Text $canonical
+  if($actualIdSha -ne $expectedIdSha){Fail "TESTLAB_REAL120_SHA_MISMATCH:$actualIdSha"}
+  Write-Host ("Frozen REAL120 SHA256: " + $actualIdSha) -ForegroundColor Green
   if(-not (Test-Path -LiteralPath (Join-Path $modelRoot 'local-data\lora-v11\LATEST.txt'))){Fail 'TESTLAB_V11_MODEL_NOT_FOUND'}
   if(-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)){Fail 'TESTLAB_WSL_NOT_FOUND'}
 
