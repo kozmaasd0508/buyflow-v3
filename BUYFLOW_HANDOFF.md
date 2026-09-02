@@ -5,7 +5,7 @@
 **Last updated:** 2026-09-02 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current main:** `92461ac103d4e337baa69ef91d09717eeb488d00`  
-**MailGate/source branch:** `codex/modern-email-source-foundation-v1`  
+**Source/audit branch:** `codex/modern-email-source-foundation-v1`  
 **Architecture PR:** #295 draft -> `codex/v9-real-gmail-identity-shadow`
 
 ## SAFETY CONTRACT
@@ -19,7 +19,7 @@
 - No direct-Gmail/source migration has been applied live from this development flow.
 - No provider production cutover.
 - No raw customer email bodies/secrets committed to Git.
-- Pub/Sub/OAuth/provider cursor state has zero Purchase authority.
+- Pub/Sub/OAuth/provider cursor/archive state has zero Purchase authority.
 
 ## MODULE AUDIT ORDER
 
@@ -27,94 +27,93 @@
 
 The full audit started on 2026-09-02 after the V12 promotion gate failed. V11 remains the better current semantic model; V12 is not promoted.
 
-## MAILGATE ROLE
+## MAILGATE
 
-MailGate owns provider connection and source acquisition only:
-- securely authorize Gmail read-only;
-- observe the configured mailbox discovery window without silently skipping source messages;
-- obtain provider message/thread identity, headers, text/HTML, attachment metadata and exact RAW MIME when requested by the archive layer;
-- maintain durable incremental cursor/watch state;
-- tolerate duplicates/retries/races/provider cursor expiry;
-- protect personal-mailbox privacy before persistence;
-- never create/link/merge Purchase identity.
+Role: provider authorization/source acquisition only. It must read Gmail safely, maintain complete durable incremental sync, protect personal-mailbox privacy, and never create/link Purchase identity.
 
-## MAILGATE AUDIT — CODE REMEDIATION COMPLETE
+Audit blockers were remediated on behavior head `e67b908e07d072e3737611eca4ee804d7d905c26`:
+- complete discovery snapshot before cursor commit;
+- detached Gmail text/html body hydration;
+- no fabricated 1970 timestamp;
+- bounded retry/concurrency;
+- expired-history automatic recovery snapshot;
+- automatic watch renewal;
+- periodic cursor fallback independent of Pub/Sub;
+- rejection of unexpected/broad Gmail OAuth authority.
 
-The first direct-Gmail audit found production blockers. They were remediated on behavior code head:
-`e67b908e07d072e3737611eca4ee804d7d905c26`
+CI #1142 on exact behavior head: API typecheck/tests/build + mobile typecheck/web build all PASS.
 
-Fixes:
-1. Durable initial sync now exhausts the full discovery-query snapshot before cursor commit. Small `limit` values are page size for durable sync, not a silently truncated mailbox snapshot.
-2. Gmail text/html or text/plain body parts stored behind `attachmentId` are fetched and hydrated before normalization.
-3. Invalid/missing `internalDate` no longer fabricates 1970. Valid `Date` header is fallback; otherwise fail closed.
-4. Gmail reads use bounded retry for transient network/408/429/5xx failures and bounded full-message concurrency.
-5. Expired Gmail history cursor automatically triggers a complete recovery snapshot; the replacement cursor commits only after safe source handling.
-6. Automatic watch renewal is scheduled before expiry.
-7. Periodic cursor-based fallback synchronization runs independently of Pub/Sub so a missed push cannot silently stop ingestion.
-8. OAuth now rejects unexpected extra Gmail authority, including `gmail.*` write scopes and the broad `https://mail.google.com/` scope.
+Protocol: `protocols/MAILGATE-DIRECT-GMAIL-AUDIT-REMEDIATION-2026-09-02.md`
+
+Status:
+- **MailGate code audit remediation: PASS**
+- **Production MailGate: BLOCKED** pending controlled real-Gmail read-only shadow smoke.
+
+## RAWVAULT
+
+Role: immutable source evidence storage only. It owns exact raw provider/MIME bytes when available, versioned normalized source documents, integrity metadata, opaque object identities, retention and crash/orphan/account-deletion cleanup. It has zero Purchase/Identity authority.
+
+The RawVault audit found and remediated:
+- source/user deletion could leave untracked Storage objects;
+- retention metadata had no deletion worker;
+- object upload before DB insert could leave crash/DB-failure orphans;
+- deduped provider id did not verify raw-byte integrity;
+- empty raw bytes were accepted;
+- expired retention boundaries were accepted;
+- normalized JSON had no separate retention;
+- archive metadata was not DB-level immutable.
+
+Behavior code head verified by CI:
+`9480e6d4e8d5c3e0a771b43671503cda593971c2`
+
+Current RawVault design:
+- artifacts are fully prepared/hashes computed before writes;
+- opaque durable `email_source_archive_manifests` row is staged before object writes;
+- manifest contains no user id, provider message id, subject or body;
+- raw + normalized object identities/hashes/retention are DB-immutable;
+- separate raw and normalized retention boundaries;
+- no retention duration is guessed: archive writes fail closed until both `BUYFLOW_EMAIL_SOURCE_RAW_RETENTION_DAYS` and `BUYFLOW_EMAIL_SOURCE_NORMALIZED_RETENTION_DAYS` are explicitly configured;
+- empty raw and expired/invalid retention fail before object writes;
+- duplicate provider message raw SHA mismatch fails closed;
+- pending manifests survive source-insert failure and provide a crash-safe retry/cleanup journal;
+- periodic maintenance heals commit races, deletes stale orphans, enforces raw/normalized retention independently, and removes archived objects after source/user deletion;
+- object/hash identity remains in audit metadata while deletion timestamps record retention cleanup;
+- bucket remains private and archive remains OFF by default.
+
+Migration:
+`supabase/migrations/20260902115500_harden_email_source_archive_v1.sql`
 
 Protocol:
-`protocols/MAILGATE-DIRECT-GMAIL-AUDIT-REMEDIATION-2026-09-02.md`
+`protocols/RAWVAULT-AUDIT-REMEDIATION-2026-09-02.md`
 
-## MAILGATE VERIFICATION
-
-Temporary CI-only PR #296 / CI #1142 on exact behavior head `e67b908e07d072e3737611eca4ee804d7d905c26`:
+Temporary CI-only PR #296 / CI #1147 on exact behavior head `9480e6d4e8d5c3e0a771b43671503cda593971c2`:
 - API typecheck PASS
 - API tests PASS
 - API build PASS
 - mobile typecheck PASS
 - mobile web build PASS
 
-Regression coverage includes complete initial pagination, detached body hydration, timestamp fail-closed behavior, retryable Gmail responses, and extra OAuth authority rejection.
+PR #296 was closed unmerged after verification.
 
-Existing safety mechanisms remain:
-- OAuth Authorization Code + PKCE;
-- `gmail.readonly` least privilege;
-- AES-256-GCM refresh-token encryption with user+connection+provider+key-version AAD;
-- server-only credential/cursor tables;
-- compare-and-swap cursor commit;
-- authenticated Pub/Sub OIDC verification;
-- durable Pub/Sub inbox with retry/dead-letter;
-- Pub/Sub is wake-up only, never email/Purchase evidence;
-- positive-commerce privacy gate before personal Gmail persistence;
-- Purchase/Shipment/Document/AI write counters remain zero in this source lane.
+Status:
+- **RawVault code audit remediation: PASS**
+- **Production RawVault: BLOCKED** until controlled staging migration + explicit retention policy + real private-storage retention/orphan smoke.
 
-## MAILGATE STATUS
+## DEPLOYMENT STATE
 
-**Code audit remediation: PASS.**
-
-**Production MailGate: still BLOCKED pending controlled real-Gmail shadow smoke.**
-
-Required shadow gate:
-- direct Gmail runtime enabled only in controlled staging/test context;
-- bounded message sample;
-- exact RAW MIME available for every sampled message;
-- valid captured Gmail cursor;
-- history replay without guessed continuation;
-- privacy-reduced counters only;
-- 0 source persistence/archive in smoke;
-- 0 Purchase/Shipment/Document writes;
-- 0 AI calls;
-- 0 mailbox mutations.
-
-Do not enable production source persistence/archive or provider cutover before that smoke is green.
-
-## SOURCE FOUNDATION / RAWVAULT CONTEXT
-
-PR #295 also contains the future RawVault/MailLens foundation:
-- `NormalizedEmailDocumentV1` with full plain text + HTML, headers, attachment metadata, structured data, safe links, authentication verdicts, raw-source ref, normalizer version and trace id;
-- immutable content-addressed RAW MIME + normalized JSON archive with SHA-256 and opaque object keys;
-- raw bytes in private object storage, not inline Postgres;
-- archive flag OFF by default.
-
-These parts have not yet received the new module-by-module audit verdict. Do not treat earlier green CI as a completed RawVault or MailLens audit.
+Still conservative:
+- direct Gmail runtime OFF by default;
+- source archive OFF by default;
+- Mailgun source persistence OFF by default;
+- new migrations committed only, not applied live here;
+- no Google OAuth credentials/archive secrets/customer raw email committed;
+- no Purchase/Shipment/Document/Identity authority change.
 
 ## NEXT ACTION
 
 1. Keep PR #295 draft and all live flags OFF.
-2. If controlled Google/Supabase staging credentials are available, run the read-only `gmail:direct-shadow-smoke` gate and record exact evidence.
-3. Until that live smoke exists, MailGate production status remains BLOCKED despite code remediation PASS.
-4. Continue the module audit with **RawVault** next; inspect immutable source archive boundaries, retention, object integrity/idempotency, privacy, failure/orphan behavior and DB/object-store consistency.
+2. Controlled Gmail/RawVault staging smokes remain required before any production cutover.
+3. Continue module audit with **MailLens** next: inspect normalization completeness, MIME/body/header handling, structured-data extraction, safe-link extraction, authentication verdict semantics, truncation/bounds, duplicate/conflict behavior, and whether evidence is ever invented or lost.
 
 ## RESUME CONTRACT
 
