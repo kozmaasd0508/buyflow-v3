@@ -107,7 +107,13 @@ export class GmailRuntimeProvider {
       userId: this.config.userId,
       emailConnectionId: this.config.emailConnectionId,
     });
-    const result = await this.provider.initialSync(input);
+    // Durable source state may only advance after the entire discovery query has
+    // been exhausted. Bounded smoke sampling bypasses this runtime wrapper and
+    // calls provider.initialSync directly without completeSnapshot.
+    const result = await this.provider.initialSync({
+      ...input,
+      completeSnapshot: true,
+    });
     return {
       result,
       checkpoint: {
