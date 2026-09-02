@@ -1,5 +1,6 @@
 import type {
   EmailAuthenticationResults,
+  EmailAuthenticationSource,
   EmailAuthenticationVerdict,
 } from './document-v1.js';
 import type { EmailHeader } from './types.js';
@@ -42,9 +43,25 @@ function collapse(verdicts: Set<EmailAuthenticationVerdict>): EmailAuthenticatio
   return [...verdicts][0] ?? 'unknown';
 }
 
+function sourceOf(input: {
+  authResults: string[];
+  arcResults: string[];
+  receivedSpf: string[];
+}): EmailAuthenticationSource {
+  const sources = [
+    input.authResults.length > 0 ? 'authentication_results' : null,
+    input.arcResults.length > 0 ? 'arc_authentication_results' : null,
+    input.receivedSpf.length > 0 ? 'received_spf' : null,
+  ].filter(Boolean) as EmailAuthenticationSource[];
+  if (sources.length === 0) return 'none';
+  if (sources.length > 1) return 'mixed';
+  return sources[0] ?? 'none';
+}
+
 /**
- * Normalizes authentication evidence without upgrading conflicting or missing
- * provider headers into trust. Multiple contradictory verdicts become unknown.
+ * Normalizes authentication header evidence without upgrading it into trust.
+ * MailLens cannot prove which trusted authserv-id inserted a raw header, so the
+ * parsed verdicts are diagnostic only. Contradictory verdicts become unknown.
  */
 export function extractEmailAuthenticationResults(
   headers: EmailHeader[],
@@ -53,14 +70,14 @@ export function extractEmailAuthenticationResults(
   const arcResults = authResults.length === 0
     ? valuesFor(headers, 'arc-authentication-results')
     : [];
-  const source = authResults.length > 0 ? authResults : arcResults;
+  const sourceHeaders = authResults.length > 0 ? authResults : arcResults;
 
-  const dkim = collapse(collectMethodVerdicts(source, 'dkim'));
-  let spf = collapse(collectMethodVerdicts(source, 'spf'));
-  const dmarc = collapse(collectMethodVerdicts(source, 'dmarc'));
+  const dkim = collapse(collectMethodVerdicts(sourceHeaders, 'dkim'));
+  let spf = collapse(collectMethodVerdicts(sourceHeaders, 'spf'));
+  const dmarc = collapse(collectMethodVerdicts(sourceHeaders, 'dmarc'));
 
+  const receivedSpf = valuesFor(headers, 'received-spf');
   if (spf === 'unknown') {
-    const receivedSpf = valuesFor(headers, 'received-spf');
     const receivedVerdicts = new Set<EmailAuthenticationVerdict>();
     for (const value of receivedSpf) {
       const token = value.trim().match(/^([a-z_]+)/i)?.[1];
@@ -70,5 +87,11 @@ export function extractEmailAuthenticationResults(
     spf = collapse(receivedVerdicts);
   }
 
-  return { dkim, spf, dmarc };
+  return {
+    dkim,
+    spf,
+    dmarc,
+    trusted: false,
+    source: sourceOf({ authResults, arcResults, receivedSpf }),
+  };
 }
