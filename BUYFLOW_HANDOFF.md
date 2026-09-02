@@ -76,64 +76,69 @@ Pre-train V11 baseline on 72 validation rows:
 - ORDER_PACKING `36/36`
 - ORDER_PROCESSING `34/36`
 - only wrong transition `ORDER_PROCESSING -> ORDER_PACKING` x2
-- misleading_subject `11/12`
-- metadata_order_shift `11/12`
-- every other representation variant `12/12`
 
 ## V12 STAGE 2C — RETENTION REPLAY PASS
 
-Canonical V11 corpus located directly at:
+Canonical V11 corpus:
 - `local-data/training-v11-normalized-semantic/classification.train.jsonl`
 - `local-data/training-v11-normalized-semantic/classification.validation.jsonl`
 
-Local gate result:
-- `v11_corpus_signature: PASS_18_EVENTS_BALANCED`
+Retention gate:
 - `status: V12_RETENTION_REPLAY_V1_READY`
-- replay TRAIN `1152`
-- hard TRAIN `144`
-- merged TRAIN `1296`
-- replay validation `288`
-- hard validation `72`
-- merged validation `360`
+- replay TRAIN `1152` + hard TRAIN `144` = merged TRAIN `1296`
+- replay validation `288` + hard validation `72` = merged validation `360`
 - TRAIN ORDER_PROCESSING `136`, ORDER_PACKING `136`, every other event `64`
 - validation ORDER_PROCESSING `52`, ORDER_PACKING `52`, every other event `16`
 - exact TRAIN/validation overlap `0`
 - frozen holdouts read `False`
 - TRAIN SHA `81c4a92bcdb22d58215ee51f1fc193415ab72c54141d6e97d12dd3766f60f00a`
 - validation SHA `d2c6a2d60c9739d81c0afda7e051c558578e93933ee72e2f82fd66ba27bfbfd6`
-- training started `False`
 
-The earlier recursive discovery attempts failed or were interrupted before training and caused no model/corpus mutation.
+## V12 STAGE 3 — CONTINUATION TRAINING COMPLETE
 
-## V12 STAGE 3 — CONTINUATION TRAINING PREPARED
+Local Qwen3-8B continuation QLoRA completed successfully from the unchanged V11 best adapter.
 
-Prepared:
-- `scripts/train-v12-retention-qwen-v1.py`
-- `scripts/run-v12-retention-train-v1.ps1`
-- `scripts/BuyFlow-V12-RETENTION-TRAIN.cmd`
-- `protocols/V12-STAGE3-RETENTION-CONTINUATION-TRAIN-V1-2026-09-02.md`
-
-Training contract:
-- start from exact V11 best adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
-- never overwrite V11; save separate V12 child adapter under `local-data/lora-v12/runs/...`
-- verify exact merged TRAIN/validation hashes before loading model
-- 1296 TRAIN / 360 validation
-- retain all 18 labels
-- one conservative first epoch
+- status `V12_TRAINING_COMPLETE`
+- parent V11 adapter SHA `462db0d03ee2f9e8d95e288700a153ca422a7feba8fa5ba93c0f6b0600352c0b`
+- parent V11 unchanged `True`
+- TRAIN `1296`
+- validation `360`
+- all 18 labels retained
+- epochs `1`
 - LR `2e-5`
 - grad_accum `4`
 - max_seq `768`
-- Qwen3-8B NF4
-- no Fresh Blind / Input View Holdout / frozen108 / BLIND50 / locked test read or training
+- optimizer steps `324/324`
+- train loss `0.000222`
+- validation loss `0.000007`
+- best epoch `1`
+- training time `66.36 min`
+- GPU peak `10.13 GiB`
+- best adapter SHA `5addcbce953f99e59ef345b14ea237daafeb2566e45a3d1e94d0459cd163f630`
+- frozen holdouts read `False`
+- adapter saved `True`
+
+Best adapter:
+`local-data/lora-v12/runs/20260902T085426Z-qwen3-8b-buyflow-v12-retention-robustness/best`
+
+Protocol:
+`protocols/V12-STAGE3-TRAINING-COMPLETE-2026-09-02.md`
+
+Important: the lower validation loss is not enough to claim behavioral improvement.
+
+Prepared exact post-training evaluator:
+- `scripts/v12-hard-siblings-posttrain-v1.py`
+- `scripts/run-v12-hard-siblings-posttrain-v1.ps1`
+- `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`
 
 ## NEXT ACTION
 
 1. Pull latest `codex/v12-teacher-robustness-foundation` in the separate V11 test worktree.
-2. Run `scripts/BuyFlow-V12-RETENTION-TRAIN.cmd`.
-3. Preserve the opening V12 training gate and final `[6/6]` verification block.
-4. Do not claim V12 improvement from validation loss alone.
-5. After successful training, score the V12 best child adapter with constrained decoding on the 72 hard-sibling validation set, then run a separate all-18-label retention check, then create a brand-new untouched post-V12 holdout.
-6. Protected old holdouts remain frozen during tuning.
+2. Run `scripts/BuyFlow-V12-HARD-SIBLINGS-POSTTRAIN.cmd`.
+3. Compare exact result against fixed V11 baseline `70/72`.
+4. Do not tune on or read Fresh Blind v1, Input View Holdout v2, frozen108 or BLIND50.
+5. After the 72-row before/after result, run a separate all-18-label retention check.
+6. Only then build a brand-new untouched post-V12 holdout.
 
 ## RESUME CONTRACT
 
