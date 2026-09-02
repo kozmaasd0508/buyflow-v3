@@ -1,187 +1,68 @@
 # BuyFlow worklog latest
 
-## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke
+## 2026-09-02 — MailGate direct-Gmail audit blockers remediated; code CI GREEN
 
-Current extension branch: `codex/modern-email-source-foundation-v1`  
-Architecture PR: #295 -> `codex/v9-real-gmail-identity-shadow`
+Branch: `codex/modern-email-source-foundation-v1`  
+Architecture PR: #295 draft -> `codex/v9-real-gmail-identity-shadow`
 
-Implemented additively since the previous source-foundation checkpoint:
-- direct Google Gmail OAuth Authorization Code + PKCE runtime behind `BUYFLOW_GMAIL_DIRECT_RUNTIME_ENABLED=false`;
-- Gmail read-only scope is mandatory and the runtime rejects unexpected extra Gmail scopes;
-- AES-256-GCM encrypted refresh-token storage with AAD binding to user + connection + provider + key version;
-- separate server-only `email_provider_credentials` and `email_sync_states` persistence with RLS and no authenticated-client grants;
-- compare-and-swap Gmail cursor commits so stale workers cannot overwrite a newer `historyId`;
-- broad direct-Gmail discovery (`newer_than:30d -in:spam -in:trash`) followed by a positive-commerce privacy gate instead of copying an entire personal mailbox;
-- unknown personal mail is ignored before persistence; `CATEGORY_PURCHASES`, transactional schema.org markup, deterministic commerce recognition or universal commerce lifecycle semantics can qualify a candidate;
-- Product/Offer-only markup is not enough and promotional mail remains ignored;
-- authenticated Google Pub/Sub wake-up endpoint with local RS256/JWKS verification, exact audience, issuer/time checks and exact configured service-account email;
-- Pub/Sub payload is only a wake-up signal (`emailAddress + historyId`), never commerce/Purchase evidence;
-- durable `gmail_sync_inbox` with dedupe, safe claim, stale-lock recovery, explicit exponential retries and `dead_letter` after 8 failed attempts;
-- 60-second recovery drain for crash-after-Pub/Sub-ack scenarios;
-- worker always resumes from the DB-committed Gmail cursor and advances it only after source handling succeeds.
+The module-by-module BuyFlow audit started with MailGate. The direct-Gmail source path was reviewed against a strict source-only contract and several production blockers were found and fixed.
 
-New controlled smoke command:
-`npm run gmail:direct-shadow-smoke --workspace @buyflow/api`
+Behavior fixes:
+- durable initial sync now exhausts the entire configured discovery-query snapshot before committing the captured Gmail history cursor; bounded smoke sampling remains separate;
+- large `text/plain` / `text/html` Gmail body parts stored behind `attachmentId` are hydrated through `attachments.get` before normalization;
+- invalid/missing `internalDate` no longer becomes 1970; valid `Date` header is fallback, otherwise fail closed;
+- transient network/408/429/5xx Gmail reads use bounded retry and `Retry-After` handling;
+- full-message fetch fan-out is concurrency bounded;
+- expired `historyId` automatically triggers a complete recovery snapshot and commits the replacement cursor only after safe source handling;
+- automatic watch renewal plus periodic cursor-based fallback sync were added, so a missed Pub/Sub push or expiring watch cannot silently stop source ingestion;
+- OAuth now rejects unexpected extra Gmail authority, including Gmail write scopes and broad `https://mail.google.com/` authority.
 
-The smoke is intentionally read-only and privacy-reduced:
-- samples at most 50 direct Gmail messages (default 10);
-- obtains exact RAW MIME for each sampled message;
-- exercises the Gmail commerce privacy gate;
-- exercises `history.list` from the initial captured boundary;
-- prints counts/reasons only, no subjects, bodies, addresses, provider message IDs or history IDs;
-- does not persist `source_emails`;
-- does not write source archive objects;
-- does not commit a Gmail cursor;
-- does not mutate Gmail;
-- Purchase/Shipment/Document writes = 0;
-- AI calls = 0.
+Regression coverage added/updated for:
+- complete initial pagination despite a small page size;
+- detached body hydration;
+- timestamp fallback/fail-closed behavior;
+- retryable Gmail API response;
+- extra Gmail OAuth authority rejection.
 
-Deployment state remains conservative:
-- direct Gmail runtime OFF by default;
-- source archive OFF by default;
-- Mailgun source persistence OFF by default;
-- direct Gmail/source migrations are committed but not applied live here;
-- no Google OAuth secrets, encrypted user tokens, Pub/Sub credentials or raw customer email are committed.
+Exact behavior code head:
+`e67b908e07d072e3737611eca4ee804d7d905c26`
 
-Verification reference before this latest smoke/handoff slice:
-- GitHub Actions CI #1132 on `30bd9baaf64bd5f2660ee223f1d54ed8994a49db` was fully GREEN: API typecheck/tests/build + mobile typecheck/build.
-
-Next gate:
-- run one final exact-head CI for the smoke + handoff/worklog slice;
-- then use a controlled staging/test account to execute the read-only direct-Gmail shadow smoke before enabling any source persistence/archive.
-
----
-
-## 2026-08-30 — Modern email source archive + rich normalizer v1 GREEN
-
-Current extension branch: `codex/modern-email-source-foundation-v1`  
-Architecture PR: #295 -> `codex/v9-real-gmail-identity-shadow`  
-Exact verified head: `1f1ae0023d695f8e3b21bb4ebcde249714d358de`
-
-Implemented additively:
-- `NormalizedEmailDocumentV1` now preserves provider full plain text + HTML, headers, attachments, structured data, safe links, authentication verdicts, immutable source reference, normalizer version and trace id;
-- provider-neutral `normalizeEmailDocumentV1(...)` runs JSON-LD/schema.org extraction, safe HTTP(S) link extraction and DKIM/SPF/DMARC normalization before any AI stage;
-- conflicting/malformed authentication or structured data fails closed instead of inventing trust;
-- immutable content-addressed raw/normalized archive with SHA-256, opaque keys and retry verification;
-- disabled-by-default archive wiring in normalized inbound persistence; source/provenance metadata may be written but Purchase/Shipment/Document/AI write counters remain zero;
-- additive migration now includes raw + normalized hashes/sizes/content types/version/trace metadata and creates private `buyflow-email-source-v1` storage bucket;
-- retention metadata is validated before any raw object write to avoid orphaning bytes on invalid metadata;
-- tests cover structured extraction, malicious/non-HTTP links, auth conflict, immutable retry/idempotency, opaque keys and zero commerce writes.
-
-GitHub Actions CI run **#1092** on exact head `1f1ae0023d695f8e3b21bb4ebcde249714d358de` is GREEN:
+Temporary CI-only PR #296 / GitHub Actions CI #1142:
 - API typecheck PASS
 - API tests PASS
 - API build PASS
 - mobile typecheck PASS
 - mobile web build PASS
 
-Temporary main-targeting CI PR #296 was reopened only for this verification and closed again **without merge**. PR #295 remains draft/mergeable against the active V9 branch.
+Protocol:
+`protocols/MAILGATE-DIRECT-GMAIL-AUDIT-REMEDIATION-2026-09-02.md`
 
 Safety unchanged:
-- archive feature flag defaults false;
-- no provider runtime cutover;
-- no live Supabase migration application;
-- no Purchase/Shipment/Identity production authority change;
-- no AI identity authority;
-- no raw customer email content committed;
-- raw email bytes stay private object-storage data, never inline Postgres content.
+- direct Gmail runtime OFF by default;
+- source archive OFF by default;
+- Mailgun source persistence OFF by default;
+- no production cutover;
+- no live migration application from this flow;
+- Purchase/Shipment/Document writes remain zero in direct-Gmail source lane;
+- AI has zero identity authority;
+- Pub/Sub remains wake-up metadata only.
 
-Next implementation slice: provider-specific source acquisition into the new stable document/archive contract, starting with the safest available raw source path, then Gmail incremental `watch + history` behind the existing `IncrementalEmailProvider` contract. Purchase/Identity authority stays unchanged.
+Verdict:
+- **MailGate code audit remediation: PASS**
+- **Production MailGate: BLOCKED pending controlled real-Gmail read-only shadow smoke**
+
+Next: keep flags OFF; run controlled `gmail:direct-shadow-smoke` only when staging Google/Supabase credentials are available. Continue module audit with RawVault in parallel; do not treat earlier source-archive CI as a completed RawVault audit.
 
 ---
 
-Current TechnicalEvidence branch: `codex/technical-evidence-shadow-v1`
+## 2026-08-31 — Direct Gmail runtime + authenticated Pub/Sub + read-only shadow smoke foundation
 
-Development PR: #256 -> `codex/mailgun-inbound-shadow-v3`
+Implemented direct Gmail OAuth/PKCE, encrypted refresh-token storage, separate cursor/watch state, CAS cursor commits, personal-mailbox positive-commerce privacy gate, authenticated Pub/Sub wake-up path, durable sync inbox with retry/dead-letter, and a read-only shadow smoke command. All live flags remained OFF and no production cutover occurred.
 
-Mode: shadow/read-only, 0 production writes, 0 AI calls, no runtime/DB/Purchase Identity Graph authority.
+Historical verification before the 2026-09-02 audit remediation: CI #1132 GREEN on code head `30bd9baaf64bd5f2660ee223f1d54ed8994a49db`.
 
-## 2026-08-24 — Unknown Webshop Challenge v1 becomes the primary direction
+---
 
-### Product goal
-BuyFlow must recognize purchase emails even when the merchant/webshop has never been seen before. Merchant/provider-specific adapters remain optional extra evidence, not the foundation of recognition.
+## 2026-08-30 — Modern email source archive + rich normalizer v1
 
-### Frozen generic-engine challenge
-Recognition code frozen before challenge message contents were inspected:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
-
-The initial historical query accidentally included sent mail. That pool was not scored and no recognition rule was changed. Replacement inbound-only and commerce-enriched samples were frozen before reading.
-
-Protocol:
-`protocols/UNKNOWN-WEBSHOP-CHALLENGE-V1-2026-08-24.md`
-
-First result:
-`protocols/UNKNOWN-WEBSHOP-CHALLENGE-V1-MANUAL-REPLAY-2026-08-24.md`
-
-### First Unknown Webshop result
-Headline scored slice:
-- 19 real commerce emails from merchants without a merchant-specific frozen deterministic parser rule
-- 7 non-commerce controls
-
-Commerce detection:
-- TP 11
-- FN 8
-- FP 1
-- TN 6
-- unknown-shop recall 57.9%
-- slice precision 91.7%
-
-Lifecycle correctness on the 19 commerce cases:
-- correct family 7
-- commerce detected but wrong lifecycle family 4
-- missed 8
-- exact/conservative lifecycle correctness 36.8%
-
-This is a manual deterministic replay against frozen rules, not production-wide accuracy and not an executable Nylas/GitHub run.
-
-### Most important generic failures
-1. product-review mail shaped like `Order #...` can become a false new order;
-2. generic cancellation family missing;
-3. identifier-before-order grammar incomplete;
-4. rich `Sikeres megrendelés` confirmation can still be missed;
-5. processing/packing can be confused with physical shipment;
-6. pickup-ready semantics incomplete;
-7. `szállításra kész` wording incomplete.
-
-### Development rule from now on
-Do NOT patch the missed merchant names.
-
-Improve reusable generic families only, in this order:
-1. eliminate review/survey `Order #...` false positives;
-2. add generic cancellation semantics;
-3. improve identifier-before-order grammar;
-4. broaden order confirmation using structural corroboration;
-5. separate processing/packing from physical shipment;
-6. add generic ready-for-pickup;
-7. broaden shipping-ready semantics conservatively.
-
-Unknown Webshop Challenge v1 is now regression-only after the first result. After generic improvements, select a completely untouched v2 set for the next genuine generalization score.
-
-## Previous frozen retro-200 reference
-- total 200
-- commerce 33
-- noise 167
-- after Direction Gate + Packeta R1 + MPL R1 + REGIO R1: actionable TP 17 / FP 0 / FN 16 / TN 167
-- historical regression only, NOT fresh blind accuracy
-
-### CI reference before Unknown Webshop Challenge
-GitHub Actions run #960 validated exact code/test snapshot:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
-
-PASS:
-- API typecheck
-- API tests 1114/1114
-- API build
-- mobile typecheck
-- mobile web build
-
-### Existing future blind v5
-`protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V5-2026-08-24.md`
-
-Freeze snapshot:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
-
-Cutoff:
-`2026-08-24T18:23:26Z` / `2026-08-24 20:23:26 Europe/Budapest`
-
-First post-cutoff Gmail ID-only preflight: 0 messages.
+Added `NormalizedEmailDocumentV1`, structured markup/link/auth extraction, immutable raw + normalized object archive with SHA-256/opaque keys, additive source metadata migration, and disabled-by-default archive wiring. Historical CI #1092 GREEN. RawVault/MailLens still require the new module-level audit before any PASS verdict.
