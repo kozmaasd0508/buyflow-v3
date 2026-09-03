@@ -9,7 +9,6 @@ $repoRoot=(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modelRoot=if($env:BUYFLOW_V11_MODEL_ROOT){$env:BUYFLOW_V11_MODEL_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\01_AKTUALIS_PROJEKT\BuyFlow_V2_6_Smart_Home_Automation'}
 $privateRoot=if($env:BUYFLOW_TESTLAB_PRIVATE_ROOT){$env:BUYFLOW_TESTLAB_PRIVATE_ROOT}else{Join-Path $env:USERPROFILE 'Desktop\buyflow\.testlab-private'}
 $idFile=Join-Path $privateRoot 'real120-ids.json'
-$progressFile=Join-Path $privateRoot 'progress.json'
 $expectedIdSha='88072442a01f0519ad4f02cf02f37825b6d933c18e199c6e7b8d1e97a506b470'
 $distro='Ubuntu-24.04'
 $tempRoot=Join-Path $env:TEMP ('buyflow-testlab-real120-' + [guid]::NewGuid().ToString('N'))
@@ -39,7 +38,7 @@ function Stop-Server {
 }
 function Remove-Junction([string]$p){if(Test-Path -LiteralPath $p){cmd.exe /d /c "rmdir `"$p`"" | Out-Null}}
 
-New-Item -ItemType Directory -Force -Path $tempRoot,$ReportDir,$privateRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $tempRoot,$ReportDir | Out-Null
 try {
   foreach($name in @('BUYFLOW_TESTLAB_GMAIL_CLIENT_ID','BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET','BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN')){
     if([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))){Fail "TESTLAB_SECRET_MISSING:$name"}
@@ -97,22 +96,18 @@ try {
   $env:BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256=[string]$health.adapter_sha256
   $env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS='30000'
 
-  Write-Host 'Running V13 candidate unit gate...' -ForegroundColor Cyan
+  $report=Join-Path $ReportDir 'eventmind-real120.json'
   Push-Location (Join-Path $repoRoot 'apps\api')
   try {
-    & node.exe --import tsx --test 'src\ai\eventmind-v13-candidate.test.ts'
-    if($LASTEXITCODE -ne 0){Fail "TESTLAB_EVENTMIND_V13_UNIT_GATE_EXIT_$LASTEXITCODE"}
-
-    $report=Join-Path $ReportDir 'eventmind-v13-dev120.json'
-    & npm.cmd exec -- tsx 'src\scripts\eventmind-v13-real-gmail-dev120.ts' $idFile $report $progressFile
+    & npm.cmd exec -- tsx 'src\scripts\eventmind-v11-real-gmail-blind120.ts' $idFile $report
     $exit=$LASTEXITCODE
   } finally {Pop-Location}
-  if($exit -ne 0){Fail "TESTLAB_EVENTMIND_V13_DEV120_EXIT_$exit"}
+  if($exit -ne 0){Fail "TESTLAB_EVENTMIND_REAL120_EXIT_$exit"}
 
-  Write-Host 'TESTLAB EVENTMIND V13 DEV120: PASS' -ForegroundColor Green
+  Write-Host 'TESTLAB EVENTMIND REAL120: PASS' -ForegroundColor Green
   exit 0
 } catch {
-  Write-Host ('TESTLAB EVENTMIND V13 DEV120: BLOCKED/FAIL - ' + $_.Exception.Message) -ForegroundColor Red
+  Write-Host ('TESTLAB EVENTMIND REAL120: BLOCKED/FAIL - ' + $_.Exception.Message) -ForegroundColor Red
   if(Test-Path $stderr){Get-Content $stderr -Tail 20}
   exit 1
 } finally {
