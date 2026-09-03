@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
   "suite": "eventmind",
-  "reason": "rerun EventMind V13 DEV120 after removing duplicate inference retries on runtime timeout",
+  "reason": "run EventMind V13-lite on frozen REAL120 using the stable V11-style execution path",
   "production_cutover_authorized": false
 }
