@@ -68,24 +68,23 @@ function runtimePayload(output = '{"is_commerce":true,"event_type":"READY_FOR_PI
   };
 }
 
-test('V13 prompt enumerates the taxonomy and hard lifecycle distinctions without identity data', () => {
+test('V13-lite prompt adds only REAL120-targeted distinctions and excludes identity data', () => {
   const document = normalizeEmailDocumentV1(sourceEmail());
   const prompt = buildEventMindPromptV13(document);
 
   for (const label of ['OTHER', 'SHIPPED', 'SHIPMENT_CREATED', 'READY_FOR_PICKUP', 'DELIVERED']) {
     assert.match(prompt, new RegExp(label));
   }
-  assert.match(prompt, /mailbox owner is the buyer/i);
-  assert.match(prompt, /goods the mailbox owner is SENDING/i);
-  assert.match(prompt, /READY_FOR_PICKUP.*NOT DELIVERED/i);
-  assert.match(prompt, /tracking\/pre-advice.*NOT physically received/i);
+  assert.match(prompt, /BUYER-SIDE/i);
+  assert.match(prompt, /mailbox owner is SENDING/i);
+  assert.match(prompt, /READY_FOR_PICKUP.*not DELIVERED/i);
   assert.match(prompt, /handed to the carrier/i);
   assert.doesNotMatch(prompt, /provider-secret-123/);
   assert.doesNotMatch(prompt, /thread-secret-456/);
   assert.doesNotMatch(prompt, /PURCHASE-SECRET-999/);
 });
 
-test('V13 successful result keeps semantic-only authority and distinct provenance', async () => {
+test('V13-lite successful result keeps semantic-only authority and distinct provenance', async () => {
   const document = normalizeEmailDocumentV1(sourceEmail());
   const fetchImpl = (async () => new Response(JSON.stringify(runtimePayload()), { status: 200 })) as typeof fetch;
   const result = await runEventMindV13(document, enabledConfig(), fetchImpl);
@@ -102,22 +101,23 @@ test('V13 successful result keeps semantic-only authority and distinct provenanc
   assert.equal('trackingId' in result.override, false);
 });
 
-test('V13 retries only transient HTTP failures and preserves deterministic request settings', async () => {
+test('V13-lite uses one deterministic runtime attempt and does not retry HTTP failures', async () => {
   const document = normalizeEmailDocumentV1(sourceEmail());
   let calls = 0;
   let requestBody: any = null;
   const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
     calls += 1;
     requestBody = JSON.parse(String(init?.body));
-    if (calls < 3) return new Response('{"ok":false}', { status: 503 });
-    return new Response(JSON.stringify(runtimePayload()), { status: 200 });
+    return new Response('{"ok":false}', { status: 503 });
   }) as typeof fetch;
 
   const result = await runEventMindV13(document, enabledConfig(), fetchImpl);
-  assert.equal(result.ok, true);
-  if (!result.ok) return;
-  assert.equal(result.runtime.attempts, 3);
-  assert.equal(calls, 3);
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.reason, 'RUNTIME_HTTP_ERROR');
+  assert.equal(result.detail, 'HTTP 503');
+  assert.equal(result.attempts, 1);
+  assert.equal(calls, 1);
   assert.deepEqual(requestBody.generation, {
     do_sample: false,
     enable_thinking: false,
@@ -125,7 +125,7 @@ test('V13 retries only transient HTTP failures and preserves deterministic reque
   });
 });
 
-test('V13 does not retry invalid model output because that is a model-quality failure', async () => {
+test('V13-lite invalid model output remains a visible model-quality failure', async () => {
   const document = normalizeEmailDocumentV1(sourceEmail());
   let calls = 0;
   const fetchImpl = (async () => {
