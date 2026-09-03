@@ -96,18 +96,22 @@ try {
   $env:BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256=[string]$health.adapter_sha256
   $env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS='30000'
 
-  $report=Join-Path $ReportDir 'eventmind-real120.json'
+  Write-Host 'Running V13-lite unit gate...' -ForegroundColor Cyan
   Push-Location (Join-Path $repoRoot 'apps\api')
   try {
-    & npm.cmd exec -- tsx 'src\scripts\eventmind-v11-real-gmail-blind120.ts' $idFile $report
+    & node.exe --import tsx --test 'src\ai\eventmind-v13-candidate.test.ts'
+    if($LASTEXITCODE -ne 0){Fail "TESTLAB_EVENTMIND_V13_LITE_UNIT_GATE_EXIT_$LASTEXITCODE"}
+
+    $report=Join-Path $ReportDir 'eventmind-v13-lite-real120.json'
+    & npm.cmd exec -- tsx 'src\scripts\eventmind-v13-real-gmail-dev120.ts' $idFile $report
     $exit=$LASTEXITCODE
   } finally {Pop-Location}
-  if($exit -ne 0){Fail "TESTLAB_EVENTMIND_REAL120_EXIT_$exit"}
+  if($exit -ne 0){Fail "TESTLAB_EVENTMIND_V13_LITE_REAL120_EXIT_$exit"}
 
-  Write-Host 'TESTLAB EVENTMIND REAL120: PASS' -ForegroundColor Green
+  Write-Host 'TESTLAB EVENTMIND V13-LITE REAL120: PASS' -ForegroundColor Green
   exit 0
 } catch {
-  Write-Host ('TESTLAB EVENTMIND REAL120: BLOCKED/FAIL - ' + $_.Exception.Message) -ForegroundColor Red
+  Write-Host ('TESTLAB EVENTMIND V13-LITE REAL120: BLOCKED/FAIL - ' + $_.Exception.Message) -ForegroundColor Red
   if(Test-Path $stderr){Get-Content $stderr -Tail 20}
   exit 1
 } finally {
