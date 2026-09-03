@@ -213,11 +213,11 @@ export async function runEventMindV13(
         },
       };
     } catch (error) {
+      // A timed-out GPU generation may still be running server-side. Retrying the
+      // same prompt immediately creates duplicate queued generations and can
+      // cascade one slow case into dozens of timeouts. Fail this case closed and
+      // let the next case proceed; transient HTTP failures are still retried above.
       if (controller.signal.aborted) {
-        if (attempt < MAX_ATTEMPTS) {
-          await retryDelay(attempt);
-          continue;
-        }
         return { ok: false, reason: 'RUNTIME_TIMEOUT', attempts: attempt };
       }
       if (attempt < MAX_ATTEMPTS) {
