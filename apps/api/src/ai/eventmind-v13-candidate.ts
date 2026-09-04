@@ -18,8 +18,9 @@ import {
 } from './eventmind-v11-runtime.js';
 
 export const EVENTMIND_V13_SOURCE_ID = 'qwen3-8b-buyflow-v13-candidate' as const;
-export const EVENTMIND_V13_SOURCE_VERSION = 'eventmind-v13-prompt-v2-lite' as const;
-export const EVENTMIND_V13_PROMPT_VERSION = 'real120-targeted-lite-v2' as const;
+export const EVENTMIND_V13_SOURCE_VERSION = 'eventmind-v13-prompt-v3-lite-memory-safe' as const;
+export const EVENTMIND_V13_PROMPT_VERSION = 'real120-targeted-lite-v3-memory-safe' as const;
+export const EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS = 12_000 as const;
 
 /**
  * V13-lite intentionally stays close to the short V11 prompt. REAL120 exposed
@@ -39,7 +40,17 @@ export const EVENTMIND_V13_INSTRUCTION = [
 ].join(' ');
 
 export function buildEventMindPromptV13(document: NormalizedEmailDocumentV1): string {
-  const input = buildEventMindInputV1(document);
+  const baseInput = buildEventMindInputV1(document);
+  const sourceSemanticText = baseInput.semanticText;
+  const semanticText = sourceSemanticText === null
+    ? null
+    : sourceSemanticText.slice(0, EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS);
+  const input = {
+    ...baseInput,
+    semanticText,
+    semanticTextTruncated: baseInput.semanticTextTruncated
+      || (sourceSemanticText?.length ?? 0) > EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS,
+  };
   return `${EVENTMIND_V13_INSTRUCTION}\n\nEVENTMIND_EMAIL_VIEW:\n${JSON.stringify(input)}`;
 }
 
