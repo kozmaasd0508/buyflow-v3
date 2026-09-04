@@ -128,8 +128,6 @@ The 12k cap is intentionally at the V13-lite model-input layer. MailLens itself 
 
 ## DIRECT TEST LAUNCHER HISTORY
 
-Old-style direct runner troubleshooting history matters because several earlier launchers failed before reaching the model. Do not reuse known-bad designs without reason.
-
 Known sequence:
 - V1 direct: exact commit check failed under PowerShell/Git handling.
 - V2: wrapper fetched inner script from a commit where the direct script did not exist -> 404.
@@ -140,7 +138,7 @@ Known sequence:
 - V8: first robust small CMD + remote PS script path that reached real Gmail and local Qwen.
 - V9: attempted checkpoint/resume + automatic Qwen restart after timeout; real run showed memory/freeze problem persisted around #45.
 
-Important launcher/state names from this development period:
+Important launcher/state names:
 - `BuyFlow-EVENTMIND-V13-LITE-REAL120-DIRECT-V8.cmd`
 - `BuyFlow-EVENTMIND-V13-LITE-REAL120-DIRECT-V9.cmd`
 - `BuyFlow-EVENTMIND-REAL5-GPU-DIAGNOSTIC.cmd`
@@ -185,7 +183,7 @@ That hypothesis was later disproven by chunk diagnostics:
 - structured-data JSON = **2 chars**
 - no detached bodies hydrated.
 
-Therefore: the freeze was **not simply caused by a giant 100k email**. It was a runtime/attention/memory behavior triggered by this case.
+Therefore the freeze was **not simply caused by a giant 100k email**. It was a runtime/attention/memory behavior triggered by this case.
 
 AMD/ROCm runtime logs also warned that flash-efficient and memory-efficient attention on the current AMD GPU are experimental. Keep this as relevant context, but do not treat it as proven sole root cause.
 
@@ -202,7 +200,7 @@ Same REAL5 target after the memory-safe candidate path:
 Interpretation:
 - the catastrophic system-RAM spike was mitigated in this path;
 - #45 still had a runtime/GPU-side failure as a whole-email request;
-- do not claim full root cause solved.
+- do not claim the underlying AMD/ROCm whole-email root cause is fully solved.
 
 ---
 
@@ -221,7 +219,7 @@ Experiment settings:
 - production flags OFF
 - no raw Gmail content persisted in report.
 
-Observed chunk results:
+Observed chunk results in the first chunk-only diagnostic:
 - chunk 1: `SHIPPED`, 2908 semantic chars, 5698 prompt chars, 10432 ms, RAM 80.6 -> 80.4%
 - chunk 2: `SHIPPED`, 2851 semantic chars, 5610 prompt chars, 6011 ms, RAM 79.8 -> 79.8%
 - chunk 3: invalid model output `COMMERCE_INVARIANT_MISMATCH`, 1752 semantic chars, 3994 prompt chars, 4056 ms, RAM 79.9 -> 80.9%
@@ -239,33 +237,67 @@ Relevant code:
 
 ---
 
-## CURRENT EXPERIMENT — CHUNK45 FINAL JUDGE
+## CHUNK45 FINAL JUDGE — VERIFIED DEVELOPMENT PASS ON #45
 
-Current design under test:
+Design:
 
 `normalized email -> bounded chunks -> chunk predictions + short lifecycle evidence -> small final-judge Qwen call -> one final event`
 
 Reason:
-- keep chunking's memory stability;
+- retain chunking's memory stability;
 - avoid naive majority voting;
 - do not resend the whole email to the final judge;
-- final judge should see only short evidence and chunk outcomes.
-
-Constraints:
-- no Purchase identity authority;
-- Gmail GET-only;
-- BuyFlow production writes 0;
-- production flags OFF;
-- report must not persist raw Gmail IDs or message content.
+- final judge sees only short evidence and chunk outcomes.
 
 Relevant commits:
 - final-judge experiment code: `14895b19ad03b3b0096262b57bbbc14b23ac8766`
 - one-click DIRECT final-judge launcher: `17c66e2bb61e17c46e6a12ca9f97dd971b084ab9`
 
-Launcher name:
+Launcher:
 - `BuyFlow-EVENTMIND-CHUNK45-FINAL-JUDGE-DIAGNOSTIC.cmd`
 
-**Current verified status:** launcher created; real final-judge result has not yet been observed in chat at the time this file was created. Do not claim it returns `OUT_FOR_DELIVERY` until the actual report/output is provided.
+### Verified real Gmail #45 result — 2026-09-04
+Report suite: `EVENTMIND_V13_LITE_REAL_GMAIL_CHUNK45_JUDGE_DIAGNOSTIC_V1`.
+
+Source/chunking:
+- target index: 45
+- source semantic text: **7120 chars**
+- detached bodies hydrated: 0
+- chunk max: 3000 chars
+- overlap: 250 chars
+- chunks planned: 3
+- source fully covered: true.
+
+Chunk results:
+- chunk 1: OK `SHIPPED`, 2908 chars, 10913.9 ms, CPU 56.7%, RAM 80.6 -> 80.7%, evidence windows 3
+- chunk 2: OK `SHIPPED`, 2851 chars, 6387 ms, CPU 56.1%, RAM 80.7 -> 80.7%, evidence windows 2
+- chunk 3: `INVALID_MODEL_OUTPUT / COMMERCE_INVARIANT_MISMATCH`, 1752 chars, 3927.1 ms, CPU 59.6%, RAM 80.7 -> 80.1%, evidence windows 1.
+
+Final judge:
+- **OK `OUT_FOR_DELIVERY`**
+- known human ground truth for #45: **`OUT_FOR_DELIVERY`**
+- therefore exact on this development case
+- final-judge prompt: **2538 chars**
+- elapsed: **3128.2 ms**
+- CPU during judge: **63.7%**
+- system RAM: **80.1 -> 80.1%**
+- no memory spike, no timeout, no 503 in final judge.
+
+Safety verified in report:
+- Gmail methods: GET only
+- mailbox mutations: 0
+- BuyFlow DB writes: 0
+- production flags enabled: false
+- raw Gmail IDs persisted: false
+- message content persisted: false
+- final-judge evidence text persisted: false.
+
+Interpretation:
+- **chunk + short-evidence final judge works correctly and stably on the single known problematic #45 case**;
+- this closes the specific #45 diagnostic question, not the EventMind production-quality gate;
+- this is a REAL120 development result, not an unbiased holdout result;
+- do not promote based on one case;
+- chunk 3 still demonstrates strict-decoder/model-quality failure can occur at chunk level, so aggregation must tolerate partial invalid chunks without hiding them from diagnostics.
 
 ---
 
@@ -311,18 +343,18 @@ Supabase reminder:
 
 ## EXACT NEXT ACTION
 
-1. Run `BuyFlow-EVENTMIND-CHUNK45-FINAL-JUDGE-DIAGNOSTIC.cmd` using the old DIRECT method.
-2. Read the generated `BuyFlow-EVENTMIND-CHUNK45-JUDGE-DIAGNOSTIC-*.json` report.
-3. Verify separately:
-   - final judge event label;
-   - whether it equals known human truth `OUT_FOR_DELIVERY`;
-   - final judge prompt/evidence size;
-   - per-chunk and final-judge timing;
-   - system RAM before/after;
-   - timeout/503/invalid-output behavior;
-   - Gmail writes 0 / BuyFlow writes 0 / production OFF.
-4. If #45 is correct and stable, do **not** immediately promote. Test the chunk+judge strategy on a wider REAL120 development slice containing other problematic/long cases.
-5. After the candidate design is frozen, create a **new untouched holdout** for unbiased validation.
+1. Do **not** immediately promote the chunk+judge strategy from one successful case.
+2. Build/run one old-style DIRECT CMD development slice across a small but diverse set of known REAL120 cases, including at minimum:
+   - OUT_FOR_DELIVERY
+   - SHIPPED
+   - READY_FOR_PICKUP
+   - OTHER / merchant-outbound courier pickup
+   - at least one prior invalid/runtime-problem case.
+3. Measure per case: exact event vs known ground truth, valid/invalid chunk outputs, final-judge prompt size, elapsed time, RAM before/after, timeout/503 count, and safety writes=0.
+4. If the wider REAL120 development slice is acceptable, freeze the candidate design.
+5. Create a **new untouched holdout** for final unbiased EventMind validation. REAL120 cannot be reused as the final holdout.
+6. Keep EventMind GPU tests on the old DIRECT CMD method, not TestLab/self-hosted runner unless the user explicitly changes preference.
+7. RawVault real private Storage smoke remains separately required when a safe isolated environment becomes available.
 
 ---
 
@@ -330,4 +362,4 @@ Supabase reminder:
 
 If a new chat starts or context is lost, tell the next assistant:
 
-**"Folytasd a BuyFlowot a GitHubból. Először olvasd el az `AGENTS.md`, `BUYFLOW_HANDOFF.md` és `BUYFLOW_TECHNICAL_CONTINUITY.md` fájlokat a `codex/modern-email-source-foundation-v1` branchen. EventMind GPU teszteknél ne használj TestLabot, a régi DIRECT CMD módszert használd. A jelenlegi nyitott kísérlet a REAL120 #45 chunk + short-evidence final judge teszt; a launcher commit `17c66e2bb61e17c46e6a12ca9f97dd971b084ab9`, de az eredmény még nincs igazolva. Production OFF."**
+**"Folytasd a BuyFlowot a GitHubból. Először olvasd el az `AGENTS.md`, `BUYFLOW_HANDOFF.md` és `BUYFLOW_TECHNICAL_CONTINUITY.md` fájlokat a `codex/modern-email-source-foundation-v1` branchen. EventMind GPU teszteknél ne használj TestLabot, a régi DIRECT CMD módszert használd. REAL120 #45 chunk+short-evidence final judge már VERIFIED development PASS: final `OUT_FOR_DELIVERY`, human truth `OUT_FOR_DELIVERY`, judge prompt 2538 chars, RAM 80.1->80.1%, Gmail GET-only, writes 0, production OFF. Következő: szélesebb, diverz REAL120 development slice chunk+judge módszerrel; utána candidate freeze és új untouched holdout. Production OFF."**
