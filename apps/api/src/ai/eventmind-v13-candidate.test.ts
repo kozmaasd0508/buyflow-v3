@@ -10,6 +10,7 @@ import {
   type EventMindV11RuntimeConfig,
 } from './eventmind-v11-runtime.js';
 import {
+  EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS,
   EVENTMIND_V13_PROMPT_VERSION,
   EVENTMIND_V13_SOURCE_ID,
   EVENTMIND_V13_SOURCE_VERSION,
@@ -82,6 +83,21 @@ test('V13-lite prompt adds only REAL120-targeted distinctions and excludes ident
   assert.doesNotMatch(prompt, /provider-secret-123/);
   assert.doesNotMatch(prompt, /thread-secret-456/);
   assert.doesNotMatch(prompt, /PURCHASE-SECRET-999/);
+});
+
+test('V13-lite caps semantic text before the model prompt', () => {
+  const oversized = 'A'.repeat(EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS + 5_000);
+  const document = normalizeEmailDocumentV1(sourceEmail({ bodyText: oversized }));
+  const prompt = buildEventMindPromptV13(document);
+  const marker = 'EVENTMIND_EMAIL_VIEW:\n';
+  const markerIndex = prompt.indexOf(marker);
+  assert.notEqual(markerIndex, -1);
+  const input = JSON.parse(prompt.slice(markerIndex + marker.length)) as {
+    semanticText: string | null;
+    semanticTextTruncated: boolean;
+  };
+  assert.equal(input.semanticText?.length, EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS);
+  assert.equal(input.semanticTextTruncated, true);
 });
 
 test('V13-lite successful result keeps semantic-only authority and distinct provenance', async () => {
