@@ -34,36 +34,34 @@
 
 REAL120 is now a **development set**, not a final blind holdout. V11 baseline was **41/120 = 34.17% strict exact**.
 
-The chunk + short-evidence final-judge path has now completed all **120/120 REAL120 cases** using the DIRECT method.
+The chunk + short-evidence final-judge path completed all **120/120 REAL120 cases** using the DIRECT method.
 
 Technical result:
 - final judge valid: **119/120**
-- final judge errors: **1**
 - runtime timeout/503 restart failures: **0**
 - max system RAM: **80.3%**
-- chunk invalid outputs: **10**, but aggregation continued safely
 - Gmail GET-only, writes 0, production OFF.
 
-Semantic result vs known REAL120 ground truth:
+Semantic result vs known ground truth:
 - strict exact: **44/120 = 36.67%**
-- improvement vs V11 baseline: only **+3 correct cases / +2.5 percentage points**
 - buyer-commerce: **40/76 = 52.63%**
 - OTHER: **4/44 = 9.09%**.
 
-Conclusion: **technical stability is now strong, semantic accuracy is still unacceptable. Do not freeze or promote this candidate.** The main remaining semantic problems are OTHER/merchant-outbound detection and SHIPMENT_CREATED/SHIPPED-stage separation. READY_FOR_PICKUP and OUT_FOR_DELIVERY improved substantially, but other classes regressed enough that total accuracy barely moved.
+Conclusion: **technical stability is strong, semantic accuracy is still unacceptable. Do not freeze or promote this candidate.** Main failure groups: OTHER/merchant-outbound and SHIPMENT_CREATED/SHIPPED-stage separation.
 
-Local GPU/EventMind tests must continue with the user's preferred DIRECT flow, not TestLab/self-hosted runner.
+An **interactive EventMind Teacher Mode V1** is now prepared on `codex/buyflow-testlab-v1` to turn known REAL120 mistakes into supervised local teaching conversations. It uses the same DIRECT Gmail + local Qwen path, stores private training conversations only under local `local-data`, and keeps a separate safe summary. **Teacher Mode has not yet been run/verified.** Detailed design: `docs/technical/EVENTMIND-TEACHER-MODE-V1-2026-09-04.md`.
+
+Local GPU/EventMind work must continue with the user's preferred DIRECT flow, not TestLab/self-hosted runner.
 
 ## Current next actions
 
-1. Do not run a fresh holdout yet and do not promote the current chunk+judge candidate.
-2. Use REAL120 as development data to fix the two dominant semantic failure groups: **OTHER/merchant-outbound** and **SHIPMENT_CREATED vs SHIPPED/later-stage confusion**.
-3. Fix the single `JUDGE_PROMPT_TOO_LARGE` case by bounding/prioritizing aggregate evidence rather than increasing memory limits.
-4. Re-run REAL120 development scoring after the targeted logic changes.
-5. Freeze the candidate only when REAL120 development accuracy improves materially without losing the current runtime stability.
-6. Then create a new untouched holdout for unbiased validation.
-7. RawVault real private Storage smoke remains a separate open gate.
+1. Run Teacher Mode on a few high-value OTHER/merchant-outbound mistakes and inspect the safe summary.
+2. Distill accepted private teaching sessions into a clean supervised training corpus; do not commit raw/private email data.
+3. Train a new LoRA candidate only after corpus review, then re-run REAL120 development scoring.
+4. Separately fix the single `JUDGE_PROMPT_TOO_LARGE` case with bounded/prioritized evidence.
+5. Freeze a candidate only after material semantic improvement without losing runtime stability; then create a new untouched holdout.
+6. RawVault real private Storage smoke remains a separate open gate.
 
 ## Resume contract
 
-**Folytasd a BuyFlowot a GitHubból. Először olvasd el az `AGENTS.md` és `BUYFLOW_HANDOFF.md` fájlt; részletes technikai előzményhez a `BUYFLOW_TECHNICAL_CONTINUITY.md`-t és a legújabb technical logot. Production OFF. EventMind REAL120 chunk+short-evidence final judge 120/120 lefutott: technikailag stabil (119/120 valid final, timeout/503 0, max RAM 80.3%), de semantic strict exact csak 44/120 = 36.67%, ezért NEM promotion-ready. Fő következő munka: OTHER/merchant-outbound és SHIPMENT_CREATED/SHIPPED hibacsoport javítása, plusz az egyetlen JUDGE_PROMPT_TOO_LARGE eset bounded evidence megoldása; utána REAL120 development rerun, majd csak megfelelő eredmény után candidate freeze + új untouched holdout. RawVault Storage smoke külön nyitott gate.**
+**Folytasd a BuyFlowot a GitHubból. Először olvasd el az `AGENTS.md` és `BUYFLOW_HANDOFF.md` fájlt; részletes előzményhez a `BUYFLOW_TECHNICAL_CONTINUITY.md`-t és a legújabb technical logot. Production OFF. EventMind REAL120 chunk+judge technikailag stabil, de strict exact csak 44/120 = 36.67%, ezért NEM promotion-ready. Következő irány: interaktív Teacher Mode V1 a domináns OTHER/merchant-outbound és SHIPMENT_CREATED/SHIPPED hibákból tanítóbeszélgetések gyűjtésére; Teacher Mode még nincs lefuttatva/igazolva. Utána corpus review -> új LoRA candidate -> REAL120 development rerun. RawVault Storage smoke külön nyitott gate.**
