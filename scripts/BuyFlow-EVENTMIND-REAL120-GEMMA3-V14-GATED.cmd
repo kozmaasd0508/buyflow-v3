@@ -1,15 +1,15 @@
 @echo off
 setlocal
-title BuyFlow EventMind REAL120 - Gemma V14 Gated
+title BuyFlow EventMind REAL120 - Gemma V14 Gated V2
 
-set "RUNNER_COMMIT=911de8300296914393e0c0b876ecc1ea7c673c3d"
-set "RUNNER_URL=https://raw.githubusercontent.com/kozmaasd0508/buyflow-v3/%RUNNER_COMMIT%/scripts/run-eventmind-v14-gemma-gated-real120-direct.ps1"
-set "RUNNER=%TEMP%\buyflow-eventmind-v14-gated-%RANDOM%%RANDOM%.ps1"
+set "RUNNER_COMMIT=1f28d981b4ac93cd992fdbc9cf30897c8ca2a14b"
+set "RUNNER_URL=https://raw.githubusercontent.com/kozmaasd0508/buyflow-v3/%RUNNER_COMMIT%/scripts/run-eventmind-v14-gemma-gated-real120-v2-bootstrap.ps1"
+set "RUNNER=%TEMP%\buyflow-eventmind-v14-gated-v2-%RANDOM%%RANDOM%.ps1"
 
 echo.
 echo ==============================================================
-echo BUYFLOW EVENTMIND V14 - GEMMA BUYER GATE + EVENT CLASSIFIER
-echo FULL EMAIL / 8192 CONTEXT / JSON SCHEMA / NO CHUNKS
+echo BUYFLOW EVENTMIND V14 V2 - GEMMA BUYER GATE + EVENT CLASSIFIER
+echo SINGLE-LAYER / 8192 CONTEXT / JSON SCHEMA / NO CHUNKS
 echo Gmail GET-only / BuyFlow production OFF
 echo ==============================================================
 echo.
@@ -28,10 +28,10 @@ del /q "%RUNNER%" >nul 2>&1
 
 echo.
 if "%RC%"=="0" (
-  echo GEMMA V14 GATED REAL120 COMPLETE.
-  echo A report a Desktopon van: BuyFlow-EVENTMIND-REAL120-GEMMA3-V14-GATED-*.json
+  echo GEMMA V14 GATED V2 REAL120 COMPLETE.
+  echo A report a Desktopon van: BuyFlow-EVENTMIND-REAL120-GEMMA3-V14-GATED-V2-*.json
 ) else (
-  echo GEMMA V14 GATED REAL120 FAILED/BLOCKED. Exit code: %RC%
+  echo GEMMA V14 GATED V2 REAL120 FAILED/BLOCKED. Exit code: %RC%
 )
 echo.
 pause
