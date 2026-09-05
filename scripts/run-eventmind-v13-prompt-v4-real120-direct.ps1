@@ -6,6 +6,7 @@ $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
 $codeCommit='a61843c9e80a1c29582805e6e2f909595d855749'
+$codeBranch='codex/eventmind-prompt-v4-real120'
 $baseCommit='e3ff5a29e0c0bc8c9074c3ba22f07c6d58e6bda6'
 $baseUrl="https://raw.githubusercontent.com/kozmaasd0508/buyflow-v3/$baseCommit/scripts/run-eventmind-v13-lite-real120-chunk-judge-direct.ps1"
 $temp=Join-Path $env:TEMP ('buyflow-prompt-v4-base-' + [guid]::NewGuid().ToString('N') + '.ps1')
@@ -15,7 +16,7 @@ try {
   Write-Host ''
   Write-Host '==============================================================' -ForegroundColor Cyan
   Write-Host 'BUYFLOW EVENTMIND - REAL120 PROMPT V4 DECISION-GATE TEST' -ForegroundColor Cyan
-  Write-Host 'PINNED CODE / DIRECT / PRODUCTION OFF' -ForegroundColor Cyan
+  Write-Host 'FROZEN CODE / DIRECT / PRODUCTION OFF' -ForegroundColor Cyan
   Write-Host '==============================================================' -ForegroundColor Cyan
   Write-Host ('Expected code commit: ' + $codeCommit) -ForegroundColor Green
   Write-Host 'REAL120 = development set. Gmail GET-only.' -ForegroundColor Green
@@ -23,6 +24,11 @@ try {
 
   Invoke-WebRequest -UseBasicParsing -Uri $baseUrl -OutFile $temp -TimeoutSec 30
   $text=Get-Content -Raw -LiteralPath $temp
+
+  $branchNeedle="`$branch='codex/buyflow-testlab-v1'"
+  $branchReplacement="`$branch='$codeBranch'"
+  if(-not $text.Contains($branchNeedle)){throw 'EXPECTED_BRANCH_ASSIGNMENT_NOT_FOUND'}
+  $text=$text.Replace($branchNeedle,$branchReplacement)
 
   $parserBad='Write-Host ("--- SEGMENT $segment: Gmail token frissites + tiszta Qwen ---") -ForegroundColor Cyan'
   $parserGood='Write-Host ("--- SEGMENT ${segment}: Gmail token frissites + tiszta Qwen ---") -ForegroundColor Cyan'
