@@ -2,6 +2,18 @@
 
 > Concise newest-first history. Older granular detail remains available in Git history and the dated `protocols/` files.
 
+## 2026-09-05 — EventMind Prompt V4 decision-gate prepared / NOT YET RUN
+
+- Reviewed the current V13-lite classifier prompt against the known REAL120 development failures.
+- Previous end-to-end chunk+judge result remains 44/120 = 36.67% strict exact; OTHER was 4/44, with dominant OTHER -> ORDER_CREATED and OTHER -> OUT_FOR_DELIVERY errors.
+- Replaced the sparse chunk-classifier instruction with `real120-decision-gate-v4-memory-safe`: buyer-role scope gate, explicit order/shipment stage boundaries, PAYMENT vs INVOICE, cancellation/refund/return/warranty rules, and `is_commerce` derived from the selected event type.
+- Same Qwen3-8B V11 adapter/runtime, thinking OFF, strict two-key JSON, memory-safe input; no identity authority and no ground-truth labels/raw Gmail content embedded in the prompt.
+- Prompt code commit: `a61843c9e80a1c29582805e6e2f909595d855749`.
+- Frozen test branch: `codex/eventmind-prompt-v4-real120` at that exact commit.
+- DIRECT pinned runner prepared on the EventMind development branch; production remains OFF and Gmail remains GET-only.
+- No REAL120 Prompt V4 output has been observed yet; do not claim semantic improvement until the user provides the completed report.
+- Technical note: `docs/technical/EVENTMIND-PROMPT-V4-DECISION-GATE-2026-09-05.md`.
+
 ## 2026-09-02 — MailGate real Gmail read-only smoke: PARTIAL PASS / history gate BLOCKED
 
 - Bounded six-message real Gmail purchase/lifecycle sample read with exact RAW MIME; RAW available **6/6**.
