@@ -3,7 +3,7 @@ Set-StrictMode -Version Latest
 
 $api='http://127.0.0.1:13305'
 $model='user.BuyFlow-Gemma-3-12B-Q4_K_M'
-$repo='tensorblock/gemma-3-12b-it-GGUF'
+$repo='ggml-org/gemma-3-12b-it-GGUF'
 $variant='Q4_K_M'
 $checkpoint=($repo+':'+$variant)
 $summaryPath=Join-Path $env:USERPROFILE 'Desktop\BuyFlow-LEMONADE-GEMMA3-12B-SUMMARY.json'
@@ -13,8 +13,8 @@ function ApiPost([string]$path,$body,[int]$timeout=1800){ Invoke-RestMethod -Uri
 
 Write-Host ''
 Write-Host '==============================================================' -ForegroundColor Cyan
-Write-Host 'BUYFLOW - LEMONADE GEMMA 3 12B Q4_K_M DOWNLOAD V2' -ForegroundColor Cyan
-Write-Host 'Variant discovery + download only + ROCm/8192 config.' -ForegroundColor Green
+Write-Host 'BUYFLOW - LEMONADE GEMMA 3 12B Q4_K_M DOWNLOAD V3' -ForegroundColor Cyan
+Write-Host 'Official ggml-org repo + variant discovery + ROCm/8192 config.' -ForegroundColor Green
 Write-Host 'No inference. No n8n change. Ollama unchanged.' -ForegroundColor Green
 Write-Host '==============================================================' -ForegroundColor Cyan
 
@@ -24,7 +24,7 @@ $sys=ApiGet '/v1/system-info'
 $rocmState=$sys.recipes.llamacpp.backends.rocm.state
 if([string]$rocmState -ne 'installed'){throw ('ROCM_BACKEND_NOT_INSTALLED:'+[string]$rocmState)}
 
-Write-Host 'Q4_K_M varians ellenorzese a Lemonade registry API-val...' -ForegroundColor Yellow
+Write-Host ('Q4_K_M varians ellenorzese: '+$repo) -ForegroundColor Yellow
 $variantsPath='/v1/pull/variants?checkpoint='+[uri]::EscapeDataString($repo)
 $variants=ApiGet $variantsPath 60
 $match=@($variants.variants|Where-Object{[string]$_.name -ieq $variant})
