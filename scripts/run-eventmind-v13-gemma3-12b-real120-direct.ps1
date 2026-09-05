@@ -32,14 +32,17 @@ try {
   $text=Get-Content -Raw -LiteralPath $temp
 
   $text=NeedReplace $text "`$branch='codex/buyflow-testlab-v1'" "`$branch='$codeBranch'" 'EXPECTED_BRANCH_ASSIGNMENT_NOT_FOUND'
+  $text=NeedReplace $text "Cmd-Git `$repoRoot ('fetch --depth=1 origin ' + `$branch)|Out-Null" "Cmd-Git `$repoRoot ('fetch --depth=10 origin ' + `$branch)|Out-Null" 'EXPECTED_FETCH_DEPTH_LINE_NOT_FOUND'
 
   $parserBad='Write-Host ("--- SEGMENT $segment: Gmail token frissites + tiszta Qwen ---") -ForegroundColor Cyan'
   $parserGood='Write-Host ("--- SEGMENT ${segment}: Gmail token frissites + Gemma 3 12B ---") -ForegroundColor Cyan'
   $text=NeedReplace $text $parserBad $parserGood 'EXPECTED_SEGMENT_INTERPOLATION_NOT_FOUND'
 
   $pinNeedle='if($fetched -notmatch ''^[a-f0-9]{40}$''){Fail "FETCH_HEAD_INVALID:$fetched"}'
-  $pinLine="  if(`$fetched -ne '$codeCommit'){Fail `"PINNED_CODE_MISMATCH:`$fetched`"}"
-  $text=NeedReplace $text $pinNeedle ($pinNeedle + "`r`n" + $pinLine) 'EXPECTED_FETCH_HEAD_GUARD_NOT_FOUND'
+  $pinLines=$pinNeedle + "`r`n  Cmd-Git `$repoRoot ('merge-base --is-ancestor $codeCommit ' + `$fetched)|Out-Null"
+  $text=NeedReplace $text $pinNeedle $pinLines 'EXPECTED_FETCH_HEAD_GUARD_NOT_FOUND'
+  $text=NeedReplace $text "Write-Host ('Code commit: ' + `$fetched) -ForegroundColor Green" "Write-Host ('Branch head: ' + `$fetched) -ForegroundColor DarkGray`r`n  Write-Host ('Pinned code commit: $codeCommit') -ForegroundColor Green" 'EXPECTED_CODE_COMMIT_PRINT_NOT_FOUND'
+  $text=NeedReplace $text "Cmd-Git `$repoRoot ('worktree add --detach `"' + `$codeRoot + '`" ' + `$fetched)|Out-Null" "Cmd-Git `$repoRoot ('worktree add --detach `"' + `$codeRoot + '`" $codeCommit')|Out-Null" 'EXPECTED_WORKTREE_ADD_NOT_FOUND'
 
   $text=$text.Replace('BuyFlow-EVENTMIND-REAL120-CHUNK-JUDGE-CHECKPOINT.json','BuyFlow-EVENTMIND-REAL120-GEMMA3-12B-V4-CHECKPOINT.json')
   $text=$text.Replace('BuyFlow-EVENTMIND-REAL120-CHUNK-JUDGE-$stamp.json','BuyFlow-EVENTMIND-REAL120-GEMMA3-12B-V4-$stamp.json')
