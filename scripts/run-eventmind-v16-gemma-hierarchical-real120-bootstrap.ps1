@@ -44,7 +44,7 @@ try {
 
   # Native V16 runtime + V16 hierarchical runner.
   $raw=NeedReplace $raw 'scripts\eventmind-ollama-gemma3-12b-gated-v14-runtime.mjs' 'scripts\eventmind-ollama-gemma3-12b-v16-hierarchical-runtime.mjs' 'EXPECTED_V16_RUNTIME_PATH_NOT_FOUND'
-  $raw=NeedReplace $raw "src\scripts\eventmind-v14-gemma-gated-real-gmail-dev120.ts' `$IdFile `$checkpointPath 15" "src\scripts\eventmind-v16-gemma-hierarchical-real-gmail-dev120.ts' `$IdFile `$checkpointPath 10" 'EXPECTED_V16_TS_RUNNER_NOT_FOUND'
+  $raw=NeedReplace $raw 'src\scripts\eventmind-v14-gemma-gated-real-gmail-dev120.ts' 'src\scripts\eventmind-v16-gemma-hierarchical-real-gmail-dev120.ts' 'EXPECTED_V16_TS_RUNNER_NOT_FOUND'
 
   # V16 has its own loopback port and environment namespace.
   $raw=$raw.Replace('4396','4397')
