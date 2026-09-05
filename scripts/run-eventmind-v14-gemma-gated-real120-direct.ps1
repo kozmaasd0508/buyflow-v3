@@ -125,6 +125,7 @@ function Start-Qwen([int]$segment){
   $text=$text.Replace('BUYFLOW EVENTMIND - REAL120 GEMMA 3 12B FULL EMAIL','BUYFLOW EVENTMIND V14 - GEMMA BUYER GATE + EVENT CLASSIFIER')
   $text=$text.Replace('NO CHUNKS / NO FINAL JUDGE / CHECKPOINT / JSON OUTPUT','FULL EMAIL / 8192 CONTEXT / JSON SCHEMA / NO CHUNKS')
   $text=$text.Replace('Gemma FULL runtime: READY | digest ','Gemma V14 runtime: READY | digest ')
+  $text=$text.Replace('[string]$health.adapter_sha256','[string]$health.model_digest')
   $text=$text.Replace('--- SEGMENT ${segment}: Gmail token frissites + Gemma 3 12B FULL EMAIL ---','--- SEGMENT ${segment}: Gmail token frissites + Gemma V14 gated ---')
   $text=$text.Replace('15-os blokk kesz -> Gemma runtime bridge ujrainditas.','15-os blokk kesz -> Gemma V14 runtime bridge ujrainditas.')
   $text=$text.Replace('REAL120 GEMMA 3 12B FULL EMAIL: COMPLETE','REAL120 GEMMA V14 GATED: COMPLETE')
