@@ -57,6 +57,7 @@ async function infer(prompt) {
       model: MODEL,
       messages: [{ role: 'user', content: prompt }],
       stream: false,
+      format: 'json',
       keep_alive: '10m',
       options: {
         temperature: 0,
@@ -146,9 +147,9 @@ const server = http.createServer(async (req, res) => {
 
 try {
   modelDigest = await resolveModelDigest();
-  await infer('Reply with exactly: OK');
+  await infer('Return one JSON object only: {"is_commerce":false,"event_type":"OTHER"}');
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(JSON.stringify({ ok: true, model: MODEL, digest: modelDigest, port: PORT, warmed: true }));
+    console.log(JSON.stringify({ ok: true, model: MODEL, digest: modelDigest, port: PORT, warmed: true, json_mode: true }));
   });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
