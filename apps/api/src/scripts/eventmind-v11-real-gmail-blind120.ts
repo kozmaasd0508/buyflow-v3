@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { normalizeGmailMessage } from '../email/gmail-incremental-provider.js';
 import { normalizeEmailDocumentV1 } from '../email/normalize-document-v1.js';
 import { runEventMindV11 } from '../ai/eventmind-v11-runtime.js';
@@ -36,6 +37,16 @@ function sha256(value: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    : `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 async function gmailJson(path: string, accessToken: string): Promise<any> {
@@ -117,6 +128,39 @@ async function main() {
   const accessToken = process.env.BUYFLOW_GMAIL_TEST_ACCESS_TOKEN?.trim();
   if (!accessToken) throw new Error('BUYFLOW_GMAIL_TEST_ACCESS_TOKEN_MISSING');
 
+  const defaultProgressPath = process.env.USERPROFILE
+    ? join(process.env.USERPROFILE, 'Desktop', 'buyflow', '.testlab-private', 'progress.json')
+    : null;
+  const progressPath = process.env.BUYFLOW_TESTLAB_PROGRESS_FILE?.trim() || defaultProgressPath;
+  const startedAtMs = Date.now();
+
+  async function publishProgress(
+    completed: number,
+    ok: number,
+    failed: number,
+    state: 'running' | 'complete' | 'incomplete',
+  ): Promise<void> {
+    if (!progressPath) return;
+    const elapsedMs = Date.now() - startedAtMs;
+    const avgMs = completed > 0 ? elapsedMs / completed : 0;
+    const remainingMs = completed > 0 ? avgMs * Math.max(0, ids.length - completed) : null;
+    const percent = ids.length > 0 ? (completed / ids.length) * 100 : 0;
+    const payload = {
+      suite: 'EVENTMIND_V11_REAL120',
+      state,
+      total: ids.length,
+      completed,
+      ok,
+      failed,
+      percent: Number(percent.toFixed(1)),
+      elapsed_seconds: Math.round(elapsedMs / 1000),
+      eta_seconds: remainingMs === null ? null : Math.round(remainingMs / 1000),
+      updated_at: new Date().toISOString(),
+    };
+    await mkdir(dirname(progressPath), { recursive: true });
+    await writeFile(progressPath, JSON.stringify(payload, null, 2), 'utf8');
+  }
+
   const idSetSha256 = sha256(ids.join('\n'));
   const results: any[] = [];
   const eventCounts: Record<string, number> = {};
@@ -131,14 +175,15 @@ async function main() {
   console.log('==============================================================');
   console.log(`Frozen ID count: ${ids.length}`);
   console.log(`Frozen ID SHA256: ${idSetSha256}`);
-  console.log('Message content is not printed or stored in this report.');
+  console.log('Message content and raw Gmail ids are not printed or stored in this report.');
   console.log('');
+
+  await publishProgress(0, 0, 0, 'running');
 
   for (let index = 0; index < ids.length; index += 1) {
     const gmailId = ids[index]!;
     const row: any = {
       index: index + 1,
-      gmail_id: gmailId,
       gmail_id_sha256: sha256(gmailId),
       ok: false,
       prediction: null,
@@ -146,6 +191,7 @@ async function main() {
       mail_lens_normalizer: null,
       detached_bodies_hydrated: 0,
     };
+    let outcome = '';
     try {
       const message = await gmailJson(
         `/messages/${encodeURIComponent(gmailId)}?format=full`,
@@ -166,14 +212,14 @@ async function main() {
           ...(inference.detail ? { detail: inference.detail } : {}),
         };
         failedCount += 1;
-        console.log(`[${index + 1}/${ids.length}] FAIL ${inference.reason}`);
+        outcome = `FAIL ${inference.reason}`;
       } else {
         row.ok = true;
         row.prediction = inference.prediction;
         row.runtime = inference.runtime;
         okCount += 1;
         eventCounts[inference.prediction.event_type] = (eventCounts[inference.prediction.event_type] ?? 0) + 1;
-        console.log(`[${index + 1}/${ids.length}] OK ${inference.prediction.event_type}`);
+        outcome = `OK ${inference.prediction.event_type}`;
       }
     } catch (error) {
       row.failure = {
@@ -181,13 +227,23 @@ async function main() {
         detail: error instanceof Error ? error.message : String(error),
       };
       failedCount += 1;
-      console.log(`[${index + 1}/${ids.length}] ERROR ${row.failure.detail}`);
+      outcome = `ERROR ${row.failure.detail}`;
     }
     results.push(row);
+
+    const completed = index + 1;
+    const elapsedMs = Date.now() - startedAtMs;
+    const avgMs = elapsedMs / completed;
+    const remainingMs = avgMs * Math.max(0, ids.length - completed);
+    const percent = (completed / ids.length) * 100;
+    console.log(
+      `[${completed}/${ids.length}] ${percent.toFixed(1)}% | ${outcome} | elapsed ${formatDuration(elapsedMs)} | ETA ${formatDuration(remainingMs)}`,
+    );
+    await publishProgress(completed, okCount, failedCount, 'running');
   }
 
   const report = {
-    suite: 'EVENTMIND_V11_REAL_GMAIL_BLIND120_PREDICTION_FREEZE_V1',
+    suite: 'EVENTMIND_V11_REAL_GMAIL_BLIND120_PREDICTION_FREEZE_V2',
     created_at: new Date().toISOString(),
     selection: {
       source: 'real_gmail_category_purchases',
@@ -212,11 +268,18 @@ async function main() {
       document_writes: 0,
       production_flags_enabled: false,
       message_content_persisted_in_report: false,
+      raw_gmail_ids_persisted_in_report: false,
     },
     results,
   };
 
   await writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
+  await publishProgress(
+    ids.length,
+    okCount,
+    failedCount,
+    failedCount === 0 ? 'complete' : 'incomplete',
+  );
 
   console.log('');
   console.log('==================== SUMMARY ===================');

@@ -1,0 +1,79 @@
+name: BuyFlow TestLab
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite to run
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - eventmind
+          - identity
+          - core
+  push:
+    branches:
+      - codex/buyflow-testlab-v1
+    paths:
+      - testlab/run-request.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buyflow-testlab
+  cancel-in-progress: false
+
+jobs:
+  testlab:
+    name: BuyFlow TestLab
+    runs-on: [self-hosted, Windows, X64, buyflow-testlab]
+    timeout-minutes: 120
+    env:
+      BUYFLOW_TESTLAB_GMAIL_CLIENT_ID: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_CLIENT_ID }}
+      BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_CLIENT_SECRET }}
+      BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN: ${{ secrets.BUYFLOW_TESTLAB_GMAIL_REFRESH_TOKEN }}
+      BUYFLOW_TESTLAB_REQUESTED_SUITE: ${{ inputs.suite }}
+
+    steps:
+      - name: Checkout exact TestLab commit
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve requested suite
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\testlab\resolve-suite.ps1
+
+      - name: Node and WSL preflight
+        shell: cmd
+        run: |
+          node --version
+          npm --version
+          git --version
+          wsl.exe -l -q
+
+      - name: Install repository dependencies
+        shell: cmd
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run BuyFlow TestLab
+        shell: cmd
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\testlab\run-testlab.ps1 -Suite "%BUYFLOW_TESTLAB_SUITE%" -ReportDir "%RUNNER_TEMP%\buyflow-testlab-report"
+
+      - name: Publish TestLab report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buyflow-testlab-${{ github.run_id }}
+          path: ${{ runner.temp }}\buyflow-testlab-report\**
+          if-no-files-found: warn
+          retention-days: 30
