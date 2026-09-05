@@ -2,7 +2,7 @@
 setlocal
 title BuyFlow EventMind REAL120 - Gemma V14 Gated V2
 
-set "RUNNER_COMMIT=1f28d981b4ac93cd992fdbc9cf30897c8ca2a14b"
+set "RUNNER_COMMIT=d42d64452b0bfc397b25b72d50762551f657b4d8"
 set "RUNNER_URL=https://raw.githubusercontent.com/kozmaasd0508/buyflow-v3/%RUNNER_COMMIT%/scripts/run-eventmind-v14-gemma-gated-real120-v2-bootstrap.ps1"
 set "RUNNER=%TEMP%\buyflow-eventmind-v14-gated-v2-%RANDOM%%RANDOM%.ps1"
 
