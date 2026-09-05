@@ -18,25 +18,30 @@ import {
 } from './eventmind-v11-runtime.js';
 
 export const EVENTMIND_V13_SOURCE_ID = 'qwen3-8b-buyflow-v13-candidate' as const;
-export const EVENTMIND_V13_SOURCE_VERSION = 'eventmind-v13-prompt-v3-lite-memory-safe' as const;
-export const EVENTMIND_V13_PROMPT_VERSION = 'real120-targeted-lite-v3-memory-safe' as const;
+export const EVENTMIND_V13_SOURCE_VERSION = 'eventmind-v13-prompt-v4-decision-gate-memory-safe' as const;
+export const EVENTMIND_V13_PROMPT_VERSION = 'real120-decision-gate-v4-memory-safe' as const;
 export const EVENTMIND_V13_MAX_SEMANTIC_TEXT_CHARS = 12_000 as const;
 
 /**
- * V13-lite intentionally stays close to the short V11 prompt. REAL120 exposed
- * three concrete taxonomy gaps, so only those gaps are added here. This avoids
- * the much longer all-taxonomy prompt used by the first V13 experiment, which
- * increased local GPU pressure and triggered a timeout cascade on the user's PC.
+ * V13 prompt-v4 keeps the memory-safe input boundary but changes the semantic
+ * instruction from a few targeted exceptions into a compact decision procedure.
+ * REAL120 showed that sender/courier keywords were overpowering buyer-side role,
+ * and that several adjacent lifecycle states lacked explicit boundaries.
+ * The model still returns only the fixed two-key JSON contract and receives no
+ * Purchase candidates or identity authority.
  */
 export const EVENTMIND_V13_INSTRUCTION = [
-  'Classify the latest concrete BUYER-SIDE commerce lifecycle state from this MailLens EventMind view.',
+  'Classify exactly one CURRENT BUYER-SIDE purchase lifecycle event from this MailLens EventMind view. Use the decision rules below silently; output no explanation.',
   `event_type must be exactly one of: ${EVENTMIND_EVENT_TYPES.join(', ')}.`,
-  'Courier pickup/collection emails about goods the mailbox owner is SENDING are OTHER, unless they explicitly describe returning a purchase.',
-  'SHIPPED means the parcel was actually dispatched or handed to the carrier; a pre-advice/tracking record before physical handoff is SHIPMENT_CREATED.',
-  'READY_FOR_PICKUP means the parcel is available for the buyer at a locker, parcel shop, pickup point or store; it is not DELIVERED until the buyer receives it.',
-  'Identifiers are not lifecycle states. You have no authority to create, link, merge, select or identify a Purchase.',
-  'Return JSON only with exactly two keys: is_commerce and event_type.',
-  'is_commerce must be false exactly when event_type is OTHER, otherwise true.',
+  'SCOPE GATE: first decide whether the email is actually about the mailbox owner as a BUYER. If it is merchant/seller/outbound operation, courier pickup or collection of goods the mailbox owner is SENDING, business fulfillment, shipping-service administration, marketing, survey, account/security or other non-purchase content, choose OTHER. Exception: an explicit return of the mailbox owner purchase is RETURN. Courier/order/shipment words alone do not make an email buyer-commerce.',
+  'CURRENT EVENT RULE: classify the primary current status asserted by this email. Subject and direct current-status statements outrank incidental mentions, instructions, examples, footers and older/history states. Do not jump to a later stage that is only planned or possible.',
+  'ORDER_CREATED = buyer order received/confirmed/accepted, with no later processing state. ORDER_PROCESSING = order is being processed/prepared. ORDER_PACKING = order is being packed/packed/ready for dispatch but not yet physically dispatched.',
+  'SHIPMENT_CREATED = shipment/tracking/label/consignment was created, registered or pre-advised, but there is no evidence of physical handoff. SHIPPED = explicit evidence the parcel was actually dispatched, sent or physically handed/accepted by the carrier. IN_TRANSIT = after handoff, the parcel is moving through the carrier network, but is not yet on final delivery. OUT_FOR_DELIVERY = the carrier/courier says final delivery to the buyer is happening today/currently. READY_FOR_PICKUP = the parcel is physically available and waiting for the buyer at a locker, parcel shop, pickup point or store. DELIVERED = delivery or buyer collection is completed. DELIVERY_FAILED = a delivery attempt failed. DELAYED = an explicit shipment/delivery delay or postponement.',
+  'PAYMENT = the email primary event is a successful/confirmed/charged payment. INVOICE = the primary event is an invoice/receipt document being issued, sent or made available. If an invoice email merely says it is already paid, choose INVOICE; if a payment confirmation merely links to an invoice, choose PAYMENT.',
+  'CANCELLED = order/service cancellation is the primary event. REFUNDED = money was actually refunded/returned. RETURN = buyer return process/request/return shipment for a purchase. WARRANTY = warranty/guarantee claim or warranty lifecycle event. If none of the buyer-side lifecycle definitions is positively supported, choose OTHER.',
+  'Identifiers, sender identity and presence of tracking/order numbers are evidence context, not lifecycle states. You have no authority to create, link, merge, select or identify a Purchase.',
+  'First choose event_type. Then set is_commerce=false only when event_type is OTHER; set is_commerce=true for every other allowed event.',
+  'Return JSON only with exactly two keys: is_commerce and event_type. Example shape only: {"is_commerce":true,"event_type":"SHIPPED"}.',
 ].join(' ');
 
 export function buildEventMindPromptV13(document: NormalizedEmailDocumentV1): string {
