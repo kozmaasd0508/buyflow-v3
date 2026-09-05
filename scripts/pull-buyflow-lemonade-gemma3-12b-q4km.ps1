@@ -2,7 +2,8 @@ $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
 $api='http://127.0.0.1:13305'
-$model='user.BuyFlow-Gemma-3-12B-Q4_K_M'
+# New stable registry name. The earlier failed tensorblock attempt reserved the old name with different metadata.
+$model='user.BuyFlow-Gemma-3-12B-Q4_K_M-ggmlorg'
 $repo='ggml-org/gemma-3-12b-it-GGUF'
 $variant='Q4_K_M'
 $checkpoint=($repo+':'+$variant)
@@ -13,8 +14,8 @@ function ApiPost([string]$path,$body,[int]$timeout=1800){ Invoke-RestMethod -Uri
 
 Write-Host ''
 Write-Host '==============================================================' -ForegroundColor Cyan
-Write-Host 'BUYFLOW - LEMONADE GEMMA 3 12B Q4_K_M DOWNLOAD V3' -ForegroundColor Cyan
-Write-Host 'Official ggml-org repo + variant discovery + ROCm/8192 config.' -ForegroundColor Green
+Write-Host 'BUYFLOW - LEMONADE GEMMA 3 12B Q4_K_M DOWNLOAD V4' -ForegroundColor Cyan
+Write-Host 'Official ggml-org repo + unique registry name + ROCm/8192 config.' -ForegroundColor Green
 Write-Host 'No inference. No n8n change. Ollama unchanged.' -ForegroundColor Green
 Write-Host '==============================================================' -ForegroundColor Cyan
 
@@ -36,13 +37,14 @@ $primaryFile=[string]$match[0].primary_file
 $sizeBytes=[double]$match[0].size_bytes
 Write-Host ('Variant READY: '+$variant+' -> '+$primaryFile) -ForegroundColor Green
 if($sizeBytes -gt 0){Write-Host ("Meret: {0:N2} GB" -f ($sizeBytes/1GB)) -ForegroundColor DarkGray}
+Write-Host ('Registry model name: '+$model) -ForegroundColor DarkGray
 
 $existing=$null
 try{$existing=ApiGet ('/v1/models/'+[uri]::EscapeDataString($model))}catch{}
 if($existing -and $existing.downloaded -eq $true){
   Write-Host 'Model mar le van toltve; letoltes kihagyva.' -ForegroundColor Green
 }else{
-  Write-Host 'Model letoltese indul: Gemma 3 12B Q4_K_M (~7.3 GB)...' -ForegroundColor Yellow
+  Write-Host 'Model letoltese indul: Gemma 3 12B Q4_K_M (~6.8 GB)...' -ForegroundColor Yellow
   Write-Host ('Checkpoint: '+$checkpoint) -ForegroundColor DarkGray
   $pull=@{
     model_name=$model
@@ -80,6 +82,7 @@ $summary=[ordered]@{
   inference_started=$false
   n8n_changed=$false
   ollama_changed=$false
+  stale_registry_entry_preserved=$true
 }
 $summary|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $summaryPath -Encoding UTF8
 
