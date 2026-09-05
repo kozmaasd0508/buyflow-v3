@@ -119,10 +119,10 @@ function Start-Qwen([int]$segment){
 
   $anchor="  Set-Content -LiteralPath `$patched -Value `$text -Encoding UTF8"
   $injection=@'
-  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_RUNTIME_ENABLED='true'","$env:BUYFLOW_GEMMA_V14_RUNTIME_ENABLED='true'")
-  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_RUNTIME_URL='http://127.0.0.1:4395/v1/eventmind'","$env:BUYFLOW_GEMMA_V14_RUNTIME_URL='http://127.0.0.1:4396'")
-  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256=[string]$health.adapter_sha256","$env:BUYFLOW_GEMMA_V14_MODEL_DIGEST=[string]$health.model_digest")
-  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS='30000'","$env:BUYFLOW_GEMMA_V14_TIMEOUT_MS='30000'")
+  $text=$text.Replace('$env:BUYFLOW_EVENTMIND_V11_RUNTIME_ENABLED=''true''','$env:BUYFLOW_GEMMA_V14_RUNTIME_ENABLED=''true''')
+  $text=$text.Replace('$env:BUYFLOW_EVENTMIND_V11_RUNTIME_URL=''http://127.0.0.1:4395/v1/eventmind''','$env:BUYFLOW_GEMMA_V14_RUNTIME_URL=''http://127.0.0.1:4396''')
+  $text=$text.Replace('$env:BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256=[string]$health.adapter_sha256','$env:BUYFLOW_GEMMA_V14_MODEL_DIGEST=[string]$health.model_digest')
+  $text=$text.Replace('$env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS=''30000''','$env:BUYFLOW_GEMMA_V14_TIMEOUT_MS=''30000''')
   Set-Content -LiteralPath $patched -Value $text -Encoding UTF8
 '@
   $text=NeedReplace $text $anchor $injection.TrimEnd() 'EXPECTED_INNER_SET_CONTENT_ANCHOR_NOT_FOUND'
