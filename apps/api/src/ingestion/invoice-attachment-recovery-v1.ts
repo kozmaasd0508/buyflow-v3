@@ -108,8 +108,26 @@ function sha256Hex(value: Buffer | string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function storagePath(userId: string, sourceEmailId: string, attachmentId: string): string {
-  return `${userId}/${sourceEmailId}/${sha256Hex(attachmentId).slice(0, 40)}.pdf`;
+export function invoiceAttachmentStoragePath(
+  userId: string,
+  sourceEmailId: string,
+  attachmentId: string,
+  contentSha256: string,
+): string {
+  const normalizedHash = contentSha256.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(normalizedHash)) {
+    throw new Error('invalid_attachment_content_sha256');
+  }
+  return `${userId}/${sourceEmailId}/${sha256Hex(attachmentId).slice(0, 40)}/${normalizedHash}.pdf`;
+}
+
+export function hasInvoiceAttachmentContentConflict(
+  existingContentSha256: string | null | undefined,
+  incomingContentSha256: string,
+): boolean {
+  const existing = existingContentSha256?.trim().toLowerCase();
+  if (!existing) return false;
+  return existing !== incomingContentSha256.trim().toLowerCase();
 }
 
 function attachmentExtractionResult(input: {
@@ -310,7 +328,18 @@ export async function drainInvoiceAttachmentRecoveryV1(
           }
 
           const contentSha256 = sha256Hex(bytes);
-          const path = storagePath(source.user_id, source.id, attachment.id);
+          if (hasInvoiceAttachmentContentConflict(attachmentRow.content_sha256, contentSha256)) {
+            await markAttachmentReview(db, attachmentRow.id, 'attachment_content_changed');
+            await db.from('source_emails').update({ processing_status: 'review' })
+              .eq('id', source.id)
+              .eq('user_id', source.user_id);
+            result.reviewAttachments += 1;
+            continue;
+          }
+
+          const path = attachmentRow.content_sha256 && attachmentRow.storage_path
+            ? attachmentRow.storage_path
+            : invoiceAttachmentStoragePath(source.user_id, source.id, attachment.id, contentSha256);
           const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, bytes, {
             contentType: 'application/pdf',
             upsert: true,

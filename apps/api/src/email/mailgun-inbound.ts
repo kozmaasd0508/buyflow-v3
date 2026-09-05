@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 import multipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { simpleParser } from 'mailparser';
-import { planNormalizedInboundEmail } from '../pipeline/normalized-inbound-pipeline.js';
+import { env } from '../config.js';
+import {
+  persistNormalizedInboundEmail,
+  planNormalizedInboundEmail,
+} from '../pipeline/normalized-inbound-pipeline.js';
 import type { EmailAddress, EmailAttachmentMetadata, EmailHeader, NormalizedEmail } from './types.js';
 
 export interface MailgunSignatureFields {
@@ -143,7 +147,7 @@ export async function normalizeForwardedEml(
     cc: parsedAddressList(Array.isArray(parsed.cc) ? parsed.cc[0] : parsed.cc),
     bcc: parsedAddressList(Array.isArray(parsed.bcc) ? parsed.bcc[0] : parsed.bcc),
     receivedAt,
-    ...(parsed.text ? { snippet: parsed.text } : {}),
+    ...(parsed.text ? { snippet: parsed.text, bodyText: parsed.text } : {}),
     ...(bodyHtml ? { bodyHtml } : {}),
     headers: parsedHeaders(parsed.headers as Map<string, unknown>),
     folders: ['inbound', 'mailgun-shadow', 'eml-expanded'],
@@ -165,6 +169,7 @@ export function normalizeMailgunInbound(
   const to = parseAddress(recipient);
   const providerMessageId = headerValue(headers, 'Message-Id')?.trim()
     || `mailgun-${crypto.createHash('sha256').update(`${recipient}\n${sender}\n${fields.timestamp ?? ''}\n${fields.subject ?? ''}`).digest('hex')}`;
+  const bodyText = fields['stripped-text'] || fields['body-plain'];
 
   return {
     recipient,
@@ -179,9 +184,7 @@ export function normalizeMailgunInbound(
       cc: [],
       bcc: [],
       receivedAt: normalizedReceivedAt(fields.timestamp),
-      ...(fields['stripped-text'] || fields['body-plain']
-        ? { snippet: fields['stripped-text'] || fields['body-plain'] }
-        : {}),
+      ...(bodyText ? { snippet: bodyText, bodyText } : {}),
       ...(fields['body-html'] ? { bodyHtml: fields['body-html'] } : {}),
       headers,
       folders: ['inbound', 'mailgun-shadow'],
@@ -308,6 +311,7 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
       let effectiveEmail = envelope.normalizedEmail;
       let emlExpanded = false;
       let emlFilename: string | null = null;
+      let rawEmlSource: RawEmlAttachment | null = null;
 
       if (emlCandidates.length > 0) {
         try {
@@ -318,6 +322,7 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
           );
           emlExpanded = true;
           emlFilename = candidate.filename;
+          rawEmlSource = candidate;
         } catch (error) {
           request.log.warn({
             errorType: error instanceof Error ? error.name : 'UnknownError',
@@ -328,6 +333,53 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
 
       const plan = planNormalizedInboundEmail({ email: effectiveEmail });
       const extraction = shadowExtractionSnapshot(plan.structuredResult);
+      const sourcePersistenceEnabled = env.BUYFLOW_MAILGUN_SOURCE_PERSIST_ENABLED
+        && env.BUYFLOW_EMAIL_SOURCE_ARCHIVE_ENABLED;
+      let sourcePersistence: {
+        enabled: boolean;
+        status: string | null;
+        archived: boolean;
+        deduped: boolean | null;
+      } = {
+        enabled: sourcePersistenceEnabled,
+        status: null,
+        archived: false,
+        deduped: null,
+      };
+
+      if (sourcePersistenceEnabled) {
+        try {
+          const persisted = await persistNormalizedInboundEmail({
+            email: effectiveEmail,
+            recipientAddress: envelope.recipient,
+            sourceQuery: 'mailgun:inbound',
+            sourceArchiveEnabled: true,
+            ...(rawEmlSource ? {
+              rawSource: {
+                bytes: rawEmlSource.content,
+                contentType: rawEmlSource.contentType || 'message/rfc822',
+              },
+            } : {}),
+          });
+          sourcePersistence = {
+            enabled: true,
+            status: persisted.status,
+            archived: persisted.sourceArchived === true,
+            deduped: persisted.deduped ?? null,
+          };
+        } catch (error) {
+          request.log.error({
+            errorType: error instanceof Error ? error.name : 'UnknownError',
+          }, 'Mailgun source persistence failed closed; requesting webhook retry');
+          return reply.code(503).send({
+            ok: false,
+            error: 'source_persistence_failed',
+            mode: 'shadow',
+            provider: 'mailgun',
+            productionCommerceWrites: 0,
+          });
+        }
+      }
 
       request.log.info({
         provider: 'mailgun',
@@ -345,7 +397,8 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
         parserVersion: plan.parserVersion,
         validationStatus: plan.validationStatus,
         extraction,
-      }, 'Mailgun inbound message evaluated by deterministic pipeline in shadow mode; no production writes performed');
+        sourcePersistence,
+      }, 'Mailgun inbound evaluated in shadow mode; Purchase/Shipment/Document writes remain disabled');
 
       return reply.code(200).send({
         ok: true,
@@ -353,6 +406,8 @@ export async function registerMailgunInboundRoutes(app: FastifyInstance) {
         provider: 'mailgun',
         accepted: true,
         productionWrites: 0,
+        productionCommerceWrites: 0,
+        sourcePersistence,
         attachmentCount: envelope.attachments.length,
         emlExpanded,
         recognition: {

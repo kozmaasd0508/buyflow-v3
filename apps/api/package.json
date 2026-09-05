@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "nylas:smoke": "tsx src/scripts/nylas-smoke.ts",
+    "gmail:direct-shadow-smoke": "tsx src/scripts/gmail-direct-shadow-smoke.ts",
     "nylas:audit": "tsx src/scripts/nylas-audit.ts",
     "nylas:protocol-shadow-audit": "tsx src/scripts/nylas-protocol-shadow-audit.ts",
     "nylas:markup-audit": "tsx src/scripts/nylas-markup-audit.ts",
@@ -18,7 +19,9 @@
     "pipeline:import-next-20": "tsx src/scripts/import-next-purchases.ts",
     "nylas:discover": "tsx src/scripts/nylas-discover.ts",
     "eml:audit": "tsx src/scripts/eml-audit.ts",
-    "identity:v9-real-gmail-shadow": "tsx src/scripts/v9-real-gmail-identity-shadow-audit.ts"
+    "identity:v9-real-gmail-shadow": "tsx src/scripts/v9-real-gmail-identity-shadow-audit.ts",
+    "eventmind:v11-gate-fixture": "tsx src/scripts/eventmind-v11-untouched-fixture-v1.ts",
+    "eventmind:v11-gate": "tsx src/scripts/eventmind-v11-representation-gate.ts"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

@@ -36,11 +36,29 @@ interface TimelineEvent {
 }
 
 function lifecycleEvents(purchase: PurchaseDetail): TimelineEvent[] {
-  const cancelled = Boolean(purchase.cancelledAt || purchase.currentState === 'cancelled');
-  const delivered = Boolean(purchase.deliveredAt || purchase.currentState === 'delivered');
-  const shipped = Boolean(purchase.shippedAt || delivered || ['shipped', 'in_transit'].includes(purchase.currentState));
-  const paid = Boolean(purchase.paidAt || purchase.paymentStatus === 'paid');
+  const pulse = purchase.pulse;
+  const terminal = ['cancelled', 'refunded', 'returned'].includes(pulse.status);
   const ordered = Boolean(purchase.orderedAt || purchase.createdAt);
+  const paid = !pulse.reviewRequired && Boolean(
+    pulse.status === 'paid'
+    || (purchase.paymentStatus === 'paid' && purchase.paidAt),
+  );
+  const moving = !pulse.reviewRequired && pulse.movement;
+  const delivered = pulse.delivered;
+
+  const shippingLabel = pulse.status === 'ready_for_pickup'
+    ? 'Átvehető'
+    : pulse.status === 'out_for_delivery'
+      ? 'Kézbesítés alatt'
+      : 'Feladva / úton';
+
+  const shippingDescription = pulse.status === 'ready_for_pickup'
+    ? 'Legalább egy kapcsolt csomagnál biztos átvételi állapot van.'
+    : pulse.status === 'out_for_delivery'
+      ? 'Legalább egy kapcsolt csomag kézbesítés alatt van.'
+      : moving || delivered
+        ? 'A rendeléshez biztos szállítási esemény tartozik.'
+        : 'Még nincs biztos feladási esemény.';
 
   const events: TimelineEvent[] = [
     {
@@ -54,38 +72,50 @@ function lifecycleEvents(purchase: PurchaseDetail): TimelineEvent[] {
       key: 'paid',
       label: 'Fizetés',
       description: paid ? 'A fizetés sikeresként ismert.' : 'Még nincs biztos sikeres fizetési bizonyíték.',
-      at: purchase.paidAt,
-      status: paid ? 'done' : cancelled ? 'stopped' : 'future',
+      at: paid ? purchase.paidAt : null,
+      status: paid ? 'done' : terminal ? 'stopped' : 'future',
     },
     {
-      key: 'shipped',
-      label: 'Feladva / úton',
-      description: shipped ? 'A rendeléshez szállítási esemény tartozik.' : 'Még nincs biztos feladási esemény.',
-      at: purchase.shippedAt,
-      status: shipped ? 'done' : cancelled ? 'stopped' : 'future',
+      key: 'shipping',
+      label: shippingLabel,
+      description: shippingDescription,
+      at: moving || delivered ? pulse.lastConfirmedAt : null,
+      status: delivered ? 'done' : moving ? 'current' : terminal ? 'stopped' : 'future',
     },
     {
       key: 'delivered',
       label: 'Kézbesítve',
-      description: delivered ? 'A rendelést kézbesítettként ismerjük.' : 'Még nincs kézbesítési bizonyíték.',
-      at: purchase.deliveredAt,
-      status: delivered ? 'done' : cancelled ? 'stopped' : 'future',
+      description: delivered ? 'A teljes rendelés kézbesítése megerősített.' : 'A teljes rendelés kézbesítése még nincs megerősítve.',
+      at: delivered ? pulse.lastConfirmedAt : null,
+      status: delivered ? 'done' : terminal ? 'stopped' : 'future',
     },
   ];
 
-  if (cancelled) {
+  if (pulse.reviewRequired) {
     events.push({
-      key: 'cancelled',
-      label: 'Rendelés törölve',
-      description: 'A vásárlási életút törölt állapotban van.',
-      at: purchase.cancelledAt,
-      status: 'stopped',
+      key: 'review',
+      label: 'Ellenőrzés alatt',
+      description: pulse.body,
+      at: pulse.lastConfirmedAt,
+      status: 'current',
     });
+    return events;
   }
 
-  const firstFuture = events.findIndex((event) => event.status === 'future');
-  if (firstFuture >= 0 && !cancelled) {
-    events[firstFuture]!.status = 'current';
+  if (terminal) {
+    events.push({
+      key: pulse.status,
+      label: pulse.label,
+      description: pulse.body,
+      at: pulse.lastConfirmedAt,
+      status: 'stopped',
+    });
+    return events;
+  }
+
+  if (!moving && !delivered) {
+    const firstFuture = events.findIndex((event) => event.status === 'future');
+    if (firstFuture >= 0) events[firstFuture]!.status = 'current';
   }
 
   return events;

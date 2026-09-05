@@ -68,8 +68,28 @@ function result(
   };
 }
 
+/**
+ * TrustLink must never promote merchant identity from the visible From: domain
+ * or raw Authentication-Results text alone. MailLens intentionally keeps those
+ * authentication headers diagnostic-only because it cannot prove which trusted
+ * auth service inserted them.
+ *
+ * A future source adapter may add this marker only after provider-verified
+ * sender authentication has been established outside the message-controlled
+ * content. Until then merchant-scoped create/link promotion fails closed.
+ */
+function hasTrustedMerchantSenderAuthority(event: CanonicalEvent): boolean {
+  return event.provenance.some((item) =>
+    item.field === 'sender_authority'
+    && item.source === 'provider_adapter'
+    && item.qualifiers?.includes('trusted_sender_authority'),
+  );
+}
+
 function hasMerchantScope(event: CanonicalEvent): boolean {
-  return event.sourceRole === 'merchant' && Boolean(event.merchantId || event.merchantNamespace);
+  return event.sourceRole === 'merchant'
+    && Boolean(event.merchantId || event.merchantNamespace)
+    && hasTrustedMerchantSenderAuthority(event);
 }
 
 function attachmentScopeReasons(event: CanonicalEvent): PromotionReadinessReason[] {

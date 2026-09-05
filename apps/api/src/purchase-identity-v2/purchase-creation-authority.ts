@@ -50,6 +50,8 @@ const PURCHASE_ROOT_PATTERNS = [
   /\b(?:veteli\s+)?ajanlat\b.{0,100}\b(?:megerkezes(?:erol|et)|beerkezes(?:erol|et)|atvetel(?:erol|et))\b/i,
 ];
 
+const EXPLICIT_LABELED_COMMERCE_STRUCTURE = /\b(?:fizetesi mod|payment method|szallitasi mod|shipping method|delivery method)\s*[:：-]\s*[^\s:;,.][^\n]{0,120}/i;
+
 export function hasExplicitPurchaseNonAcceptance(document: EmailDocumentV1): boolean {
   const fresh = normalizeText(`${document.subject ?? ''}\n${document.text}`);
   return NON_ACCEPTANCE_PATTERNS.some((pattern) => pattern.test(fresh));
@@ -66,12 +68,16 @@ export function hasExplicitPurchaseRootEvidence(document: EmailDocumentV1): bool
   return PURCHASE_ROOT_PATTERNS.some((pattern) => pattern.test(fresh));
 }
 
+function hasExplicitLabeledCommerceStructure(document: EmailDocumentV1): boolean {
+  return EXPLICIT_LABELED_COMMERCE_STRUCTURE.test(normalizeText(document.text));
+}
+
 function structureSignalCount(document: EmailDocumentV1): number {
   return [
     document.sections.some((section) => section.type === 'order_summary'),
     document.signals.products.length > 0,
     document.signals.amounts.length > 0,
-    document.signals.paymentMethods.length > 0,
+    document.signals.paymentMethods.length > 0 || hasExplicitLabeledCommerceStructure(document),
     document.signals.shippingMethods.length > 0,
   ].filter(Boolean).length;
 }
@@ -120,8 +126,12 @@ export function evaluatePurchaseCreationAuthority(input: {
 
   // Root text + hard order identity + merchant source are already independent
   // evidence classes. Require at least one additional commerce-structure signal
-  // (product, amount, payment/shipping method or order-summary structure), but
-  // never authorize a structure-free root acknowledgement.
+  // (product, amount, explicitly labelled payment/shipping method or order-summary
+  // structure), but never authorize a structure-free root acknowledgement.
+  //
+  // Some provider-normalized messages flatten the body to a single line. Preserve
+  // an explicit labelled method in that representation instead of treating the
+  // email as structure-free merely because line-based extraction could not split it.
   if (structureSignalCount(input.document) < 1) {
     return {
       version: PURCHASE_CREATION_AUTHORITY_V1_VERSION,

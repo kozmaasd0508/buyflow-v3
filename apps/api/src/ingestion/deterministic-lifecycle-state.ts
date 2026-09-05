@@ -5,7 +5,7 @@ import type { DeterministicLifecycleEvent } from './deterministic-lifecycle-pars
 
 const TRUSTED_VALIDATION = new Set(['validated', 'guardrailed']);
 const TERMINAL_STATES = new Set(['cancelled', 'refunded', 'returned', 'delivered']);
-const PHYSICAL_PROGRESS_STATES = new Set(['in_transit', 'shipped']);
+const PHYSICAL_PROGRESS_STATES = new Set(['ready_for_pickup', 'in_transit', 'shipped']);
 const ORDER_PROGRESS_EVENTS = new Set<DeterministicLifecycleEvent>([
   'order_processing',
   'order_packing',
@@ -35,6 +35,13 @@ export interface LifecyclePurchasePatch {
   cancelled_at?: string;
 }
 
+export interface ShipmentProgressSummary {
+  status: 'in_transit' | 'ready_for_pickup' | 'delivered' | null;
+  latestEventAt: string | null;
+  allDelivered: boolean;
+  completedAt: string | null;
+}
+
 function isAfter(left: string | null, right: string): boolean {
   if (!left) return false;
   const leftTime = Date.parse(left);
@@ -42,9 +49,67 @@ function isAfter(left: string | null, right: string): boolean {
   return Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime > rightTime;
 }
 
+function laterTimestamp(current: string | null, candidate: unknown): string | null {
+  if (typeof candidate !== 'string') return current;
+  const candidateTime = Date.parse(candidate);
+  if (!Number.isFinite(candidateTime)) return current;
+  if (!current) return candidate;
+  const currentTime = Date.parse(current);
+  return !Number.isFinite(currentTime) || candidateTime > currentTime ? candidate : current;
+}
+
+export function summarizeShipmentProgress(rows: Array<Record<string, unknown>>): ShipmentProgressSummary {
+  if (rows.length === 0) {
+    return { status: null, latestEventAt: null, allDelivered: false, completedAt: null };
+  }
+
+  let latestEventAt: string | null = null;
+  let completedAt: string | null = null;
+  let deliveredCount = 0;
+  let inTransitCount = 0;
+  let readyForPickupCount = 0;
+  let knownStatusCount = 0;
+
+  for (const row of rows) {
+    latestEventAt = laterTimestamp(latestEventAt, row.last_event_at);
+    latestEventAt = laterTimestamp(latestEventAt, row.delivered_at);
+    latestEventAt = laterTimestamp(latestEventAt, row.shipped_at);
+
+    const status = typeof row.status === 'string' ? row.status : null;
+    if (status === 'delivered') {
+      knownStatusCount += 1;
+      deliveredCount += 1;
+      completedAt = laterTimestamp(completedAt, row.delivered_at);
+    } else if (status === 'ready_for_pickup') {
+      knownStatusCount += 1;
+      readyForPickupCount += 1;
+    } else if (status === 'in_transit' || status === 'shipped') {
+      knownStatusCount += 1;
+      inTransitCount += 1;
+    }
+  }
+
+  const allDelivered = knownStatusCount === rows.length && deliveredCount === rows.length;
+  const status = allDelivered
+    ? 'delivered'
+    : inTransitCount > 0
+      ? 'in_transit'
+      : readyForPickupCount > 0
+        ? 'ready_for_pickup'
+        : null;
+
+  return {
+    status,
+    latestEventAt,
+    allDelivered,
+    completedAt: allDelivered ? completedAt : null,
+  };
+}
+
 function recoverFromNewerShipment(input: LifecyclePurchaseStateInput): LifecyclePurchasePatch | null {
-  if (!isAfter(input.latestShipmentEventAt, input.sourceReceivedAt)) return null;
-  const recoveredState = input.latestShipmentStatus === 'delivered' ? 'delivered' : 'in_transit';
+  if (!input.latestShipmentStatus || !isAfter(input.latestShipmentEventAt, input.sourceReceivedAt)) return null;
+  const recoveredState = input.latestShipmentStatus === 'shipped' ? 'in_transit' : input.latestShipmentStatus;
+  if (!PHYSICAL_PROGRESS_STATES.has(recoveredState) && recoveredState !== 'delivered') return null;
   return input.currentState === recoveredState ? {} : { current_state: recoveredState };
 }
 
@@ -85,7 +150,7 @@ export function decideLifecyclePurchasePatch(input: LifecyclePurchaseStateInput)
     return patch;
   }
 
-  if (TERMINAL_STATES.has(input.currentState) || input.currentState === 'payment_failed') return patch;
+  if (TERMINAL_STATES.has(input.currentState) || PHYSICAL_PROGRESS_STATES.has(input.currentState) || input.currentState === 'payment_failed') return patch;
   const recovered = recoverFromNewerShipment(input);
   if (recovered) return recovered;
   if (input.currentState !== 'delayed') patch.current_state = 'delayed';
@@ -102,25 +167,6 @@ function fromDomain(fromAddress: string | null): string | null {
   if (!fromAddress) return null;
   const at = fromAddress.lastIndexOf('@');
   return at >= 0 ? normalizeDomain(fromAddress.slice(at + 1)) : null;
-}
-
-function latestShipmentEvent(rows: Array<Record<string, unknown>>): { status: string | null; at: string | null } {
-  let latestAt: string | null = null;
-  let latestStatus: string | null = null;
-  let latestTime = Number.NEGATIVE_INFINITY;
-  for (const row of rows) {
-    const candidates = [row.last_event_at, row.delivered_at, row.shipped_at]
-      .filter((value): value is string => typeof value === 'string');
-    for (const candidate of candidates) {
-      const time = Date.parse(candidate);
-      if (Number.isFinite(time) && time > latestTime) {
-        latestTime = time;
-        latestAt = candidate;
-        latestStatus = typeof row.status === 'string' ? row.status : null;
-      }
-    }
-  }
-  return { status: latestStatus, at: latestAt };
 }
 
 export async function reconcileDeterministicLifecycleStatesForGrant(grantId: string): Promise<{ scanned: number; applied: number }> {
@@ -173,7 +219,7 @@ export async function reconcileDeterministicLifecycleStatesForGrant(grantId: str
       .eq('user_id', connection.user_id).eq('purchase_id', purchase.id);
     if (shipmentError) throw new Error(`Lifecycle reconciliation shipment lookup failed: ${shipmentError.message}`);
 
-    const latest = latestShipmentEvent((shipments ?? []) as Array<Record<string, unknown>>);
+    const shipmentProgress = summarizeShipmentProgress((shipments ?? []) as Array<Record<string, unknown>>);
     const patch = decideLifecyclePurchasePatch({
       lifecycleEvent,
       sourceReceivedAt: source.received_at,
@@ -181,8 +227,8 @@ export async function reconcileDeterministicLifecycleStatesForGrant(grantId: str
       currentPaymentStatus: typeof purchase.payment_status === 'string' ? purchase.payment_status : null,
       currentCancelledAt: typeof purchase.cancelled_at === 'string' ? purchase.cancelled_at : null,
       hasShipment: Array.isArray(shipments) && shipments.length > 0,
-      latestShipmentStatus: latest.status,
-      latestShipmentEventAt: latest.at,
+      latestShipmentStatus: shipmentProgress.status,
+      latestShipmentEventAt: shipmentProgress.latestEventAt,
     });
 
     if (Object.keys(patch).length === 0) continue;

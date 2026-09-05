@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  LEGACY_CORE_PURCHASE_WRITES_ENABLED,
   canAutomaticallyWriteDocument,
   canAutomaticallyWritePurchase,
   canAutomaticallyWriteShipment,
@@ -63,27 +64,28 @@ test('generic order confirmation parser versions are permanently shadow-only at 
   }), true);
 });
 
-test('allows strongly corroborated purchase creation', () => {
-  assert.equal(canAutomaticallyWritePurchase(purchase()), true);
-});
-
-test('rejects weakly corroborated purchase creation', () => {
-  assert.equal(canAutomaticallyWritePurchase(purchase({ evidenceCount: 2, corroboratingEvidenceCount: 1 })), false);
-});
-
-test('allows direct purchase only at high confidence', () => {
+test('legacy Core Purchase creation remains disabled even for formerly strong candidates', () => {
+  assert.equal(LEGACY_CORE_PURCHASE_WRITES_ENABLED, false);
+  assert.equal(canAutomaticallyWritePurchase(purchase()), false);
   assert.equal(canAutomaticallyWritePurchase(purchase({
-    decision: 'create_direct', confidence: 0.9, evidenceCount: 1,
-    corroboratingEvidenceCount: 0, sourceEmailIds: ['email-1'],
-  })), true);
-  assert.equal(canAutomaticallyWritePurchase(purchase({ decision: 'create_direct', confidence: 0.89 })), false);
+    decision: 'create_direct', confidence: 0.99, evidenceCount: 4,
+    corroboratingEvidenceCount: 3,
+  })), false);
+});
+
+test('legacy automatic payment evidence is fail-closed', () => {
+  assert.equal(isTrustedAutomaticEvidence('validated', {
+    validation_status: 'validated',
+    event_type: 'payment_completed',
+    parser_version: 'deterministic-commerce-v2',
+  }), false);
 });
 
 test('never writes lifecycle-only purchase candidate', () => {
   assert.equal(canAutomaticallyWritePurchase(purchase({ decision: 'lifecycle_only' })), false);
 });
 
-test('allows only strongly anchored physical shipment candidate', () => {
+test('keeps the separately controlled Shipment lane available', () => {
   assert.equal(canAutomaticallyWriteShipment(shipment()), true);
   assert.equal(canAutomaticallyWriteShipment(shipment({ carrierEvidenceCount: 1 })), false);
   assert.equal(canAutomaticallyWriteShipment(shipment({ merchantAnchorCount: 0 })), false);
@@ -93,7 +95,7 @@ test('allows only strongly anchored physical shipment candidate', () => {
   assert.equal(canAutomaticallyWriteShipment(shipment({ physicalShipmentEvidenceCount: 0 })), false);
 });
 
-test('allows only linkable high-confidence invoice document', () => {
+test('keeps the separately controlled invoice document lane available', () => {
   assert.equal(canAutomaticallyWriteDocument(document()), true);
   assert.equal(canAutomaticallyWriteDocument(document({ documentType: 'receipt' })), false);
   assert.equal(canAutomaticallyWriteDocument(document({ confidence: 0.84 })), false);

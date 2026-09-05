@@ -9,6 +9,7 @@ import {
 import { PurchaseIdentityGraph } from './graph.js';
 import { deriveMerchantSenderNamespace } from './merchant-sender-namespace.js';
 import { evaluatePromotionReadiness, type PromotionReadinessDecision } from './promotion-readiness.js';
+import { deriveTrustedProviderSenderAuthorityProvenance } from './provider-sender-authority.js';
 import { evaluatePurchaseCreationAuthority } from './purchase-creation-authority.js';
 import type { CanonicalEvent, CorrelationDecision, PurchaseIdentitySnapshot } from './types.js';
 
@@ -42,8 +43,9 @@ export interface PurchaseIdentityShadowResult {
 /**
  * End-to-end read-only shadow orchestration:
  * EmailDocumentV1 -> frozen Extraction Engine v2 -> direct canonical adapter ->
- * optional precomputed semantic-only event overlay -> Purchase root authority ->
- * Purchase Identity Graph v2 decision/simulation -> Phase E readiness audit.
+ * optional precomputed semantic-only event overlay -> provider sender authority ->
+ * Purchase root authority -> Purchase Identity Graph v2 decision/simulation ->
+ * Phase E readiness audit.
  *
  * The graph may mutate its private in-memory clone to show the predicted result,
  * but this function performs no database writes and does not alter the caller's
@@ -52,7 +54,9 @@ export interface PurchaseIdentityShadowResult {
  *
  * semanticEventOverride changes only CanonicalEvent.eventType. Every identity
  * value still comes from Extraction v2, and purchase creation still requires
- * separate deterministic purchase-root authority.
+ * separate deterministic purchase-root authority. Provider sender authority is
+ * derived independently from trusted provider metadata and can only constrain
+ * promotion readiness; it never invents merchant/order identity.
  */
 export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): PurchaseIdentityShadowResult {
   const extraction = (input.runExtraction ?? runExtractionEngineV2)(input.document);
@@ -84,6 +88,9 @@ export function runPurchaseIdentityShadow(input: PurchaseIdentityShadowInput): P
     };
   }
 
+  canonicalEvent.provenance.push(
+    ...deriveTrustedProviderSenderAuthorityProvenance(input.document),
+  );
   canonicalEvent.merchantNamespace = deriveMerchantSenderNamespace(canonicalEvent);
   const creationAuthority = evaluatePurchaseCreationAuthority({
     document: input.document,

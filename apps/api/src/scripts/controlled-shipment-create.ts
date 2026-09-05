@@ -1,4 +1,9 @@
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
+import { summarizeShipmentProgress } from '../ingestion/deterministic-lifecycle-state.js';
+import {
+  monotonicControlledShipmentStatus,
+  purchaseStateMatchesShipmentSummary,
+} from '../ingestion/journeygraph-controlled-verification.js';
 import { selectControlledShipmentCandidate } from '../resolution/controlled-shipment-creation.js';
 import {
   normalizeCarrierSlug,
@@ -184,6 +189,11 @@ async function main() {
     throw new Error('Existing tracking identity belongs to another purchase');
   }
 
+  const expectedShipmentStatus = monotonicControlledShipmentStatus(
+    existedBefore && typeof existingRows[0]?.status === 'string' ? existingRows[0].status : null,
+    candidate.recommendedStatus,
+  );
+
   const sources = candidateEvidence.map((row) => ({
     source_email_id: row.sourceEmailId,
     confidence: row.confidence,
@@ -228,8 +238,8 @@ async function main() {
   if (!shipment || shipment.purchase_id !== candidate.purchaseId) {
     throw new Error('Controlled shipment verification failed');
   }
-  if (shipment.status !== candidate.recommendedStatus) {
-    throw new Error('Controlled shipment status verification failed');
+  if (shipment.status !== expectedShipmentStatus) {
+    throw new Error('Controlled shipment monotonic status verification failed');
   }
 
   const { count: linkedEvidenceCount, error: evidenceCountError } = await db
@@ -247,20 +257,32 @@ async function main() {
     );
   }
 
-  const { data: purchaseAfterRows, error: purchaseAfterError } = await db
-    .from('purchases')
-    .select('current_state')
-    .eq('id', candidate.purchaseId)
-    .limit(1);
+  const [
+    { data: purchaseAfterRows, error: purchaseAfterError },
+    { data: purchaseShipmentRows, error: purchaseShipmentsError },
+  ] = await Promise.all([
+    db.from('purchases').select('current_state').eq('id', candidate.purchaseId).limit(1),
+    db
+      .from('shipments')
+      .select('status,shipped_at,delivered_at,last_event_at')
+      .eq('user_id', candidate.userId)
+      .eq('purchase_id', candidate.purchaseId),
+  ]);
 
   if (purchaseAfterError) {
     throw new Error(`Failed to verify purchase state: ${purchaseAfterError.message}`);
   }
+  if (purchaseShipmentsError) {
+    throw new Error(`Failed to verify aggregate shipment state: ${purchaseShipmentsError.message}`);
+  }
 
   const purchaseAfterState = purchaseAfterRows?.[0]?.current_state;
-  const expectedState = candidate.recommendedStatus === 'delivered' ? 'delivered' : 'in_transit';
-  if (purchaseAfterState !== expectedState && purchaseAfterState !== 'delivered') {
-    throw new Error('Controlled shipment purchase-state verification failed');
+  const shipmentProgress = summarizeShipmentProgress(
+    (purchaseShipmentRows ?? []) as Array<Record<string, unknown>>,
+  );
+
+  if (!purchaseStateMatchesShipmentSummary(purchaseAfterState, shipmentProgress)) {
+    throw new Error('Controlled shipment aggregate purchase-state verification failed');
   }
 
   console.log(
@@ -276,6 +298,7 @@ async function main() {
           userScopedResolution: true,
           databaseTrackingIdentityGuard: true,
           atomicShipmentPurchaseAndSourceWrite: true,
+          aggregatePurchaseStateVerification: true,
           documentWrites: false,
           openAiCalls: false,
           publicLogContainsIdentifiers: false,

@@ -1,5 +1,17 @@
 import { mobileConfig } from './config.js';
 
+export interface PurchasePulse {
+  status: string;
+  label: string;
+  title: string;
+  body: string;
+  tone: 'neutral' | 'active' | 'success' | 'warning' | 'danger';
+  movement: boolean;
+  delivered: boolean;
+  reviewRequired: boolean;
+  lastConfirmedAt: string | null;
+}
+
 export interface ShipmentSummary {
   id: string;
   carrier: string | null;
@@ -72,10 +84,13 @@ export interface PurchaseSummary {
   paymentStatus: string | null;
   currentState: string;
   orderedAt: string | null;
+  paidAt: string | null;
   shippedAt: string | null;
   deliveredAt: string | null;
+  cancelledAt: string | null;
   createdAt: string;
   updatedAt: string;
+  pulse: PurchasePulse;
   shipments: ShipmentSummary[];
   documentCount: number;
   productCount: number;
@@ -89,8 +104,6 @@ export interface PurchaseDetail extends Omit<PurchaseSummary, 'documentCount' | 
   paymentMethod: string | null;
   shippingMethod: string | null;
   expectedCarrier: string | null;
-  paidAt: string | null;
-  cancelledAt: string | null;
   products: ProductSummary[];
   documents: DocumentSummary[];
 }

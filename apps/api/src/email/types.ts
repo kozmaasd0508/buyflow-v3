@@ -30,6 +30,8 @@ export interface NormalizedEmail {
   bcc: EmailAddress[];
   receivedAt: string;
   snippet?: string;
+  /** Provider-supplied full plain-text body when available. */
+  bodyText?: string;
   bodyHtml?: string;
   headers?: EmailHeader[];
   folders: string[];

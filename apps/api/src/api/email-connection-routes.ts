@@ -8,6 +8,7 @@ import {
   processEmailScanJob,
 } from '../ingestion/email-scan-jobs.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
+import { registerGmailDirectConnectionRoutes } from './gmail-direct-connection-routes.js';
 
 interface NylasApplicationResponse {
   data?: {
@@ -130,6 +131,8 @@ async function exchangeNylasCode(input: {
 }
 
 export async function registerEmailConnectionRoutes(app: FastifyInstance) {
+  await registerGmailDirectConnectionRoutes(app);
+
   app.get('/api/email-connections', async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;

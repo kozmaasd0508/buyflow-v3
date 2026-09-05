@@ -1,156 +1,69 @@
 # BuyFlow V3 — persistent handoff
 
-> Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md` / `BUYFLOW_WORKLOG.md`. Reconcile with current GitHub state before changing runtime code.
+> Read `AGENTS.md`, then this file. Use `BUYFLOW_TECHNICAL_CONTINUITY.md` and the newest technical log only when detailed test/debug history is needed.
 
-**Last updated:** 2026-08-24 Europe/Budapest  
+**Last updated:** 2026-09-05 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
-**Active development base:** `codex/mailgun-inbound-shadow-v3`  
-**TechnicalEvidence branch:** `codex/technical-evidence-shadow-v1`  
-**Development PR:** #256 -> `codex/mailgun-inbound-shadow-v3`
+**Main:** `92461ac103d4e337baa69ef91d09717eeb488d00`  
+**Architecture branch:** `codex/modern-email-source-foundation-v1`  
+**EventMind development branch:** `codex/buyflow-testlab-v1`
 
-## CURRENT STATE
+## Safety / production state
 
-TechnicalEvidence is still shadow/read-only:
-- 0 production writes
-- 0 AI/LLM calls
-- no DB mutation
-- no automatic Purchase/Shipment create/link
-- no Purchase Identity Graph decision authority
-- ambiguity/conflict -> REVIEW/PENDING
-- hard identifiers remain namespace-scoped
+- Production remains OFF / unchanged.
+- AI/EventMind classifies lifecycle semantics only; Purchase Identity Graph v2 remains the only identity/link/create/merge authority.
+- Lifecycle-only email cannot create a Purchase; ambiguity/conflict stays REVIEW/PENDING.
+- Direct Gmail production runtime, source archive, EventMind production runtime and TrustLink production writes remain OFF.
+- JourneyGraph/DocVault/Core target production migrations remain NOT APPLIED.
+- V11 remains the reference adapter; V12 is not promoted.
+- Real Gmail model tests remain Gmail GET-only; no raw Gmail content/IDs are committed.
 
-Executable collector:
-`apps/api/src/extraction-v2/technical-evidence-v1-5.ts`
+## Module state
 
-Purchase-direction safety gate:
-`apps/api/src/extraction-v2/technical-evidence-direction-gate-v1.ts`
+`MailGate -> RawVault -> MailLens -> EventMind -> TrustLink -> JourneyGraph -> DocVault -> Core -> Pulse`
 
-Current evidence families include:
-- base v1.2 layers
-- DPD / FOXPOST / Packeta / MPL
-- native Shopify
-- REGIO / SiteEngine R1
-- deterministic PDF invoice
-- GLS COD PDF evidence
+- MailGate: PASS incl. real Gmail RAW + historyId/history.list gate; production OFF.
+- RawVault: code/audit PASS; real private Supabase Storage + retention/orphan/account-deletion smoke still open due environment limits.
+- MailLens: PASS.
+- EventMind: code/runtime-safety PASS; **real-world semantic quality gate OPEN**.
+- TrustLink: PASS incl. Gmail provider-auth; production writes OFF.
+- JourneyGraph / DocVault / Core: isolated DB smoke PASS; production migrations not applied.
+- Pulse: PASS / read-only.
 
-## RETRO-200 CURRENT BASELINE
+## EventMind current state
 
-Frozen historical set:
-- total 200
-- commerce 33
-- noise 167
+REAL120 is now a **development set**, not a final blind holdout. V11 baseline was **41/120 = 34.17% strict exact**.
 
-Historical regression only, NOT fresh blind accuracy.
+The chunk + short-evidence final-judge path completed all **120/120 REAL120 cases** using the DIRECT method.
 
-Progress:
-- before Direction Gate: actionable TP 5 / FP 10
-- after Direction Gate: actionable TP 5 / FP 0
-- after Packeta R1: actionable TP 6 / FP 0
-- after MPL R1: actionable TP 14 / FP 0
-- after REGIO R1: actionable **TP 17 / FP 0 / FN 16 / TN 167**
+Technical result:
+- final judge valid: **119/120**
+- runtime timeout/503 restart failures: **0**
+- max system RAM: **80.3%**
+- Gmail GET-only, writes 0, production OFF.
 
-Current actionable precision on this frozen historical set: **100.00%**  
-Current actionable recall: **51.52%**  
-Current actionable F1: **68.00%**
+Semantic result vs known ground truth:
+- strict exact: **44/120 = 36.67%**
+- buyer-commerce: **40/76 = 52.63%**
+- OTHER: **4/44 = 9.09%**.
 
-Current event result after REGIO R1:
-- TP **14**
-- FP **0**
-- FN **19**
-- TN **167**
-- recall **42.42%**
+Conclusion: **technical stability is strong, semantic accuracy is still unacceptable. Do not freeze or promote this candidate.** Main failure groups: OTHER/merchant-outbound and SHIPMENT_CREATED/SHIPPED-stage separation.
 
-Report:
-`protocols/TECHNICAL-EVIDENCE-RETRO-HOLDOUT-V1-V15-DIRECTION-GATE-V1-PACKETA-R1-MPL-R1-REGIO-R1-2026-08-24.md`
+An interactive Teacher Mode V1 exists but its second-turn UX/runtime behavior was not yet verified successfully enough to use as the next gate.
 
-## REGIO / SITEENGINE R1 — COMPLETED
+A new **Prompt V4 decision-gate experiment** is prepared. It keeps the same V11 Qwen3-8B adapter/runtime and memory-safe chunk path, but replaces the sparse classifier instruction with a compact buyer-role gate plus explicit lifecycle boundaries for order, shipment, payment/invoice, cancellation/refund/return/warranty. `is_commerce` is derived only after `event_type`. Prompt code is frozen at commit `a61843c9e80a1c29582805e6e2f909595d855749` on branch `codex/eventmind-prompt-v4-real120`. **Prompt V4 REAL120 has not yet been run, so no accuracy claim exists yet.**
 
-Implementation:
-- `apps/api/src/extraction-v2/technical-evidence-regio-v1.ts`
-- wired into `technical-evidence-v1-5.ts`
-- tests: `technical-evidence-regio-v1.test.ts`
+Local GPU/EventMind work must continue with the user's preferred DIRECT flow, not TestLab/self-hosted runner.
 
-Strict authority contract:
-- exact `regiojatek.hu` direct sender
-- matching DKIM pass
-- SiteEngine(c)GreyMatter MIME boundary
-- one unique `WS .../...` order identity
-- subject/body order identity must agree
-- event needs one reviewed current REGIO lifecycle template
+## Current next actions
 
-Supported R1 lifecycle:
-- order received/recorded -> order_created
-- fulfillment processing started -> order_processing
-- explicit carrier handoff -> shipment
+1. Run the frozen Prompt V4 candidate on the same REAL120 development set using DIRECT and compare against 44/120 = 36.67%.
+2. If Prompt V4 materially improves semantic accuracy without losing runtime stability, inspect class-level gains/regressions before any further change.
+3. If prompt-only improvement remains insufficient, resume teacher/corpus -> reviewed LoRA training instead of endlessly expanding the prompt.
+4. Separately fix the single `JUDGE_PROMPT_TOO_LARGE` case with bounded/prioritized evidence.
+5. Freeze a candidate only after material semantic improvement; then create a new untouched holdout for unbiased validation.
+6. RawVault real private Storage smoke remains a separate open gate.
 
-Important negative:
-a real REGIO survey from the same authenticated sender/platform and with the same order number remains non-actionable because it has no supported current lifecycle event.
+## Resume contract
 
-Frozen retro cardinality:
-- Mixed: 3 REGIO transactional messages
-- NoiseEnriched: 0 REGIO messages
-- all 3 were previous false negatives and are now recognized
-- 197/200 cases are outside the REGIO sender scope
-
-## CI — REGIO R1 GREEN
-
-GitHub Actions run **#960** validated exact code/test head:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
-
-PASS:
-- API typecheck
-- API tests **1114/1114 PASS**
-- API build
-- mobile typecheck
-- mobile web build
-
-CI-only draft PR #262 was closed **without merge**.
-
-Dependency-hygiene note remains: npm install reports 3 high-severity audit findings; separate release-hardening task.
-
-## ACTIVE FUTURE BLIND FREEZE — V5
-
-Protocol:
-`protocols/TECHNICAL-EVIDENCE-BLIND-HOLDOUT-V5-2026-08-24.md`
-
-Exact freeze snapshot:
-`e13ef747f8f622cf88d5c9f647c324a197569522`
-
-Cutoff:
-`2026-08-24T18:23:26Z`  
-`2026-08-24 20:23:26 Europe/Budapest`
-
-First Gmail ID-only preflight strictly after cutoff: **0 messages**.
-No post-cutoff content or predictions were inspected. v5 is untouched.
-
-Any evidence/authority logic change before first v5 prediction requires another blind version.
-
-## IMPORTANT SAFETY RULES
-
-- seller-outbound / return-to-seller evidence cannot influence buyer Purchase authority
-- future shipment wording is not current physical shipment
-- pre-advice is not physical progress
-- READY_FOR_PICKUP is not DELIVERED
-- survey/review mail is not lifecycle proof by itself
-- provider/platform identity alone is insufficient
-- generic id/ids/code/ref is not hard identity without typed context
-- conflicting hard identifiers never auto-merge
-- payment-only evidence cannot create Purchase authority
-- QR pickup/action code is not generic tracking
-
-## NEXT HIGH-VALUE TASK
-
-Next historical recall target if continuing tuning:
-1. authenticated Shoprenter families
-2. Temu
-3. Vinted
-4. AWGifts
-5. Frogpack/PPL
-
-Required sequence:
-provider-qualified evidence -> negative tests -> retro-200 impact -> FP must remain 0 -> full CI -> new blind freeze.
-
-## RESUME CONTRACT
-
-Minimal resume phrase:
-**Folytasd a BuyFlowot a GitHubból.**
+**Folytasd a BuyFlowot a GitHubból. Először olvasd el az `AGENTS.md` és `BUYFLOW_HANDOFF.md` fájlt; részletes előzményhez a `BUYFLOW_TECHNICAL_CONTINUITY.md`-t és a legújabb technical logot. Production OFF. EventMind REAL120 chunk+judge baseline 44/120 = 36.67%. Új Prompt V4 decision-gate candidate készen áll, ugyanazzal a V11 adapterrel, frozen code commit `a61843c9e80a1c29582805e6e2f909595d855749`, frozen branch `codex/eventmind-prompt-v4-real120`; még NINCS lefuttatva. Következő lépés: DIRECT REAL120 Prompt V4 run, majd class-level összehasonlítás a 44/120 baseline-nal.**

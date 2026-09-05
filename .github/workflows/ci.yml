@@ -21,6 +21,20 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: EventMind V11 runtime syntax
+        run: python3 -m py_compile scripts/eventmind-v11-runtime.py
+
+      - name: EventMind V11 launcher syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('scripts/run-eventmind-v11-gate.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
       - name: API typecheck
         run: npm run typecheck --workspace @buyflow/api
 
