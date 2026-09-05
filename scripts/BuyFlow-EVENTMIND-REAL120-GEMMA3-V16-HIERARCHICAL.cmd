@@ -2,7 +2,7 @@
 setlocal
 title BuyFlow EventMind REAL120 - Gemma V16 Hierarchical
 
-set "RUNNER_COMMIT=29a17c193e3ae2206a9dfb2370c66ce4443cba1b"
+set "RUNNER_COMMIT=bbd832941f9a317dc2ddd61ff6af0b1ca3f59c70"
 set "RUNNER_URL=https://raw.githubusercontent.com/kozmaasd0508/buyflow-v3/%RUNNER_COMMIT%/scripts/run-eventmind-v16-gemma-hierarchical-real120-bootstrap.ps1"
 set "RUNNER=%TEMP%\buyflow-eventmind-v16-hierarchical-%RANDOM%%RANDOM%.ps1"
 
