@@ -30,7 +30,8 @@ try {
   $text=$text.Replace($parserBad,$parserGood)
 
   $pinNeedle='if($fetched -notmatch ''^[a-f0-9]{40}$''){Fail "FETCH_HEAD_INVALID:$fetched"}'
-  $pinReplacement=$pinNeedle + "`r`n  if(`$fetched -ne '$codeCommit'){Fail \"PINNED_CODE_MISMATCH:`$fetched\"}"
+  $pinLine="  if(`$fetched -ne '$codeCommit'){Fail `"PINNED_CODE_MISMATCH:`$fetched`"}"
+  $pinReplacement=$pinNeedle + "`r`n" + $pinLine
   if(-not $text.Contains($pinNeedle)){throw 'EXPECTED_FETCH_HEAD_GUARD_NOT_FOUND'}
   $text=$text.Replace($pinNeedle,$pinReplacement)
 
