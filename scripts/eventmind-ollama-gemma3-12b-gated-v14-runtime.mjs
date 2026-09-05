@@ -17,7 +17,6 @@ const EVENT_TYPES = [
 const BUYER_GATE_SCHEMA = {
   type: 'object',
   properties: {
-    buyer_side: { type: 'boolean' },
     reason_code: {
       type: 'string',
       enum: [
@@ -26,17 +25,16 @@ const BUYER_GATE_SCHEMA = {
       ],
     },
   },
-  required: ['buyer_side', 'reason_code'],
+  required: ['reason_code'],
   additionalProperties: false,
 };
 
 const EVENT_SCHEMA = {
   type: 'object',
   properties: {
-    is_commerce: { type: 'boolean' },
     event_type: { type: 'string', enum: EVENT_TYPES },
   },
-  required: ['is_commerce', 'event_type'],
+  required: ['event_type'],
   additionalProperties: false,
 };
 
@@ -147,7 +145,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const prompt = await readPrompt(req);
     const gate = req.url === '/v1/buyer-gate';
-    const output = await lockedInfer(prompt, gate ? BUYER_GATE_SCHEMA : EVENT_SCHEMA, gate ? 48 : 64);
+    const output = await lockedInfer(prompt, gate ? BUYER_GATE_SCHEMA : EVENT_SCHEMA, gate ? 32 : 48);
     return send(res, 200, {
       ok: true,
       model_id: MODEL,
@@ -168,9 +166,9 @@ const server = http.createServer(async (req, res) => {
 try {
   modelDigest = await resolveModelDigest();
   await infer(
-    'The mailbox owner received a marketing newsletter with no purchase lifecycle event. Return the structured buyer-side gate result.',
+    'The mailbox owner received a marketing newsletter with no purchase lifecycle event. Return only the structured gate reason.',
     BUYER_GATE_SCHEMA,
-    48,
+    32,
   );
   server.listen(PORT, '127.0.0.1', () => {
     console.log(JSON.stringify({
