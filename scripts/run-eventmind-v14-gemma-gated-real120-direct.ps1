@@ -106,21 +106,9 @@ function Start-Qwen([int]$segment){
 '@
   $text=NeedReplace $text $oldPrep $newPrep 'EXPECTED_GEMMA_PREP_BLOCK_NOT_FOUND'
 
-  $text=NeedReplace $text "& npm.cmd exec --yes -- tsx 'src\scripts\eventmind-v13-real-gmail-full-dev120.ts' `$IdFile `$checkpointPath 15" "& npm.cmd exec --yes -- tsx 'src\scripts\eventmind-v14-gemma-gated-real-gmail-dev120.ts' `$IdFile `$checkpointPath 15" 'EXPECTED_TS_RUNNER_NOT_FOUND'
-
-  $oldEnv=@'
-    $env:BUYFLOW_EVENTMIND_V11_RUNTIME_ENABLED='true'
-    $env:BUYFLOW_EVENTMIND_V11_RUNTIME_URL='http://127.0.0.1:4395/v1/eventmind'
-    $env:BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256=[string]$health.adapter_sha256
-    $env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS='30000'
-'@
-  $newEnv=@'
-    $env:BUYFLOW_GEMMA_V14_RUNTIME_ENABLED='true'
-    $env:BUYFLOW_GEMMA_V14_RUNTIME_URL='http://127.0.0.1:4396'
-    $env:BUYFLOW_GEMMA_V14_MODEL_DIGEST=[string]$health.model_digest
-    $env:BUYFLOW_GEMMA_V14_TIMEOUT_MS='30000'
-'@
-  $text=NeedReplace $text $oldEnv $newEnv 'EXPECTED_RUNTIME_ENV_BLOCK_NOT_FOUND'
+  # The downloaded file is itself a stable wrapper. Patch its replacement target,
+  # not the generated inner runner text (which does not exist yet at this level).
+  $text=NeedReplace $text 'src\scripts\eventmind-v13-real-gmail-full-dev120.ts' 'src\scripts\eventmind-v14-gemma-gated-real-gmail-dev120.ts' 'EXPECTED_TS_RUNNER_DESTINATION_NOT_FOUND'
 
   $text=$text.Replace('BUYFLOW EVENTMIND - REAL120 GEMMA 3 12B FULL EMAIL','BUYFLOW EVENTMIND V14 - GEMMA BUYER GATE + EVENT CLASSIFIER')
   $text=$text.Replace('NO CHUNKS / NO FINAL JUDGE / CHECKPOINT / JSON OUTPUT','FULL EMAIL / 8192 CONTEXT / JSON SCHEMA / NO CHUNKS')
@@ -131,14 +119,17 @@ function Start-Qwen([int]$segment){
   $text=$text.Replace('REAL120 GEMMA 3 12B FULL EMAIL: COMPLETE','REAL120 GEMMA V14 GATED: COMPLETE')
   $text=$text.Replace('Runtime: Ollama gemma3:12b | FULL semantic email | V4 prompt | JSON mode','Runtime: Ollama gemma3:12b | buyer gate -> event | 8192 context | JSON Schema')
 
-  $cleanupNeedle="  Remove-Item Env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS -ErrorAction SilentlyContinue"
-  $cleanupExtra=@'
-  Remove-Item Env:BUYFLOW_GEMMA_V14_RUNTIME_ENABLED -ErrorAction SilentlyContinue
-  Remove-Item Env:BUYFLOW_GEMMA_V14_RUNTIME_URL -ErrorAction SilentlyContinue
-  Remove-Item Env:BUYFLOW_GEMMA_V14_MODEL_DIGEST -ErrorAction SilentlyContinue
-  Remove-Item Env:BUYFLOW_GEMMA_V14_TIMEOUT_MS -ErrorAction SilentlyContinue
+  # Inject V14 environment rewrites into the downloaded wrapper immediately
+  # before it writes/executes the generated inner PowerShell runner.
+  $anchor="  Set-Content -LiteralPath `$patched -Value `$text -Encoding UTF8"
+  $injection=@'
+  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_RUNTIME_ENABLED='true'","$env:BUYFLOW_GEMMA_V14_RUNTIME_ENABLED='true'")
+  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_RUNTIME_URL='http://127.0.0.1:4395/v1/eventmind'","$env:BUYFLOW_GEMMA_V14_RUNTIME_URL='http://127.0.0.1:4396'")
+  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256=[string]$health.model_digest","$env:BUYFLOW_GEMMA_V14_MODEL_DIGEST=[string]$health.model_digest")
+  $text=$text.Replace("$env:BUYFLOW_EVENTMIND_V11_TIMEOUT_MS='30000'","$env:BUYFLOW_GEMMA_V14_TIMEOUT_MS='30000'")
+  Set-Content -LiteralPath $patched -Value $text -Encoding UTF8
 '@
-  $text=NeedReplace $text $cleanupNeedle ($cleanupNeedle + "`r`n" + $cleanupExtra.TrimEnd()) 'EXPECTED_CLEANUP_ANCHOR_NOT_FOUND'
+  $text=NeedReplace $text $anchor $injection.TrimEnd() 'EXPECTED_INNER_SET_CONTENT_ANCHOR_NOT_FOUND'
 
   Set-Content -LiteralPath $patched -Value $text -Encoding UTF8
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $patched -IdFile $IdFile
