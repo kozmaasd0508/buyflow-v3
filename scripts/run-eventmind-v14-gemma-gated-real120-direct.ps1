@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
-$codeCommit='fcc9f4e595e2260ec0175b972feaa0b7648a1456'
+$codeCommit='c1632945f43dd1ce9d3c8116993adf2d78dfcc7d'
 $codeBranch='codex/eventmind-gemma3-gated-v14-real120'
 $baseRunnerCommit='d9476089a3095074700a880bb9d3603763822867'
 $baseUrl="https://raw.githubusercontent.com/kozmaasd0508/buyflow-v3/$baseRunnerCommit/scripts/run-eventmind-v13-gemma3-12b-real120-full-direct.ps1"
