@@ -4,6 +4,11 @@ param(
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
+# Literal source-code placeholders consumed by the proven V14 single-layer patcher.
+# These are intentionally literal strings, not runtime paths/branch values.
+$branch='$branch'
+$repoRoot='$repoRoot'
+
 $coreCommit='e26ccd995469690f9d8450db0959cc50f295c7bd'
 $codeBranch='codex/eventmind-gemma3-v16-hierarchical'
 $runnerCommit='ae237feaf910932ef45be40b8979c1f492775ba2'
