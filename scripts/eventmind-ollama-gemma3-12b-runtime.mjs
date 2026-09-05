@@ -103,7 +103,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { ok: false });
   }
 
-  let length = Number(req.headers['content-length'] || 0);
+  const length = Number(req.headers['content-length'] || 0);
   if (!Number.isInteger(length) || length <= 0 || length > MAX_REQUEST_BYTES) {
     return send(res, 413, { ok: false, reason: 'REQUEST_SIZE_REJECTED' });
   }
@@ -146,8 +146,9 @@ const server = http.createServer(async (req, res) => {
 
 try {
   modelDigest = await resolveModelDigest();
+  await infer('Reply with exactly: OK');
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(JSON.stringify({ ok: true, model: MODEL, digest: modelDigest, port: PORT }));
+    console.log(JSON.stringify({ ok: true, model: MODEL, digest: modelDigest, port: PORT, warmed: true }));
   });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
