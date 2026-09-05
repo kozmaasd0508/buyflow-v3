@@ -2,7 +2,6 @@ $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
 $api='http://127.0.0.1:13305'
-# New stable registry name. The earlier failed tensorblock attempt reserved the old name with different metadata.
 $model='user.BuyFlow-Gemma-3-12B-Q4_K_M-ggmlorg'
 $repo='ggml-org/gemma-3-12b-it-GGUF'
 $variant='Q4_K_M'
@@ -11,11 +10,13 @@ $summaryPath=Join-Path $env:USERPROFILE 'Desktop\BuyFlow-LEMONADE-GEMMA3-12B-SUM
 
 function ApiGet([string]$path,[int]$timeout=30){ Invoke-RestMethod -Uri ($api+$path) -Method Get -TimeoutSec $timeout }
 function ApiPost([string]$path,$body,[int]$timeout=1800){ Invoke-RestMethod -Uri ($api+$path) -Method Post -ContentType 'application/json' -Body ($body|ConvertTo-Json -Depth 20 -Compress) -TimeoutSec $timeout }
+function HasProp($obj,[string]$name){ return ($null -ne $obj -and $null -ne $obj.PSObject.Properties[$name]) }
+function GetDownloaded($obj){ if(HasProp $obj 'downloaded'){ return [bool]$obj.downloaded }; return $false }
 
 Write-Host ''
 Write-Host '==============================================================' -ForegroundColor Cyan
-Write-Host 'BUYFLOW - LEMONADE GEMMA 3 12B Q4_K_M DOWNLOAD V4' -ForegroundColor Cyan
-Write-Host 'Official ggml-org repo + unique registry name + ROCm/8192 config.' -ForegroundColor Green
+Write-Host 'BUYFLOW - LEMONADE GEMMA 3 12B Q4_K_M DOWNLOAD V5' -ForegroundColor Cyan
+Write-Host 'Safe resume/check + official ggml-org repo + ROCm/8192 config.' -ForegroundColor Green
 Write-Host 'No inference. No n8n change. Ollama unchanged.' -ForegroundColor Green
 Write-Host '==============================================================' -ForegroundColor Cyan
 
@@ -41,10 +42,10 @@ Write-Host ('Registry model name: '+$model) -ForegroundColor DarkGray
 
 $existing=$null
 try{$existing=ApiGet ('/v1/models/'+[uri]::EscapeDataString($model))}catch{}
-if($existing -and $existing.downloaded -eq $true){
-  Write-Host 'Model mar le van toltve; letoltes kihagyva.' -ForegroundColor Green
+if(GetDownloaded $existing){
+  Write-Host 'Model mar teljesen le van toltve; letoltes kihagyva.' -ForegroundColor Green
 }else{
-  Write-Host 'Model letoltese indul: Gemma 3 12B Q4_K_M (~6.8 GB)...' -ForegroundColor Yellow
+  Write-Host 'Model nincs meg teljesen; letoltes/resume indul (~6.8 GB)...' -ForegroundColor Yellow
   Write-Host ('Checkpoint: '+$checkpoint) -ForegroundColor DarkGray
   $pull=@{
     model_name=$model
@@ -54,18 +55,32 @@ if($existing -and $existing.downloaded -eq $true){
     stream=$false
   }
   $result=ApiPost '/v1/pull' $pull 7200
-  if($result.error){throw ('MODEL_PULL_FAILED:'+($result.error|ConvertTo-Json -Compress))}
-  Write-Host 'Model letoltes kesz.' -ForegroundColor Green
+  if(HasProp $result 'error'){
+    $errText=[string]$result.error
+    if(-not [string]::IsNullOrWhiteSpace($errText)){
+      throw ('MODEL_PULL_FAILED:'+($result.error|ConvertTo-Json -Compress))
+    }
+  }
+  Write-Host 'Pull API visszatert; registry allapot ellenorzese...' -ForegroundColor Green
 }
+
+$check=$null
+for($i=0;$i -lt 10;$i++){
+  try{$check=ApiGet ('/v1/models/'+[uri]::EscapeDataString($model))}catch{$check=$null}
+  if(GetDownloaded $check){break}
+  Start-Sleep -Seconds 2
+}
+if(-not (GetDownloaded $check)){throw 'MODEL_NOT_DOWNLOADED_AFTER_PULL'}
+Write-Host 'Model download status: READY.' -ForegroundColor Green
 
 Write-Host 'ROCm + 8192 context beallitasa...' -ForegroundColor Yellow
 $options=ApiPost ('/v1/models/'+[uri]::EscapeDataString($model)+'/options') @{ctx_size=8192;llamacpp_backend='rocm'} 60
+if(-not (HasProp $options 'effective')){throw 'MODEL_OPTIONS_RESPONSE_MISSING_EFFECTIVE'}
 if([int]$options.effective.ctx_size -ne 8192){throw ('CTX_SAVE_FAILED:'+[string]$options.effective.ctx_size)}
 if([string]$options.effective.llamacpp_backend -ne 'rocm'){throw ('ROCM_SAVE_FAILED:'+[string]$options.effective.llamacpp_backend)}
 
-$check=ApiGet ('/v1/models/'+[uri]::EscapeDataString($model))
-if($check.downloaded -ne $true){throw 'MODEL_NOT_DOWNLOADED_AFTER_PULL'}
-
+$sizeValue=$null
+if(HasProp $check 'size'){$sizeValue=$check.size}
 $summary=[ordered]@{
   completed_at=(Get-Date).ToString('o')
   model_id=$model
@@ -76,8 +91,8 @@ $summary=[ordered]@{
   recipe='llamacpp'
   backend='rocm'
   context_tokens=8192
-  downloaded=[bool]$check.downloaded
-  size_gb=$check.size
+  downloaded=$true
+  size_gb=$sizeValue
   openai_base="$api/v1"
   inference_started=$false
   n8n_changed=$false
