@@ -8,10 +8,10 @@ import {
   type EventMindPredictionV1,
 } from './eventmind-v1.js';
 
-export const EVENTMIND_V11_MODEL_ID = 'Qwen/Qwen3-8B' as const;
+export const EVENTMIND_V11_MODEL_ID = 'gemma3:12b' as const;
 export const EVENTMIND_V11_RUNTIME_PROTOCOL = 'buyflow-eventmind-v11-runtime-v1' as const;
-export const EVENTMIND_V11_RUNTIME_VERSION = 'eventmind-v11-runtime-v1' as const;
-export const EVENTMIND_V11_TEMPLATE_VERSION = 'qwen3-chat-template-thinking-off-v1' as const;
+export const EVENTMIND_V11_RUNTIME_VERSION = 'eventmind-ollama-gemma3-12b-runtime-v1' as const;
+export const EVENTMIND_V11_TEMPLATE_VERSION = 'ollama-gemma3-chat-v1' as const;
 export const EVENTMIND_V11_MAX_NEW_TOKENS = 48 as const;
 
 const SHA256 = /^[a-f0-9]{64}$/i;
@@ -96,8 +96,10 @@ function timeoutMs(value: string | undefined): number {
 }
 
 /**
- * EventMind stays disabled unless explicitly enabled. Enabling it requires the
- * exact local V11 adapter SHA-256; there is intentionally no guessed/default SHA.
+ * EventMind stays disabled unless explicitly enabled. Enabling it requires an
+ * exact local runtime/model SHA-256 pin; there is intentionally no guessed/default SHA.
+ * The legacy environment variable name is retained so the frozen REAL120 harness
+ * can compare runtimes without changing its request contract.
  */
 export function eventMindV11RuntimeConfigFromEnvironment(
   source: NodeJS.ProcessEnv = process.env,
@@ -108,7 +110,7 @@ export function eventMindV11RuntimeConfigFromEnvironment(
 
   const adapterSha = source.BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256?.trim().toLowerCase();
   if (!adapterSha || !SHA256.test(adapterSha)) {
-    throw new Error('EventMind V11 requires BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256 as an exact SHA-256 pin');
+    throw new Error('EventMind runtime requires BUYFLOW_EVENTMIND_V11_ADAPTER_SHA256 as an exact SHA-256 pin');
   }
 
   return {
@@ -163,9 +165,9 @@ function metadataMatches(
 }
 
 /**
- * Calls the pinned V11 classifier in a fail-closed way. The request contains
- * only the MailLens-derived EventMind prompt and fixed deterministic generation
- * settings. No Purchase candidates or identity graph state are accepted here.
+ * Calls the pinned classifier in a fail-closed way. The request contains only
+ * the MailLens-derived EventMind prompt and fixed deterministic generation settings.
+ * No Purchase candidates or identity graph state are accepted here.
  */
 export async function runEventMindV11(
   document: NormalizedEmailDocumentV1,
