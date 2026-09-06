@@ -3,21 +3,7 @@ import readline from 'node:readline';
 const OLLAMA = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const MODEL = process.env.BUYFLOW_CHAT_MODEL || 'gemma3:12b';
 
-const system = `You are the local BuyFlow AI assistant running on the user's computer.
-You can have a normal conversation in Hungarian or in the user's language.
-Your specialty is understanding purchase, webshop, payment, invoice, shipping, delivery, pickup, return, refund and warranty emails.
-Reason from the meaning of the text instead of memorizing exact phrases.
-Important BuyFlow boundaries:
-- A shipping label or shipment record being created is SHIPMENT_CREATED, not proof that the courier physically received the parcel.
-- SHIPPED requires evidence that the seller handed/sent the parcel into the delivery flow.
-- IN_TRANSIT means the parcel is moving through the carrier network.
-- OUT_FOR_DELIVERY means the parcel is with the courier for delivery to the recipient now/today.
-- READY_FOR_PICKUP means the parcel is waiting for the recipient at a pickup point/locker/store.
-- DELIVERED means delivery/receipt is completed.
-- Distinguish a buyer's incoming purchase from a merchant/mailbox-owner sending an outbound parcel.
-- Marketing, surveys and account-security messages are not purchase lifecycle events unless the current message also contains real current lifecycle evidence.
-If uncertain, say what evidence is missing. Do not invent facts.
-This is an exploratory chat, not production BuyFlow decision logic.`;
+const system = `You are a helpful assistant. Analyze the information the user gives you carefully. Reason from the actual meaning and evidence in the provided text. Do not invent missing facts or relationships. If evidence is insufficient, say so. Answer in the user's language.`;
 
 const messages = [{ role: 'system', content: system }];
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
@@ -117,16 +103,17 @@ rl.on('close', () => {
 try {
   await health();
   console.log('==============================================================');
-  console.log('BUYFLOW AI CHAT - LOCAL GEMMA 3 12B');
+  console.log('GEMMA 3 12B - CLEAN BLIND TEST CHAT');
   console.log(`Model: ${MODEL}`);
   console.log('Ollama: READY');
-  console.log('Ez csak helyi chat. Gmail 0 | BuyFlow writes 0 | Production OFF');
-  console.log('Egyszerű mód: írj vagy illessz be bármit, és automatikusan elküldi.');
+  console.log('Semleges rendszerprompt | Nincs BuyFlow-súgás');
+  console.log('Gmail 0 | BuyFlow writes 0 | Production OFF');
+  console.log('Illeszd be a tesztet, automatikusan egy üzenetként elküldi.');
   console.log('/clear = új beszélgetés | /exit = kilépés');
   console.log('==============================================================');
   showPrompt();
 } catch (e) {
-  console.error(`BUYFLOW AI CHAT: BLOCKED - ${e.message}`);
+  console.error(`GEMMA CLEAN CHAT: BLOCKED - ${e.message}`);
   process.exitCode = 1;
   rl.close();
 }
