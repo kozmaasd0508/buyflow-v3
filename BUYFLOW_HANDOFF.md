@@ -2,7 +2,7 @@
 
 > Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile with current GitHub/Supabase/Render state before changing runtime code.
 
-**Last updated:** 2026-08-17 Europe/Budapest  
+**Last updated:** 2026-09-06 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current released main:** `73fe594d281df31307547585f6204f34d92a4039` — Generic Lifecycle v1.2  
 **Current release candidate:** PR #156 — Generic Lifecycle v1.3 multi-observation shadow  
@@ -232,3 +232,74 @@ Payment-only email must never create a Purchase. Payment provider identity must 
 - wrong automatic link = 0
 - duplicate Purchase/Shipment/Document = 0
 - REVIEW preferred over unsafe automation
+
+## 2026-09-06 — LOCAL GEMMA CLEAN BLIND TEST + V17 DIRECTION
+
+Local model: `gemma3:12b` via Ollama. This experiment is local only: Gmail 0, BuyFlow writes 0, Production OFF.
+
+### Chat test setup
+
+The previous BuyFlow chat system prompt contained many lifecycle boundary rules. A clean blind-test chat was created with a neutral system prompt only:
+
+> Analyze the information carefully, reason from the actual meaning/evidence, do not invent missing facts or relationships, and say when evidence is insufficient.
+
+No BuyFlow lifecycle definitions such as SHIPMENT_CREATED / SHIPPED / OUT_FOR_DELIVERY / READY_FOR_PICKUP / DELIVERED were included in the system prompt.
+
+Clean-chat code commit:
+`739faf17d44f72a41ef799ad16e3968cac32f91e`
+
+Pinned launcher commit:
+`8339d481aa0eeebf7788f8a015ef1b92881b5f22`
+
+### Clean 20-email blind test result
+
+The clean Gemma understood the important semantic boundaries without being taught them explicitly:
+- electronic shipment data exists but parcel physically not handed over;
+- carrier physically received parcel;
+- parcel is moving through carrier network;
+- parcel is on the delivery courier vehicle / being delivered today;
+- parcel is available at locker/pickup point;
+- successful delivery;
+- marketing/security messages are not purchase lifecycle events;
+- a survey may still be linked to an existing parcel while not creating a new lifecycle event;
+- merchant/mailbox-owner outbound courier pickup is not a buyer purchase;
+- two separate orders on the same platform were kept distinct in the per-email analysis.
+
+Important concrete checks from the clean test:
+- E04 correctly identified as actual carrier pickup.
+- E05 correctly identified as parcel currently with the delivery courier.
+- E13 correctly identified as ready for pickup.
+- E17 correctly linked to an existing tracking number but treated as non-purchase feedback/survey.
+- E18 correctly identified as seller/outbound pickup, not buyer purchase.
+
+### Important failure
+
+There was one serious summary-consistency error: E19 (`PEP-204947` cancellation) was correctly classified per-email, but the final aggregated purchase-history section also inserted E19 into `PEP-204881` and incorrectly marked that separate purchase as cancelled.
+
+This is interpreted as an aggregation/consistency failure, not a basic email-understanding failure.
+
+There was also a smaller provenance wording error in the final answers: some emails chained by tracking were described as if they had been linked directly by order number.
+
+### Current conclusion
+
+The neutral/short prompt produced better natural semantic reasoning on several lifecycle boundaries than the previous long BuyFlow teaching prompt. The long prompt appears to have over-constrained Gemma and made it overly cautious, e.g. refusing SHIPPED-like semantics even when explicit handoff evidence existed.
+
+Do NOT conclude that the clean Gemma is production-ready. This was one synthetic blind test and it still had a cross-email aggregation consistency failure.
+
+### V17 design direction
+
+Build V17 as a separate experimental path. Do not overwrite the stable V15 baseline.
+
+V17 principle:
+1. Let Gemma interpret the email naturally.
+2. Give it only the minimal BuyFlow event taxonomy/output contract needed to map meaning into BuyFlow labels.
+3. Require evidence for links; no guessed relationships.
+4. Add deterministic validation/consistency checks around aggregation and identity linking.
+5. Avoid long case-by-case teaching rules unless a real failure proves they are necessary.
+6. Develop on REAL120 + synthetic boundary cases only.
+7. Do not tune on spent BLIND40 V1.
+8. Freeze V17 before testing on a new untouched BLIND40 V2 or EXTERNAL20.
+9. Production remains OFF unless explicitly authorized.
+
+Desired V17 experiment shape:
+`Gemma natural understanding + minimal BuyFlow taxonomy + evidence-only linking + deterministic consistency validation`.
