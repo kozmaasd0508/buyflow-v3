@@ -20,7 +20,11 @@ If uncertain, say what evidence is missing. Do not invent facts.
 This is an exploratory chat, not production BuyFlow decision logic.`;
 
 const messages = [{ role: 'system', content: system }];
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+
+let pasteMode = false;
+let pasteLines = [];
+let busy = false;
 
 async function health() {
   const r = await fetch(`${OLLAMA}/api/tags`);
@@ -41,7 +45,7 @@ async function ask(content) {
       model: MODEL,
       messages,
       stream: false,
-      options: { temperature: 0.3, num_ctx: 8192 }
+      options: { temperature: 0.3, num_ctx: 16384 }
     })
   });
   if (!r.ok) throw new Error(`Ollama HTTP ${r.status}: ${await r.text()}`);
@@ -52,27 +56,80 @@ async function ask(content) {
   return answer;
 }
 
-function prompt() {
-  rl.question('\nTe > ', async text => {
-    const q = text.trim();
-    if (!q) return prompt();
-    if (['/exit','exit','kilep','kilép','quit'].includes(q.toLowerCase())) return rl.close();
-    if (q.toLowerCase() === '/clear') {
-      messages.splice(1);
-      console.log('Beszélgetés törölve.');
-      return prompt();
-    }
-    try {
-      process.stdout.write('\nGemma > gondolkodik...\r');
-      const a = await ask(q);
-      process.stdout.write(' '.repeat(80) + '\r');
-      console.log(`Gemma > ${a}`);
-    } catch (e) {
-      console.error(`\nHIBA: ${e.message}`);
-    }
-    prompt();
-  });
+function showPrompt() {
+  if (!busy && !pasteMode) process.stdout.write('\nTe > ');
 }
+
+async function sendToGemma(text) {
+  const q = text.trim();
+  if (!q || busy) return;
+  busy = true;
+  try {
+    process.stdout.write('\nGemma > gondolkodik...\r');
+    const a = await ask(q);
+    process.stdout.write(' '.repeat(100) + '\r');
+    console.log(`Gemma > ${a}`);
+  } catch (e) {
+    console.error(`\nHIBA: ${e.message}`);
+  } finally {
+    busy = false;
+    showPrompt();
+  }
+}
+
+rl.on('line', async line => {
+  const trimmed = line.trim();
+
+  if (pasteMode) {
+    if (trimmed.toLowerCase() === '/send') {
+      const text = pasteLines.join('\n');
+      pasteLines = [];
+      pasteMode = false;
+      console.log(`\n[${text.length} karakter elküldése a Gemmának]`);
+      await sendToGemma(text);
+      return;
+    }
+    if (trimmed.toLowerCase() === '/cancel') {
+      pasteLines = [];
+      pasteMode = false;
+      console.log('\nBeillesztés megszakítva.');
+      showPrompt();
+      return;
+    }
+    pasteLines.push(line);
+    return;
+  }
+
+  if (busy) return;
+  if (!trimmed) { showPrompt(); return; }
+
+  const lower = trimmed.toLowerCase();
+  if (['/exit','exit','kilep','kilép','quit'].includes(lower)) {
+    rl.close();
+    return;
+  }
+  if (lower === '/clear') {
+    messages.splice(1);
+    console.log('\nBeszélgetés törölve.');
+    showPrompt();
+    return;
+  }
+  if (lower === '/paste') {
+    pasteMode = true;
+    pasteLines = [];
+    console.log('\nBEILLESZTÉSI MÓD');
+    console.log('Illeszd be most a teljes hosszú szöveget / e-maileket.');
+    console.log('Ha kész, egy új sorba írd: /send');
+    console.log('Megszakítás: /cancel\n');
+    return;
+  }
+
+  await sendToGemma(line);
+});
+
+rl.on('close', () => {
+  console.log('\nBuyFlow AI Chat bezárva.');
+});
 
 try {
   await health();
@@ -81,9 +138,13 @@ try {
   console.log(`Model: ${MODEL}`);
   console.log('Ollama: READY');
   console.log('Ez csak helyi chat. Gmail 0 | BuyFlow writes 0 | Production OFF');
-  console.log('Parancsok: /clear = új beszélgetés | /exit = kilépés');
+  console.log('Parancsok:');
+  console.log('  /paste = hosszú, többsoros szöveg beillesztése');
+  console.log('  /send  = beillesztett szöveg elküldése');
+  console.log('  /clear = új beszélgetés');
+  console.log('  /exit  = kilépés');
   console.log('==============================================================');
-  prompt();
+  showPrompt();
 } catch (e) {
   console.error(`BUYFLOW AI CHAT: BLOCKED - ${e.message}`);
   process.exitCode = 1;
