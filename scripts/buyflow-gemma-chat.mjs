@@ -22,9 +22,10 @@ This is an exploratory chat, not production BuyFlow decision logic.`;
 const messages = [{ role: 'system', content: system }];
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
 
-let pasteMode = false;
-let pasteLines = [];
 let busy = false;
+let pendingLines = [];
+let pendingTimer = null;
+const GROUP_DELAY_MS = 900;
 
 async function health() {
   const r = await fetch(`${OLLAMA}/api/tags`);
@@ -57,7 +58,7 @@ async function ask(content) {
 }
 
 function showPrompt() {
-  if (!busy && !pasteMode) process.stdout.write('\nTe > ');
+  if (!busy) process.stdout.write('\nTe > ');
 }
 
 async function sendToGemma(text) {
@@ -65,6 +66,7 @@ async function sendToGemma(text) {
   if (!q || busy) return;
   busy = true;
   try {
+    if (q.includes('\n')) console.log(`\n[${q.length} karakter elküldése egy üzenetként]`);
     process.stdout.write('\nGemma > gondolkodik...\r');
     const a = await ask(q);
     process.stdout.write(' '.repeat(100) + '\r');
@@ -77,57 +79,38 @@ async function sendToGemma(text) {
   }
 }
 
-rl.on('line', async line => {
-  const trimmed = line.trim();
+async function flushPending() {
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = null;
+  if (!pendingLines.length) return;
+  const text = pendingLines.join('\n');
+  pendingLines = [];
+  await sendToGemma(text);
+}
 
-  if (pasteMode) {
-    if (trimmed.toLowerCase() === '/send') {
-      const text = pasteLines.join('\n');
-      pasteLines = [];
-      pasteMode = false;
-      console.log(`\n[${text.length} karakter elküldése a Gemmának]`);
-      await sendToGemma(text);
-      return;
-    }
-    if (trimmed.toLowerCase() === '/cancel') {
-      pasteLines = [];
-      pasteMode = false;
-      console.log('\nBeillesztés megszakítva.');
-      showPrompt();
-      return;
-    }
-    pasteLines.push(line);
-    return;
-  }
-
+rl.on('line', line => {
   if (busy) return;
-  if (!trimmed) { showPrompt(); return; }
-
+  const trimmed = line.trim();
   const lower = trimmed.toLowerCase();
-  if (['/exit','exit','kilep','kilép','quit'].includes(lower)) {
+
+  if (pendingLines.length === 0 && ['exit','/exit','kilep','kilép','quit'].includes(lower)) {
     rl.close();
     return;
   }
-  if (lower === '/clear') {
+  if (pendingLines.length === 0 && lower === '/clear') {
     messages.splice(1);
     console.log('\nBeszélgetés törölve.');
     showPrompt();
     return;
   }
-  if (lower === '/paste') {
-    pasteMode = true;
-    pasteLines = [];
-    console.log('\nBEILLESZTÉSI MÓD');
-    console.log('Illeszd be most a teljes hosszú szöveget / e-maileket.');
-    console.log('Ha kész, egy új sorba írd: /send');
-    console.log('Megszakítás: /cancel\n');
-    return;
-  }
 
-  await sendToGemma(line);
+  pendingLines.push(line);
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => { void flushPending(); }, GROUP_DELAY_MS);
 });
 
 rl.on('close', () => {
+  if (pendingTimer) clearTimeout(pendingTimer);
   console.log('\nBuyFlow AI Chat bezárva.');
 });
 
@@ -138,11 +121,8 @@ try {
   console.log(`Model: ${MODEL}`);
   console.log('Ollama: READY');
   console.log('Ez csak helyi chat. Gmail 0 | BuyFlow writes 0 | Production OFF');
-  console.log('Parancsok:');
-  console.log('  /paste = hosszú, többsoros szöveg beillesztése');
-  console.log('  /send  = beillesztett szöveg elküldése');
-  console.log('  /clear = új beszélgetés');
-  console.log('  /exit  = kilépés');
+  console.log('Egyszerű mód: írj vagy illessz be bármit, és automatikusan elküldi.');
+  console.log('/clear = új beszélgetés | /exit = kilépés');
   console.log('==============================================================');
   showPrompt();
 } catch (e) {
