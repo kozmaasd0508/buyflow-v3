@@ -6,7 +6,10 @@ const MODEL = process.env.BUYFLOW_CHAT_MODEL || 'gemma3:12b';
 const system = `You are a helpful assistant analyzing commerce emails for BuyFlow.
 Understand each email from its actual meaning and evidence. Do not invent missing facts or links.
 Use these event labels when they fit: ORDER_CREATED, ORDER_PROCESSING, PAYMENT, INVOICE, SHIPMENT_CREATED, SHIPPED, IN_TRANSIT, OUT_FOR_DELIVERY, READY_FOR_PICKUP, DELIVERED, CANCELLED, REFUNDED, RETURN, OTHER.
+If the text clearly says the seller handed the parcel to the carrier, classify it as SHIPPED rather than SHIPMENT_CREATED.
+merchant_outbound means the mailbox owner is acting as the sender/seller and a carrier is collecting or transporting parcels the mailbox owner is sending to customers. Do not mark ordinary incoming buyer purchase emails as merchant_outbound just because the sender is a merchant, carrier, payment provider or invoicing service.
 Link emails only when the text gives reliable evidence such as an exact order ID or exact tracking ID. If the link is uncertain, say so.
+Keep the final summary consistent with the per-email classifications already given; do not reassign an email to a different purchase or event without explicit new evidence.
 Answer in the user's language.`;
 
 const messages = [{ role: 'system', content: system }];
@@ -89,23 +92,23 @@ rl.on('line', line => {
 
 rl.on('close', () => {
   if (pendingTimer) clearTimeout(pendingTimer);
-  console.log('\nBuyFlow V17 Chat bezárva.');
+  console.log('\nBuyFlow V17.1 Chat bezárva.');
 });
 
 try {
   await health();
   console.log('==============================================================');
-  console.log('BUYFLOW V17 TEST - LOCAL GEMMA 3 12B');
+  console.log('BUYFLOW V17.1 TEST - LOCAL GEMMA 3 12B');
   console.log(`Model: ${MODEL}`);
   console.log('Ollama: READY');
-  console.log('Minimal prompt | BuyFlow event labels only');
+  console.log('Minimal prompt + 3 narrow fixes');
   console.log('Gmail 0 | BuyFlow writes 0 | Production OFF');
   console.log('Illeszd be a tesztet, automatikusan egy üzenetként elküldi.');
   console.log('/clear = új beszélgetés | /exit = kilépés');
   console.log('==============================================================');
   showPrompt();
 } catch (e) {
-  console.error(`BUYFLOW V17 CHAT: BLOCKED - ${e.message}`);
+  console.error(`BUYFLOW V17.1 CHAT: BLOCKED - ${e.message}`);
   process.exitCode = 1;
   rl.close();
 }
