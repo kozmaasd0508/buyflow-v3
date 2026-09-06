@@ -20,7 +20,7 @@ def gb(x: int) -> float:
 
 def main() -> None:
     print("==============================================================")
-    print("BUYFLOW V17 - GEMMA 3 12B QLORA DOWNLOAD + LOAD SMOKE")
+    print("BUYFLOW V17 - GEMMA 3 12B QLORA DOWNLOAD + LOAD SMOKE V2")
     print(f"Model: {MODEL_ID}")
     print(f"Local dir: {MODEL_DIR}")
     print("Training: NOT STARTED")
@@ -30,8 +30,11 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("PyTorch cannot see the AMD GPU through the CUDA-compatible ROCm API.")
 
-    free, total = shutil.disk_usage(ROOT)
-    print(f"Disk free: {gb(free)} GB")
+    ROOT.mkdir(parents=True, exist_ok=True)
+    total, used, free = shutil.disk_usage(ROOT)
+    print(f"Disk total: {gb(total)} GB")
+    print(f"Disk used:  {gb(used)} GB")
+    print(f"Disk free:  {gb(free)} GB")
     if gb(free) < MIN_FREE_GB and not MODEL_DIR.exists():
         raise RuntimeError(f"Need at least {MIN_FREE_GB} GB free before first model download.")
 
