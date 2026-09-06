@@ -1,0 +1,46 @@
+name: EventMind V14 validation
+
+on:
+  push:
+    branches:
+      - codex/eventmind-v14-zero-shot-prompt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: V14 Python runtime syntax
+        run: python3 -m py_compile scripts/eventmind-v14-base-runtime.py
+
+      - name: V14 PowerShell runner syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('scripts/testlab/run-eventmind-v14-base-dev120.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: API typecheck
+        run: npm run typecheck --workspace @buyflow/api
+
+      - name: V14 prompt unit tests
+        working-directory: apps/api
+        run: node --import tsx --test src/ai/eventmind-v14-zero-shot.test.ts
