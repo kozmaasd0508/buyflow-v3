@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$commit = '12a86f3b9ffa8f6d7dd6cb86b66cfe27705cbf3b'
+$commit = 'a75b7a7365d7a04a19937d81fdde1d358ec23cfb'
 $node = "$env:USERPROFILE\BuyFlowTools\node-v24.20.0-win-x64\node.exe"
 if (-not (Test-Path $node)) { throw "Portable Node 24 not found: $node" }
 
