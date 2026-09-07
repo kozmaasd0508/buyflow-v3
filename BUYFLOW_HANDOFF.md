@@ -2,7 +2,7 @@
 
 > Current-state snapshot for a new AI/chat. Read `AGENTS.md`, then this file, then `BUYFLOW_WORKLOG_LATEST.md`. Reconcile with current GitHub/Supabase/Render state before changing runtime code.
 
-**Last updated:** 2026-09-06 Europe/Budapest  
+**Last updated:** 2026-09-07 Europe/Budapest  
 **Repository:** `kozmaasd0508/buyflow-v3`  
 **Current released main:** `73fe594d281df31307547585f6204f34d92a4039` — Generic Lifecycle v1.2  
 **Current release candidate:** PR #156 — Generic Lifecycle v1.3 multi-observation shadow  
@@ -303,3 +303,145 @@ V17 principle:
 
 Desired V17 experiment shape:
 `Gemma natural understanding + minimal BuyFlow taxonomy + evidence-only linking + deterministic consistency validation`.
+
+## 2026-09-07 — V17 TRAINING, BLIND V4 DIAGNOSIS, GPT-OSS 20B PIVOT
+
+All experiments in this section are local-only. Gmail 0, BuyFlow DB writes 0, Production OFF.
+
+### Gemma V17.3 / V17.4 status
+
+V17.3 was continued on a 3000-train / 400-validation synthetic teacher corpus. Training completed successfully. On fresh External Blind V3 (40 cases, minimal prompt):
+
+- Exact: **34/40 = 85.0%**
+- event_type: 36/40 = 90.0%
+- perspective: 40/40 = 100.0%
+- order_id: 40/40 = 100.0%
+- tracking_id: 40/40 = 100.0%
+- link_status: 38/40 = 95.0%
+- errors: 0
+
+V17.4 continued from V17.3 on a 5000-train / 600-validation corpus focused on link-status hardening. Technical training completed, but same-family validation slightly worsened (`0.000232 -> 0.000258`). On fresh hard Blind V4 (60 cases), comparing the two adapters on the same cases:
+
+V17.3:
+- Exact 41/60 = 68.33%
+- event_type 86.67%
+- perspective 96.67%
+- order_id 93.33%
+- tracking_id 98.33%
+- link_status 83.33%
+- link-hard Exact 75.0%
+
+V17.4:
+- Exact 43/60 = 71.67%
+- event_type 88.33%
+- perspective 91.67%
+- order_id 93.33%
+- tracking_id 98.33%
+- link_status 86.67%
+- link-hard Exact 71.43%
+
+Conclusion: V17.4 gained only two full-exact cases while regressing perspective and hard-link Exact, so it was not promoted over V17.3.
+
+### Closed Blind V4 diagnosis
+
+Blind V4 is now spent/closed and can be used for diagnosis, never again as a fresh blind benchmark. Main error families found:
+
+- invented non-BuyFlow event labels such as `HANDED_TO_CARRIER`, `UNDELIVERED`, `IN_NETWORK`, `TRACKING_UPDATE`;
+- buyer vs merchant_outbound/non_purchase perspective mistakes;
+- linked/unresolved/not_applicable boundary mistakes;
+- refund request or return-label creation incorrectly treated as settled RETURN/REFUNDED lifecycle;
+- invoice/payment order identity sometimes dropped;
+- fake/documentation/promo tracking-like strings sometimes treated as real identifiers;
+- quoted/older status and current-state boundary errors.
+
+This motivated a V17.5 targeted corpus rather than another broad generic corpus.
+
+### V17.5 targeted Gemma experiment
+
+A new targeted corpus was built and validated:
+- train: 2400
+- validation: 320
+- exact train/validation overlap: 0
+- focus: closed event taxonomy, perspective, link_status, refund/return boundary, ID safety, lifecycle minimal pairs/hard negatives
+- train SHA256: `2d5f11244bec1292827460b05fec215f404b12799b0375fbce8ea52d3883d092`
+- validation SHA256: `15f68db07fb844b09708f25599ade58cf510bc24dea4ec9a99eb64472899e93c`
+
+Training started from the V17.3 champion adapter. Encoding/masking, 4-bit model load, trainable LoRA load and backward/OOM preflight all passed. Initial targeted validation loss was **0.439136**, meaning the new corpus was genuinely harder/different from the previous synthetic family.
+
+IMPORTANT: the PowerShell window was later closed by the user before completion. Treat V17.5 as **INCOMPLETE / NOT PROVEN COMPLETE** unless a saved checkpoint/final summary is explicitly recovered. Never claim V17.5 finished.
+
+### Local OpenAI gpt-oss-20b experiment
+
+`gpt-oss:20b` was downloaded locally with Ollama (~13 GB model payload) and runs on the current machine. It is OpenAI's separate open-weight model, not ChatGPT/GPT-5.6 Sol.
+
+Early manual prompting showed that without BuyFlow enum definitions it understood physical handoff semantics but invented its own labels. A sequence of harness fixes established the correct evaluation runtime:
+
+- Ollama chat API
+- structured JSON schema / closed enums
+- reasoning `think=low`
+- sufficient generation budget (`num_predict=512` in the technical retry)
+- aggregate-only scoring
+
+O1 became a technical/regression set after repeated harness debugging and must not be treated as fresh blind. Final O1 technical result was 15/30 exact = 50%, errors 0.
+
+### Fresh Blind O2 — GPT-OSS 20B vs Gemma V17.3
+
+A new 40-case holdout was created independently from O1 / Blind V4 / Blind V5 and run with the same cases against both models.
+
+**GPT-OSS 20B — untrained for BuyFlow:**
+- Exact: **23/40 = 57.5%**
+- event_type: 36/40 = 90.0%
+- perspective: 30/40 = 75.0%
+- order_id: 35/40 = 87.5%
+- tracking_id: 37/40 = 92.5%
+- link_status: 34/40 = 85.0%
+- link-hard Exact: 9/18 = 50.0%
+- errors: 1
+
+**Gemma V17.3 — BuyFlow-trained:**
+- Exact: **17/40 = 42.5%**
+- event_type: 37/40 = 92.5%
+- perspective: 28/40 = 70.0%
+- order_id: 40/40 = 100.0%
+- tracking_id: 40/40 = 100.0%
+- link_status: 25/40 = 62.5%
+- link-hard Exact: 3/18 = 16.67%
+- errors: 0
+
+Delta GPT-OSS minus Gemma:
+- Exact: **+15.0 pp**
+- event_type: -2.5 pp
+- perspective: +5.0 pp
+- order_id: -12.5 pp
+- tracking_id: -7.5 pp
+- link_status: **+22.5 pp**
+- link-hard Exact: **+33.33 pp**
+
+Interpretation: despite no BuyFlow fine-tuning, GPT-OSS 20B was materially stronger on overall exact and especially safe link-status/hard-link reasoning. Gemma remains stronger at exact ID extraction. The architectural implication is to keep deterministic MailLens/parser extraction for order/tracking IDs and let the LLM specialize in semantic lifecycle/perspective/link decisions.
+
+O2 remains a measured benchmark. Do not tune by copying its cases. A later fresh O3/V5-style benchmark must be used to prove generalization after GPT-OSS tuning.
+
+### 2026-09-07 web research — recommended GPT-OSS training path
+
+Current public guidance was reviewed before starting GPT-OSS tuning:
+
+1. OpenAI/Hugging Face model documentation says gpt-oss uses the **Harmony response format** and should be trained/inferred with that structure. It is explicitly fine-tunable; gpt-oss-20b is intended for local/specialized use.
+2. OpenAI's fine-tuning cookbook uses supervised fine-tuning with TRL/PEFT and notes that a relatively small high-quality dataset can be sufficient for a heavily post-trained model.
+3. Unsloth currently provides a dedicated gpt-oss fine-tuning path and a dedicated **AMD gpt-oss-20b notebook**. It reports gpt-oss-20b QLoRA at roughly **14 GB VRAM**, while BF16 LoRA needs roughly 44 GB; therefore QLoRA is the practical path for this 16 GB RX 9060 XT.
+4. Unsloth added AMD training/inference support across Windows, WSL and Linux in July 2026, including Radeon GPUs and ROCm-specific fixes. There have also been recent native-Windows ROCm installer bugs, so setup must be isolated from the working Gemma environment.
+5. For gpt-oss QLoRA, use Unsloth's supported/linearized gpt-oss 20B model path, correct Harmony template, and target the major attention + MLP linear layers (`q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`). Use LoRA rank in the small/moderate range (start r=16), alpha about 2×rank, dropout 0, gradient checkpointing, BF16 compute where supported, one epoch first, and conservative validation/blind promotion gates.
+
+### GPT-OSS training decision
+
+Current preferred next experiment is **GPT-OSS 20B QLoRA via Unsloth on AMD**, not more broad Gemma continuation.
+
+Rules for this experiment:
+- create a NEW isolated environment; do not modify `C:\Users\kozma\BuyFlowTools\v17-qlora`;
+- preserve all Gemma adapters/checkpoints;
+- do not train on O2 examples or O2 failure text;
+- reuse only independent BuyFlow teacher data / new minimal-pair hard negatives;
+- format data with the gpt-oss Harmony chat template, using developer instructions + user email + assistant final structured output;
+- keep chain-of-thought private and do not require long rationale targets; prefer concise structured evidence/final JSON;
+- validate schema/enum discipline separately from semantic correctness;
+- after training, evaluate on a fresh untouched blind set (O3), same cases for baseline GPT-OSS and tuned GPT-OSS;
+- production remains OFF regardless of local benchmark result until explicitly authorized.
