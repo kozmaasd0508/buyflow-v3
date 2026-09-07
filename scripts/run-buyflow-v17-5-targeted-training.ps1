@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $builderCommit = '7f0e8c13cdfefdac10e14410bc321a03e898c405'
 $baseTrainerCommit = 'b33b7d4d190366f7acd01dbbd9a546e2dede3584'
-$patchCommit = '7a792b9771d3214f37e612a98e7588b49a8c2e44'
+$patchCommit = '46a8456b672f92ec16f464d688815d7aecd14b79'
 $py = "$env:USERPROFILE\BuyFlowTools\v17-qlora\Scripts\python.exe"
 if (-not (Test-Path $py)) { throw "BuyFlow V17 QLoRA Python env missing: $py" }
 
