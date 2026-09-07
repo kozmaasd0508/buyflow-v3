@@ -12,15 +12,16 @@ Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $src
 $text = Get-Content -Raw -Encoding UTF8 $src
 $old = '"format": SCHEMA,'
 $new = '"format": "json",'
-if (($text.Split($old).Count - 1) -ne 1) { throw 'Could not patch Ollama format exactly once' }
+$count = [regex]::Matches($text, [regex]::Escape($old)).Count
+if ($count -ne 1) { throw "Could not patch Ollama format exactly once; found $count occurrences" }
 $text = $text.Replace($old, $new)
 $text = $text.Replace('schema-constrained', 'JSON-mode')
 $text = $text.Replace('Schema constrained', 'JSON-mode')
 Set-Content -Encoding UTF8 -Path $dst -Value $text
 
 Write-Host '=============================================================='
-Write-Host 'BUYFLOW GPT-OSS 20B BLIND O1 - JSON MODE RETRY'
-Write-Host 'Reason: previous run had Errors=30, so it produced no scorable predictions.'
+Write-Host 'BUYFLOW GPT-OSS 20B BLIND O1 - JSON MODE RETRY V2'
+Write-Host 'Reason: previous schema run had Errors=30, so it produced no scorable predictions.'
 Write-Host 'This retry keeps the SAME hidden O1 cases because the first run never returned predictions.'
 Write-Host 'Ollama format=json is used; enum validity is still scored client-side.'
 Write-Host 'Blind V4/V5: NOT USED. Production OFF.'
