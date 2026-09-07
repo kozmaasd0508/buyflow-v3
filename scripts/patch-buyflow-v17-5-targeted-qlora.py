@@ -21,7 +21,6 @@ replacements = [
     ('BUYFLOW V17.3 - GEMMA 3 12B QLORA CONTINUATION', 'BUYFLOW V17.5 - GEMMA 3 12B TARGETED QLORA CONTINUATION'),
     ('Start adapter: buyflow-v17-gemma3-12b-qlora-r8-v3', 'Start adapter: buyflow-v17-3-gemma3-12b-qlora-r8-cont1'),
     ('Train: 3000 | Validation: 400', 'Train: 2400 | Validation: 320 | targeted contrastive hardening'),
-    ('External Blind V2: UNTOUCHED', 'Closed Blind V4: NOT READ DURING TRAINING'),
     ('Continuation: 1 epoch | batch=1 | grad_accum=8 | lr=2e-5', 'Continuation: 1 epoch | batch=1 | grad_accum=8 | lr=8e-6'),
     ('Validating assistant boundaries for ALL 3400 rows before model load...', 'Validating assistant boundaries for ALL 2720 rows before model load...'),
     ('DATASET MASKING PRECHECK: PASS | 3400/3400', 'DATASET MASKING PRECHECK: PASS | 2720/2720'),
@@ -38,7 +37,13 @@ for old, new in replacements:
         raise RuntimeError(f'Expected exactly one occurrence, got {n}: {old}')
     s = s.replace(old, new)
 
-# Add a non-promotional warning if internal synthetic validation worsens.
+old = 'External Blind V2: UNTOUCHED'
+new = 'Closed Blind V4: NOT READ DURING TRAINING'
+n = s.count(old)
+if n != 2:
+    raise RuntimeError(f'Expected exactly two Blind V2 status strings, got {n}')
+s = s.replace(old, new)
+
 needle = '    final_val = eval_loss(model, val_loader)\n    elapsed = time.time() - start\n'
 insert = '    final_val = eval_loss(model, val_loader)\n    if final_val > initial_val:\n        print(f"WARNING: targeted validation worsened: {initial_val:.6f} -> {final_val:.6f}; do not promote without fresh Blind V5")\n    elapsed = time.time() - start\n'
 if s.count(needle) != 1:
