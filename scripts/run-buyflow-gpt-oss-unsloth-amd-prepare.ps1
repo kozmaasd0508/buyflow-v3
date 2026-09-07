@@ -39,7 +39,8 @@ Write-Host 'Pinned GPU arch: gfx1200'
 Write-Host 'Installing/updating official Unsloth Windows AMD stack...'
 Write-Host ''
 
-$installer = Invoke-RestMethod -UseBasicParsing 'https://unsloth.ai/install.ps1'
+$installer = (Invoke-WebRequest -UseBasicParsing -Uri 'https://unsloth.ai/install.ps1').Content
+if ([string]::IsNullOrWhiteSpace($installer)) { throw 'Could not download official Unsloth installer.' }
 & ([scriptblock]::Create($installer))
 
 Write-Host ''
