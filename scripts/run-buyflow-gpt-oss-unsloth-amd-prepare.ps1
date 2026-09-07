@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$home = Join-Path $env:USERPROFILE 'BuyFlowTools\unsloth-gptoss-amd'
+$unslothHome = Join-Path $env:USERPROFILE 'BuyFlowTools\unsloth-gptoss-amd'
 
 Write-Host '=============================================================='
 Write-Host 'BUYFLOW GPT-OSS 20B - UNSLOTH AMD PREPARE'
@@ -27,14 +27,14 @@ try {
 # Free Ollama VRAM if the inference model is still resident.
 try { & ollama stop 'gpt-oss:20b' 2>$null | Out-Null } catch {}
 
-$env:UNSLOTH_STUDIO_HOME = $home
+$env:UNSLOTH_STUDIO_HOME = $unslothHome
 $env:UNSLOTH_SKIP_AUTOSTART = '1'
 $env:UNSLOTH_PYTHON = '3.13'
 $env:UNSLOTH_ROCM_GFX_ARCH = 'gfx1200'
 $env:UNSLOTH_LLAMA_CPP_BACKEND = 'rocm'
 $env:UNSLOTH_VERBOSE = '1'
 
-Write-Host ('Isolated Unsloth home: ' + $home)
+Write-Host ('Isolated Unsloth home: ' + $unslothHome)
 Write-Host 'Pinned GPU arch: gfx1200'
 Write-Host 'Installing/updating official Unsloth Windows AMD stack...'
 Write-Host ''
@@ -45,12 +45,12 @@ if ([string]::IsNullOrWhiteSpace($installer)) { throw 'Could not download offici
 
 Write-Host ''
 Write-Host 'Locating isolated Python runtime...'
-$pyCandidates = Get-ChildItem -Path $home -Recurse -Filter python.exe -File -ErrorAction SilentlyContinue |
+$pyCandidates = Get-ChildItem -Path $unslothHome -Recurse -Filter python.exe -File -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -match '\\Scripts\\python\.exe$|\\python\.exe$' } |
   Sort-Object FullName
 
 if (-not $pyCandidates) {
-  throw "Unsloth installation completed but no Python runtime was found under $home"
+  throw "Unsloth installation completed but no Python runtime was found under $unslothHome"
 }
 
 # Prefer a venv/Studio runtime that can import unsloth + torch.
