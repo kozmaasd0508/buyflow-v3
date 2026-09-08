@@ -11,7 +11,7 @@ $perspectives=@('buyer','merchant_outbound','non_purchase')
 $links=@('linked','unresolved','not_applicable')
 
 $SYSTEM=@'
-Classify this commerce email for BuyFlow. Return exactly one JSON object with event_type, perspective, order_id, tracking_id, link_status. Do not invent facts.
+Classify this commerce email for BuyFlow. Return ONLY one strict JSON object with exactly these keys: event_type, perspective, order_id, tracking_id, link_status. No markdown, no explanation, no extra text. Do not invent facts.
 Allowed event_type: ORDER_CREATED, ORDER_PROCESSING, PAYMENT, INVOICE, SHIPMENT_CREATED, SHIPPED, IN_TRANSIT, OUT_FOR_DELIVERY, READY_FOR_PICKUP, DELIVERED, CANCELLED, REFUNDED, RETURN, OTHER.
 Allowed perspective: buyer, merchant_outbound, non_purchase.
 Allowed link_status: linked, unresolved, not_applicable.
@@ -61,6 +61,25 @@ function Get-Prop($o,[string]$name){
   if($null -eq $p){ return $null }
   return $p.Value
 }
+function Get-ErrorText($err){
+  try {
+    if($err.ErrorDetails -and -not [string]::IsNullOrWhiteSpace([string]$err.ErrorDetails.Message)){
+      return [string]$err.ErrorDetails.Message
+    }
+  } catch {}
+  try {
+    $resp=$err.Exception.Response
+    if($null -ne $resp){
+      $stream=$resp.GetResponseStream()
+      if($null -ne $stream){
+        $reader=New-Object System.IO.StreamReader($stream)
+        $body=$reader.ReadToEnd()
+        if(-not [string]::IsNullOrWhiteSpace($body)){ return $body }
+      }
+    }
+  } catch {}
+  return [string]$err.Exception.Message
+}
 function Parse-JsonContent([string]$text){
   $t=$text.Trim()
   if($t.StartsWith('```')){
@@ -72,7 +91,7 @@ function Parse-JsonContent([string]$text){
   if($start -ge 0 -and $end -gt $start){
     return ($t.Substring($start,$end-$start+1) | ConvertFrom-Json)
   }
-  Fail 'MODEL_OUTPUT_NOT_JSON'
+  Fail ('MODEL_OUTPUT_NOT_JSON: '+($t.Substring(0,[Math]::Min(220,$t.Length))))
 }
 function Normalize-Prediction($v){
   $event=[string](Get-Prop $v 'event_type')
@@ -86,46 +105,36 @@ function Normalize-Prediction($v){
   return [ordered]@{event_type=$event;perspective=$perspective;order_id=$oid;tracking_id=$tid;link_status=$link}
 }
 function Invoke-LocalModel([string]$emailText){
-  $schema=[ordered]@{
-    type='object'
-    properties=[ordered]@{
-      event_type=@{type='string';enum=$events}
-      perspective=@{type='string';enum=$perspectives}
-      order_id=@{type=@('string','null')}
-      tracking_id=@{type=@('string','null')}
-      link_status=@{type='string';enum=$links}
-    }
-    required=@('event_type','perspective','order_id','tracking_id','link_status')
-    additionalProperties=$false
-  }
-  $base=[ordered]@{
+  # IMPORTANT: no Ollama `format` field here. gpt-oss has had compatibility problems
+  # with structured-output format/schema handling. We enforce JSON in the prompt and parse it ourselves.
+  $payload=[ordered]@{
     model=$model
     stream=$false
+    think=$false
     keep_alive='30m'
     messages=@(
       @{role='system';content=$SYSTEM},
       @{role='user';content=("Email:`n`n"+$emailText)}
     )
-    format=$schema
     options=@{temperature=0;num_predict=512;num_ctx=8192}
   }
-  $json=$base | ConvertTo-Json -Depth 20 -Compress
+  $json=$payload | ConvertTo-Json -Depth 20 -Compress
+  $bytes=[System.Text.Encoding]::UTF8.GetBytes($json)
   try {
-    return Invoke-RestMethod -Method Post -Uri $ollamaUrl -ContentType 'application/json' -Body $json -TimeoutSec 900
+    return Invoke-RestMethod -Method Post -Uri $ollamaUrl -ContentType 'application/json; charset=utf-8' -Body $bytes -TimeoutSec 900
   } catch {
-    # Compatibility fallback for Ollama builds that reject schema objects.
-    $base.format='json'
-    $json=$base | ConvertTo-Json -Depth 20 -Compress
-    return Invoke-RestMethod -Method Post -Uri $ollamaUrl -ContentType 'application/json' -Body $json -TimeoutSec 900
+    $detail=Get-ErrorText $_
+    throw ('OLLAMA_HTTP_ERROR: '+$detail)
   }
 }
 
 Write-Host ''
 Write-Host '==============================================================' -ForegroundColor Cyan
-Write-Host 'BUYFLOW REAL60 H1 - LOCAL GPT-OSS 20B / MAILLENS v1.1' -ForegroundColor Cyan
+Write-Host 'BUYFLOW REAL60 H1 - LOCAL GPT-OSS 20B / MAILLENS v1.1 V2' -ForegroundColor Cyan
 Write-Host 'Same 60 H1 emails + frozen Prompt V2.' -ForegroundColor Green
 Write-Host 'LOCAL OLLAMA ONLY. NO OpenAI API. NO Gmail calls.' -ForegroundColor Green
 Write-Host 'BuyFlow writes 0. Production OFF. O3 NOT USED.' -ForegroundColor Green
+Write-Host 'Ollama structured format/schema disabled for gpt-oss compatibility.' -ForegroundColor Yellow
 Write-Host '==============================================================' -ForegroundColor Cyan
 
 $bundle=Get-ChildItem (Join-Path $env:USERPROFILE 'Desktop') -Recurse -File -Filter 'real60-h1-blind-bundle-maillens-v1.1-private-local.json' -ErrorAction SilentlyContinue |
@@ -144,6 +153,18 @@ try { $tags=Invoke-RestMethod -Method Get -Uri $tagsUrl -TimeoutSec 15 } catch {
 $names=@($tags.models | ForEach-Object {$_.name})
 if($names -notcontains $model){ Fail ('MODEL_NOT_INSTALLED:'+ $model) }
 Write-Host ('Model: '+$model+' OK') -ForegroundColor Green
+
+# One compatibility preflight. If this fails, stop before wasting 60 requests.
+Write-Host 'Preflight: testing gpt-oss /api/chat without format/schema...' -ForegroundColor Yellow
+try {
+  $pre=Invoke-LocalModel "Feladó: shop@example.com`nTárgy: Rendelés visszaigazolva`n`nA 12345 számú rendelésedet megkaptuk."
+  $preContent=[string]$pre.message.content
+  $null=Normalize-Prediction (Parse-JsonContent $preContent)
+  Write-Host 'Preflight: PASS' -ForegroundColor Green
+} catch {
+  Write-Host ('Preflight: FAIL - '+$_.Exception.Message) -ForegroundColor Red
+  Fail 'LOCAL_GPT_OSS_PREFLIGHT_FAILED'
+}
 
 $rows=@(); $errors=0
 $start=Get-Date
