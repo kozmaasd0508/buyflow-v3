@@ -1,4 +1,4 @@
-import { env } from '../config.js';
+import { env, isLunaShadowConfigured } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
@@ -151,17 +151,11 @@ export async function processWebhookInboxEvent(
       return { claimed: true };
     }
 
-    // Gate B: observe the explicitly reviewed GREEN protocol profiles on the
-    // live Nylas message before normal processing. The observer has no database
-    // dependency/write hook, and failures are isolated from ingestion above.
     await observeProtocolProductionShadow({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
     });
 
-    // Gmail category labels are advisory only. Real purchase confirmations can land in
-    // Personal, Updates, or other categories, so every signed message.created event
-    // reaches the deterministic commerce filters instead of being rejected here.
     const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
@@ -185,10 +179,6 @@ export async function processWebhookInboxEvent(
       commerceMatched = commercePreprocess.matched;
     }
 
-    // Generic lifecycle is deliberately last. Known merchant/carrier parsers and
-    // the generic new-order lane keep priority. This fallback may only attach the
-    // source to an already-existing Purchase through a hard identity; it never
-    // creates a Purchase or mutates Purchase/Shipment/Document state.
     let genericLifecycleMatched = false;
     if (!lifecyclePreprocess.matched && !limoneMatched && !commerceMatched) {
       const genericLifecyclePreprocess = await preprocessGenericLifecycleNylasMessage({
@@ -202,7 +192,8 @@ export async function processWebhookInboxEvent(
       || limoneMatched
       || commerceMatched
       || genericLifecycleMatched;
-    const aiOffGuard = !deterministicMatched
+    const lunaShadow = !deterministicMatched && isLunaShadowConfigured();
+    const aiOffGuard = !deterministicMatched && !lunaShadow
       ? await guardNylasMessageWhenAiDisabled({
         grantId: event.grant_id,
         messageId: event.provider_message_id,
@@ -215,7 +206,7 @@ export async function processWebhookInboxEvent(
       : await processNylasMessage({
         grantId: event.grant_id,
         messageId: event.provider_message_id,
-        mode,
+        mode: lunaShadow ? 'observe' : mode,
       });
 
     await reconcileDeterministicLifecycleStatesForGrant(event.grant_id);
