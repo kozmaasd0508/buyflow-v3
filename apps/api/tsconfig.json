@@ -7,5 +7,6 @@
     "sourceMap": true,
     "declaration": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/scripts/buyflow-real*.ts"]
 }
