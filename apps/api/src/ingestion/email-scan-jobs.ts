@@ -43,6 +43,7 @@ export interface InitialEmailScanResult {
   purchaseWrites: number;
   shipmentWrites: number;
   documentWrites: number;
+  matchedPurchaseIds?: string[];
 }
 
 function safeErrorCode(error: unknown): string {
@@ -89,6 +90,66 @@ function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult 
   };
 }
 
+function structuredObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function anchorValue(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = normalizeSearchTerm(value);
+  if (normalized.length < 2 || normalized.length > 120) return null;
+  return normalized;
+}
+
+async function collectTargetedLifecycleAnchors(
+  db: any,
+  sourceEmailIds: Set<string>,
+  originalSearchTerm: string,
+): Promise<string[]> {
+  if (sourceEmailIds.size === 0) return [];
+  const { data, error } = await db
+    .from('source_emails')
+    .select('validated_result,structured_result')
+    .in('id', [...sourceEmailIds]);
+  if (error) throw new Error(`Targeted lifecycle anchor read failed: ${error.message}`);
+
+  const originalKey = originalSearchTerm.toLowerCase();
+  const anchors = new Map<string, string>();
+  for (const row of data ?? []) {
+    const result = structuredObject(row.validated_result) ?? structuredObject(row.structured_result);
+    if (!result) continue;
+    for (const key of ['order_number', 'tracking_number', 'invoice_number']) {
+      const value = anchorValue(result[key]);
+      if (!value) continue;
+      const normalizedKey = value.toLowerCase();
+      if (normalizedKey === originalKey) continue;
+      if (!anchors.has(normalizedKey)) anchors.set(normalizedKey, value);
+      if (anchors.size >= 8) return [...anchors.values()];
+    }
+  }
+  return [...anchors.values()];
+}
+
+async function collectMatchedPurchaseIds(
+  db: any,
+  sourceEmailIds: Set<string>,
+): Promise<string[]> {
+  if (sourceEmailIds.size === 0) return [];
+  const { data, error } = await db
+    .from('purchase_sources')
+    .select('purchase_id')
+    .in('source_email_id', [...sourceEmailIds]);
+  if (error) throw new Error(`Targeted lifecycle purchase link read failed: ${error.message}`);
+
+  const purchaseIds = new Set<string>();
+  for (const row of (data ?? []) as Array<{ purchase_id?: unknown }>) {
+    if (typeof row.purchase_id === 'string') purchaseIds.add(row.purchase_id);
+  }
+  return [...purchaseIds].slice(0, 20);
+}
+
 async function refreshScanOutcomeCounts(
   db: any,
   result: InitialEmailScanResult,
@@ -123,7 +184,7 @@ export async function enqueueInitialEmailScan(input: {
   const { data, error } = await db.rpc('enqueue_initial_email_scan', {
     p_user_id: input.userId,
     p_email_connection_id: input.emailConnectionId,
-    p_window_days: input.windowDays ?? 7,
+    p_window_days: input.windowDays ?? 2,
   });
 
   if (error) {
@@ -183,7 +244,7 @@ export async function enqueueTargetedEmailScan(input: {
   userId: string;
   emailConnectionId: string;
   searchTerm: string;
-  windowDays: 7 | 30 | 90;
+  windowDays: 7 | 30 | 90 | 365;
 }): Promise<string> {
   const db = getSupabaseAdmin() as any;
   const searchTerm = normalizeSearchTerm(input.searchTerm);
@@ -268,17 +329,19 @@ export async function processEmailScanJob(
       providerAccountId: emailConnection.provider_account_id,
     });
 
-    const windowDays = Math.min(Math.max(scanJob.window_days, 1), 90);
+    const maxWindowDays = scanJob.kind === 'targeted' ? 365 : 90;
+    const windowDays = Math.min(Math.max(scanJob.window_days, 1), maxWindowDays);
     let query: string;
     let pageSize: number;
     let maxPages: number;
+    let targetedSearchTerm = '';
 
     if (scanJob.kind === 'targeted') {
-      const searchTerm = normalizeSearchTerm(scanJob.search_term ?? '');
-      if (searchTerm.length < 2) {
+      targetedSearchTerm = normalizeSearchTerm(scanJob.search_term ?? '');
+      if (targetedSearchTerm.length < 2) {
         throw new Error('Targeted email scan is missing a valid search term');
       }
-      query = `"${searchTerm}" newer_than:${windowDays}d -in:spam -in:trash`;
+      query = `"${targetedSearchTerm}" newer_than:${windowDays}d -in:spam -in:trash`;
       pageSize = 20;
       maxPages = 2;
     } else if (scanJob.kind === 'audit') {
@@ -299,6 +362,69 @@ export async function processEmailScanJob(
     let pages = 0;
     const result = emptyScanResult();
     const observedSourceEmailIds = new Set<string>();
+    const seenProviderMessageIds = new Set<string>();
+
+    const processCommerceMessage = async (messageId: string, sourceQuery: string) => {
+      const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
+        grantId: emailConnection.provider_account_id!,
+        messageId,
+      });
+
+      let limoneMatched = false;
+      if (!lifecyclePreprocess.matched) {
+        const limonePreprocess = await preprocessLimoneOrderNylasMessage({
+          grantId: emailConnection.provider_account_id!,
+          messageId,
+        });
+        limoneMatched = limonePreprocess.matched;
+      }
+
+      let commerceMatched = false;
+      if (!lifecyclePreprocess.matched && !limoneMatched) {
+        const commercePreprocess = await preprocessDeterministicNylasMessage({
+          grantId: emailConnection.provider_account_id!,
+          messageId,
+        });
+        commerceMatched = commercePreprocess.matched;
+      }
+
+      const deterministicMatched = lifecyclePreprocess.matched || limoneMatched || commerceMatched;
+      const aiOffGuard = !deterministicMatched
+        ? await guardNylasMessageWhenAiDisabled({
+          grantId: emailConnection.provider_account_id!,
+          messageId,
+          sourceQuery,
+        })
+        : null;
+
+      const pipeline = aiOffGuard?.guarded
+        ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
+        : await processNylasMessage({
+          grantId: emailConnection.provider_account_id!,
+          messageId,
+          mode: effectiveMode,
+        });
+
+      if (pipeline.sourceEmailId) observedSourceEmailIds.add(pipeline.sourceEmailId);
+
+      if (
+        scanJob.kind === 'initial' &&
+        pipeline.status === 'unlinked' &&
+        pipeline.sourceEmailId
+      ) {
+        await enqueueAutomaticTargetedRecoveryForSource(pipeline.sourceEmailId);
+      }
+
+      result.aiCalls += pipeline.aiCalls;
+      result.purchaseWrites += pipeline.purchaseWrites;
+      result.shipmentWrites += pipeline.shipmentWrites;
+      result.documentWrites += pipeline.documentWrites;
+
+      if (pipeline.status === 'ignored') result.ignored += 1;
+      else if (pipeline.status === 'processed') result.processed += 1;
+      else if (pipeline.status === 'unlinked') result.unlinked += 1;
+      else result.review += 1;
+    };
 
     do {
       const page = await provider.searchMessages({
@@ -310,6 +436,8 @@ export async function processEmailScanJob(
       result.pages = pages;
 
       for (const email of page.messages) {
+        if (seenProviderMessageIds.has(email.providerMessageId)) continue;
+        seenProviderMessageIds.add(email.providerMessageId);
         result.checked += 1;
 
         if (scanJob.kind === 'audit') {
@@ -327,65 +455,7 @@ export async function processEmailScanJob(
           continue;
         }
 
-        const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
-          grantId: emailConnection.provider_account_id,
-          messageId: email.providerMessageId,
-        });
-
-        let limoneMatched = false;
-        if (!lifecyclePreprocess.matched) {
-          const limonePreprocess = await preprocessLimoneOrderNylasMessage({
-            grantId: emailConnection.provider_account_id,
-            messageId: email.providerMessageId,
-          });
-          limoneMatched = limonePreprocess.matched;
-        }
-
-        let commerceMatched = false;
-        if (!lifecyclePreprocess.matched && !limoneMatched) {
-          const commercePreprocess = await preprocessDeterministicNylasMessage({
-            grantId: emailConnection.provider_account_id,
-            messageId: email.providerMessageId,
-          });
-          commerceMatched = commercePreprocess.matched;
-        }
-
-        const deterministicMatched = lifecyclePreprocess.matched || limoneMatched || commerceMatched;
-        const aiOffGuard = !deterministicMatched
-          ? await guardNylasMessageWhenAiDisabled({
-            grantId: emailConnection.provider_account_id,
-            messageId: email.providerMessageId,
-            sourceQuery: `scan:${scanJob.kind}`,
-          })
-          : null;
-
-        const pipeline = aiOffGuard?.guarded
-          ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
-          : await processNylasMessage({
-            grantId: emailConnection.provider_account_id,
-            messageId: email.providerMessageId,
-            mode: effectiveMode,
-          });
-
-        if (pipeline.sourceEmailId) observedSourceEmailIds.add(pipeline.sourceEmailId);
-
-        if (
-          scanJob.kind === 'initial' &&
-          pipeline.status === 'unlinked' &&
-          pipeline.sourceEmailId
-        ) {
-          await enqueueAutomaticTargetedRecoveryForSource(pipeline.sourceEmailId);
-        }
-
-        result.aiCalls += pipeline.aiCalls;
-        result.purchaseWrites += pipeline.purchaseWrites;
-        result.shipmentWrites += pipeline.shipmentWrites;
-        result.documentWrites += pipeline.documentWrites;
-
-        if (pipeline.status === 'ignored') result.ignored += 1;
-        else if (pipeline.status === 'processed') result.processed += 1;
-        else if (pipeline.status === 'unlinked') result.unlinked += 1;
-        else result.review += 1;
+        await processCommerceMessage(email.providerMessageId, `scan:${scanJob.kind}`);
       }
 
       await db
@@ -397,9 +467,46 @@ export async function processEmailScanJob(
       cursor = page.nextCursor;
     } while (cursor && pages < maxPages);
 
+    if (scanJob.kind === 'targeted') {
+      const anchors = await collectTargetedLifecycleAnchors(db, observedSourceEmailIds, targetedSearchTerm);
+      for (const anchor of anchors) {
+        let anchorCursor: string | undefined;
+        let anchorPages = 0;
+        do {
+          const page = await provider.searchMessages({
+            query: `"${anchor}" newer_than:${windowDays}d -in:spam -in:trash`,
+            limit: 20,
+            ...(anchorCursor ? { cursor: anchorCursor } : {}),
+          });
+          anchorPages += 1;
+          pages += 1;
+          result.pages = pages;
+
+          for (const email of page.messages) {
+            if (seenProviderMessageIds.has(email.providerMessageId)) continue;
+            seenProviderMessageIds.add(email.providerMessageId);
+            result.checked += 1;
+            await processCommerceMessage(email.providerMessageId, 'scan:targeted-lifecycle');
+          }
+
+          await db
+            .from('email_scan_jobs')
+            .update({ locked_at: new Date().toISOString() })
+            .eq('id', scanJob.id)
+            .eq('status', 'processing');
+
+          anchorCursor = page.nextCursor;
+        } while (anchorCursor && anchorPages < 2);
+      }
+    }
+
     if (scanJob.kind !== 'audit') {
       await reconcileDeterministicLifecycleStatesForGrant(emailConnection.provider_account_id);
       await refreshScanOutcomeCounts(db, result, observedSourceEmailIds);
+    }
+
+    if (scanJob.kind === 'targeted') {
+      result.matchedPurchaseIds = await collectMatchedPurchaseIds(db, observedSourceEmailIds);
     }
 
     const { error: finishError } = await db.rpc('finish_email_scan_job', {

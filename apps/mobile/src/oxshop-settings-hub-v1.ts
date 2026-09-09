@@ -1,3 +1,4 @@
+import { mobileConfig } from './config.js';
 import { supabase } from './supabase.js';
 import './oxshop-settings-hub-v1.css';
 
@@ -21,6 +22,7 @@ const icons = {
   mail: icon('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'),
   inbox: icon('<path d="M4 4h16v16H4z"/><path d="M4 13h4l2 3h4l2-3h4"/>'),
   shield: icon('<path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z"/><path d="m9 12 2 2 4-4"/>'),
+  reset: icon('<path d="M4 7v5h5"/><path d="M5.5 16a8 8 0 1 0 1-9L4 9"/>'),
   logout: icon('<path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/>'),
   back: icon('<path d="m15 18-6-6 6-6"/>'),
   chevron: icon('<path d="m9 18 6-6-6-6"/>'),
@@ -49,6 +51,45 @@ function openInbox() {
   closeSettingsHub();
   const inbox = document.querySelector<HTMLButtonElement>('.bottom-nav [aria-label="Üzenetek"]');
   inbox?.click();
+}
+
+async function resetBuyFlow(button: HTMLButtonElement) {
+  const first = window.confirm(
+    'Ez törli a BuyFlow-ban lévő vásárlásokat, csomagokat, dokumentumokat és korábbi feldolgozási adatokat. A fiókod és a Gmail-kapcsolatod megmarad. Folytatod?',
+  );
+  if (!first) return;
+  const second = window.confirm(
+    'Biztosan újrakezded? A törölt BuyFlow adatok nem állíthatók vissza. Ezután csak az elmúlt 2 nap automatikus ellenőrzése indul el.',
+  );
+  if (!second) return;
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) {
+    window.alert('A bejelentkezés lejárt. Lépj be újra.');
+    return;
+  }
+
+  button.disabled = true;
+  const original = button.innerHTML;
+  button.querySelector('.bf-ox-settings-row-copy strong')!.textContent = 'Újrakezdés folyamatban…';
+
+  try {
+    const response = await fetch(`${mobileConfig.apiBaseUrl}/api/app-reset`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+    if (!response.ok) throw new Error(`API_${response.status}`);
+    window.alert('A BuyFlow adatai törölve. A Gmail-kapcsolat megmaradt, és elindult az elmúlt 2 nap automatikus ellenőrzése.');
+    window.location.reload();
+  } catch {
+    button.disabled = false;
+    button.innerHTML = original;
+    window.alert('A reset most nem sikerült. A meglévő adatokhoz nem nyúlunk tovább. Próbáld újra később.');
+  }
 }
 
 async function openSettingsHub() {
@@ -95,7 +136,7 @@ async function openSettingsHub() {
         <div class="bf-ox-settings-card">
           <button type="button" class="bf-ox-settings-row" data-open-email-settings>
             <span class="bf-ox-settings-icon">${icons.mail}</span>
-            <span class="bf-ox-settings-row-copy"><strong>Email kapcsolat</strong><small>Gmail kapcsolat kezelése – opcionális</small></span>
+            <span class="bf-ox-settings-row-copy"><strong>Email kapcsolat</strong><small>Automatikusan csak az elmúlt 2 napot ellenőrizzük</small></span>
             <span class="bf-ox-settings-chevron">${icons.chevron}</span>
           </button>
           <button type="button" class="bf-ox-settings-row" data-open-inbox>
@@ -111,8 +152,19 @@ async function openSettingsHub() {
         <div class="bf-ox-settings-card bf-ox-settings-static">
           <div class="bf-ox-settings-row">
             <span class="bf-ox-settings-icon">${icons.shield}</span>
-            <span class="bf-ox-settings-row-copy"><strong>Biztonságos feldolgozás</strong><small>A BuyFlow bizonytalan esetben nem találgat, és a vásárlási leveleket ellenőrizhető szabályok szerint kezeli.</small></span>
+            <span class="bf-ox-settings-row-copy"><strong>Biztonságos feldolgozás</strong><small>A BuyFlow bizonytalan esetben nem találgat. Régebbi rendelést csak akkor keresünk, ha te célzottan kéred.</small></span>
           </div>
+        </div>
+      </section>
+
+      <section class="bf-ox-settings-group">
+        <p class="bf-ox-settings-label">ÚJRAKEZDÉS</p>
+        <div class="bf-ox-settings-card">
+          <button type="button" class="bf-ox-settings-row bf-ox-settings-reset" data-reset-buyflow>
+            <span class="bf-ox-settings-icon">${icons.reset}</span>
+            <span class="bf-ox-settings-row-copy"><strong>BuyFlow adatok resetelése</strong><small>Vásárlások és feldolgozott adatok törlése; a fiók és Gmail-kapcsolat megmarad</small></span>
+            <span class="bf-ox-settings-chevron">${icons.chevron}</span>
+          </button>
         </div>
       </section>
 
@@ -137,6 +189,9 @@ async function openSettingsHub() {
     void handoffToAccountAction('gmail-settings-button');
   });
   root.querySelector<HTMLButtonElement>('[data-open-inbox]')?.addEventListener('click', openInbox);
+  root.querySelector<HTMLButtonElement>('[data-reset-buyflow]')?.addEventListener('click', (event) => {
+    void resetBuyFlow(event.currentTarget as HTMLButtonElement);
+  });
   root.querySelector<HTMLButtonElement>('[data-logout]')?.addEventListener('click', async () => {
     await supabase.auth.signOut();
     closeSettingsHub();

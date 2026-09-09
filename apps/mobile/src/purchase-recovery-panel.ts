@@ -2,7 +2,7 @@ import { mobileConfig } from './config.js';
 import { supabase } from './supabase.js';
 import './purchase-recovery-panel.css';
 
-type WindowDays = 7 | 30 | 90;
+type WindowDays = 7 | 30 | 90 | 365;
 
 interface RecoveryResult {
   checked: number;
@@ -13,6 +13,7 @@ interface RecoveryResult {
   purchaseWrites: number;
   shipmentWrites: number;
   documentWrites: number;
+  matchedPurchaseIds: string[];
 }
 
 interface RecoveryJob {
@@ -82,7 +83,7 @@ function renderProgress(message: string) {
       <span class="recovery-progress-dot"></span>
       <strong>${message}</strong>
     </div>
-    <p>A keresés a háttérben is folytatódik. Bezárhatod ezt az ablakot.</p>
+    <p>A BuyFlow a találatból rendelési, tracking- és számlaazonosítókat követ tovább, hogy összeállítsa az életutat.</p>
   `;
 }
 
@@ -93,10 +94,31 @@ function renderFailure(message: string) {
   container.innerHTML = `<strong>Most nem sikerült</strong><p>${message}</p>`;
 }
 
+function journeyButtonHtml(safe: RecoveryResult): string {
+  if (safe.matchedPurchaseIds.length === 1) {
+    return '<button id="recovery-open-journey" class="recovery-refresh-button" type="button">Rendelés életútjának megnyitása</button>';
+  }
+  return '<button id="recovery-refresh-purchases" class="recovery-refresh-button" type="button">Vásárlások frissítése</button>';
+}
+
+function bindJourneyButton(safe: RecoveryResult) {
+  const journey = document.querySelector<HTMLButtonElement>('#recovery-open-journey');
+  journey?.addEventListener('click', () => {
+    const purchaseId = safe.matchedPurchaseIds[0];
+    if (!purchaseId) return;
+    window.sessionStorage.setItem('buyflow-open-purchase-id', purchaseId);
+    window.location.reload();
+  });
+
+  document.querySelector<HTMLButtonElement>('#recovery-refresh-purchases')?.addEventListener('click', () => {
+    window.location.reload();
+  });
+}
+
 function renderCompleted(result: RecoveryResult | null) {
   const container = resultContainer();
   if (!container) return;
-  const safe = result ?? {
+  const safe: RecoveryResult = result ?? {
     checked: 0,
     processed: 0,
     unlinked: 0,
@@ -105,18 +127,21 @@ function renderCompleted(result: RecoveryResult | null) {
     purchaseWrites: 0,
     shipmentWrites: 0,
     documentWrites: 0,
+    matchedPurchaseIds: [],
   };
+  safe.matchedPurchaseIds = Array.isArray(safe.matchedPurchaseIds) ? safe.matchedPurchaseIds : [];
 
-  if (safe.purchaseWrites > 0) {
+  if (safe.purchaseWrites > 0 || safe.matchedPurchaseIds.length > 0) {
     container.className = 'recovery-result success';
+    const title = safe.purchaseWrites > 0
+      ? 'Megtaláltuk a hiányzó vásárlást.'
+      : 'Megtaláltuk a rendelés életútját.';
     container.innerHTML = `
-      <strong>Megtaláltuk a hiányzó vásárlást.</strong>
-      <p>${safe.purchaseWrites} új, biztonságosan azonosított vásárlás került be. A keresés ${safe.checked} emailt ellenőrzött.</p>
-      <button id="recovery-refresh-purchases" class="recovery-refresh-button" type="button">Vásárlások frissítése</button>
+      <strong>${title}</strong>
+      <p>${safe.checked} kapcsolódó emailt ellenőriztünk. A BuyFlow a megtalált azonosítókkal a rendelés további állomásait is célzottan megkereste.</p>
+      ${journeyButtonHtml(safe)}
     `;
-    container.querySelector<HTMLButtonElement>('#recovery-refresh-purchases')?.addEventListener('click', () => {
-      window.location.reload();
-    });
+    bindJourneyButton(safe);
     return;
   }
 
@@ -124,7 +149,7 @@ function renderCompleted(result: RecoveryResult | null) {
   if (safe.checked === 0) {
     container.innerHTML = `
       <strong>Nem találtunk egyező emailt.</strong>
-      <p>Próbáld meg a webshop nevét vagy a rendelési számot másképp megadni, esetleg válassz hosszabb időszakot.</p>
+      <p>Próbáld meg a webshop nevét, rendelési számot vagy tracking számot másképp megadni, esetleg válassz hosszabb időszakot.</p>
     `;
     return;
   }
@@ -133,19 +158,17 @@ function renderCompleted(result: RecoveryResult | null) {
     container.className = 'recovery-result success';
     container.innerHTML = `
       <strong>Ezt a vásárlást már ismeri a BuyFlow.</strong>
-      <p>${safe.checked} emailt ellenőriztünk, ebből ${safe.processed} már egy meglévő vásárláshoz kapcsolódik. Nem hoztunk létre másolatot.</p>
+      <p>${safe.checked} emailt ellenőriztünk, ebből ${safe.processed} már meglévő vásárlási adathoz kapcsolódik. Nem hoztunk létre másolatot.</p>
       <button id="recovery-refresh-purchases" class="recovery-refresh-button" type="button">Vásárlások megtekintése</button>
     `;
-    container.querySelector<HTMLButtonElement>('#recovery-refresh-purchases')?.addEventListener('click', () => {
-      closeRecovery();
-    });
+    bindJourneyButton(safe);
     return;
   }
 
   if (safe.unlinked > 0) {
     container.innerHTML = `
       <strong>Találtunk kapcsolódó emaileket.</strong>
-      <p>${safe.checked} emailt ellenőriztünk. ${safe.unlinked} levelet felismertünk, de még nincs elég biztos adat egy új vásárlás létrehozásához.</p>
+      <p>${safe.checked} emailt ellenőriztünk. ${safe.unlinked} levelet felismertünk, de még nincs elég biztos adat egyetlen rendelési életút összekapcsolásához.</p>
     `;
     return;
   }
@@ -153,14 +176,14 @@ function renderCompleted(result: RecoveryResult | null) {
   if (safe.review > 0) {
     container.innerHTML = `
       <strong>Találtunk bizonytalan egyezést.</strong>
-      <p>${safe.checked} emailt ellenőriztünk, de a BuyFlow nem kapott elég biztos bizonyítékot ahhoz, hogy automatikusan új vásárlást hozzon létre.</p>
+      <p>${safe.checked} emailt ellenőriztünk, de a BuyFlow nem kapott elég biztos bizonyítékot ahhoz, hogy automatikusan összekapcsolja őket.</p>
     `;
     return;
   }
 
   container.innerHTML = `
     <strong>Nem találtunk új vásárlást.</strong>
-    <p>${safe.checked} emailt ellenőriztünk, de egyikből sem azonosítható biztonságosan új rendelés.</p>
+    <p>${safe.checked} emailt ellenőriztünk, de egyikből sem azonosítható biztonságosan a keresett rendelés.</p>
   `;
 }
 
@@ -175,7 +198,7 @@ async function pollRecovery(jobId: string) {
     if (job.status === 'retry') {
       renderProgress('Újrapróbáljuk a keresést…');
     } else {
-      renderProgress('Keresés folyamatban…');
+      renderProgress('Rendelés és életút keresése…');
     }
   }
 
@@ -189,34 +212,35 @@ function openRecovery() {
   overlay.className = 'recovery-overlay';
   overlay.innerHTML = `
     <div class="recovery-backdrop" data-recovery-close></div>
-    <section class="recovery-sheet" role="dialog" aria-modal="true" aria-label="Hiányzó vásárlás keresése">
+    <section class="recovery-sheet" role="dialog" aria-modal="true" aria-label="Rendelés és életút keresése">
       <header class="recovery-header">
         <div>
           <p>BUYFLOW RECOVERY</p>
-          <h2>Hiányzik egy vásárlásod?</h2>
+          <h2>Keress meg egy rendelést</h2>
         </div>
         <button class="recovery-close" type="button" data-recovery-close aria-label="Bezárás">×</button>
       </header>
 
-      <p class="recovery-copy">Írd be a webshop nevét vagy a rendelési számot. A BuyFlow célzottan keres, ezért nem kell újra az egész Gmail-fiókot átnéznie.</p>
+      <p class="recovery-copy">Írd be a webshop nevét, rendelési számot vagy tracking számot. A BuyFlow először célzottan megtalálja a rendelést, majd a belőle kinyert azonosítókkal megkeresi a kapcsolódó fizetési, csomag-, kézbesítési és dokumentumleveleket is.</p>
 
       <form id="recovery-form" class="recovery-form">
         <label class="recovery-label">
-          <span>Webshop vagy rendelési szám</span>
-          <input id="recovery-search-term" class="recovery-input" type="text" minlength="2" maxlength="120" autocomplete="off" placeholder="pl. GymBeam vagy 12345678" required />
+          <span>Webshop, rendelési szám vagy tracking</span>
+          <input id="recovery-search-term" class="recovery-input" type="text" minlength="2" maxlength="120" autocomplete="off" placeholder="pl. eMAG, 12345678 vagy Z3502850057" required />
         </label>
 
         <div>
           <div class="recovery-window-title">Milyen régen vásároltál?</div>
           <div class="recovery-window-grid">
-            <label class="recovery-window-option"><input type="radio" name="recovery-window" value="7" checked /><span>7 nap</span></label>
-            <label class="recovery-window-option"><input type="radio" name="recovery-window" value="30" /><span>30 nap</span></label>
+            <label class="recovery-window-option"><input type="radio" name="recovery-window" value="7" /><span>7 nap</span></label>
+            <label class="recovery-window-option"><input type="radio" name="recovery-window" value="30" checked /><span>30 nap</span></label>
             <label class="recovery-window-option"><input type="radio" name="recovery-window" value="90" /><span>90 nap</span></label>
+            <label class="recovery-window-option"><input type="radio" name="recovery-window" value="365" /><span>1 év</span></label>
           </div>
         </div>
 
-        <button id="recovery-submit" class="recovery-submit" type="submit">Vásárlás megkeresése</button>
-        <p class="recovery-note">A keresés legfeljebb 40 egyező emailt vizsgál meg, és csak a biztonsági ellenőrzésen átment vásárlás kerülhet be automatikusan.</p>
+        <button id="recovery-submit" class="recovery-submit" type="submit">Rendelés és életút megkeresése</button>
+        <p class="recovery-note">A keresés célzott. Nem olvassa újra a teljes postafiókot: az első találatból rendelési, tracking- és számlaazonosítókat használ a kapcsolódó életút felépítéséhez.</p>
       </form>
 
       <div id="recovery-result" hidden></div>
@@ -236,7 +260,7 @@ function openRecovery() {
       const button = overlay.querySelector<HTMLButtonElement>('#recovery-submit');
       const result = overlay.querySelector<HTMLElement>('#recovery-result');
       const searchTerm = input?.value.trim() ?? '';
-      const windowDays = Number(selected?.value ?? '7') as WindowDays;
+      const windowDays = Number(selected?.value ?? '30') as WindowDays;
 
       if (searchTerm.length < 2) {
         input?.focus();
@@ -252,7 +276,7 @@ function openRecovery() {
 
       try {
         const jobId = await startRecovery(searchTerm, windowDays);
-        renderProgress('Keresés folyamatban…');
+        renderProgress('Rendelés és életút keresése…');
         await pollRecovery(jobId);
       } catch (error) {
         if (error instanceof Error && error.message === 'EMAIL_CONNECTION_REQUIRED') {
@@ -265,7 +289,7 @@ function openRecovery() {
       } finally {
         if (button) {
           button.disabled = false;
-          button.textContent = 'Vásárlás megkeresése';
+          button.textContent = 'Rendelés és életút megkeresése';
         }
       }
     })();
@@ -276,7 +300,17 @@ function openRecovery() {
   window.setTimeout(() => overlay.querySelector<HTMLInputElement>('#recovery-search-term')?.focus(), 250);
 }
 
+function maybeOpenRecoveredPurchase() {
+  const purchaseId = window.sessionStorage.getItem('buyflow-open-purchase-id');
+  if (!purchaseId) return;
+  const card = document.querySelector<HTMLButtonElement>(`[data-purchase-id="${CSS.escape(purchaseId)}"]`);
+  if (!card) return;
+  window.sessionStorage.removeItem('buyflow-open-purchase-id');
+  card.click();
+}
+
 function enhancePurchasesPage() {
+  maybeOpenRecoveredPurchase();
   if (document.querySelector('#missing-purchase-recovery')) return;
   const pages = Array.from(document.querySelectorAll<HTMLElement>('section.page'));
   const page = pages.find((candidate) => candidate.querySelector('h1')?.textContent?.trim() === 'Vásárlások');
@@ -292,8 +326,8 @@ function enhancePurchasesPage() {
   button.innerHTML = `
     <span class="recovery-entry-icon">⌕</span>
     <span class="recovery-entry-copy">
-      <strong>Hiányzik egy vásárlásom</strong>
-      <span>Keresés webshop vagy rendelési szám alapján</span>
+      <strong>Rendelés célzott keresése</strong>
+      <span>Webshop, rendelési szám vagy tracking alapján · teljes életúttal</span>
     </span>
     <span class="recovery-entry-arrow">›</span>
   `;
