@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+export const BUYFLOW_RUNTIME_OPENAI_MODEL = 'gpt-5.6-luna' as const;
+
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('0.0.0.0'),
@@ -19,7 +21,14 @@ const envSchema = z.object({
   NYLAS_WEBHOOK_SECRET: z.string().min(1).optional(),
 
   OPENAI_API_KEY: z.string().min(1).optional(),
-  OPENAI_MODEL: z.string().min(1).default('gpt-5.4-nano'),
+  // BuyFlow's server-side OpenAI runtime is intentionally pinned to Luna.
+  // An old deployment-level OPENAI_MODEL value must not silently move the app
+  // back to a different model while this release contract is active.
+  OPENAI_MODEL: z
+    .string()
+    .min(1)
+    .default(BUYFLOW_RUNTIME_OPENAI_MODEL)
+    .transform(() => BUYFLOW_RUNTIME_OPENAI_MODEL),
   BUYFLOW_AI_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
 
   // Gate B is read-only by construction. This switch is an operational kill
