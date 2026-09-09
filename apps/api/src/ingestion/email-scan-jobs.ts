@@ -142,9 +142,12 @@ async function collectMatchedPurchaseIds(
     .select('purchase_id')
     .in('source_email_id', [...sourceEmailIds]);
   if (error) throw new Error(`Targeted lifecycle purchase link read failed: ${error.message}`);
-  return [...new Set((data ?? [])
-    .map((row: any) => typeof row.purchase_id === 'string' ? row.purchase_id : null)
-    .filter((value: string | null): value is string => Boolean(value)))].slice(0, 20);
+
+  const purchaseIds = new Set<string>();
+  for (const row of (data ?? []) as Array<{ purchase_id?: unknown }>) {
+    if (typeof row.purchase_id === 'string') purchaseIds.add(row.purchase_id);
+  }
+  return [...purchaseIds].slice(0, 20);
 }
 
 async function refreshScanOutcomeCounts(
