@@ -1,0 +1,61 @@
+{
+  "benchmark": "buyflow-real100-h4-gold-posthoc-source-audit-v1",
+  "created_at": "2026-09-09T13:35:00Z",
+  "selection_sha256": "ab0104762feaf0b1c05e871a92321060f97eb20bd9edbf6cdf1d3aa1c525caa9",
+  "frozen_gold_commit": "385aa15d1978fa1941bf3a962fcb9095da44d657",
+  "policy_commit": "bc046c361a9269e891456bc0b8e7105c701cf59e",
+  "prompt_commit": "25810f66af0855fbc81d913872072d42d75a0abb",
+  "status": "post_model_source_audit",
+  "blind_score_rewrite_allowed": false,
+  "audit_rule": "For every non-null expected order_id or tracking_id, the exact ID must be present in the frozen H4 subject or semantic_text. Corrections below are based on frozen source text, not on model outputs.",
+  "violations": [
+    {
+      "case_id": "H4-019",
+      "field": "tracking_id",
+      "frozen_gold_value": "3406978622",
+      "source_value": "3391414834",
+      "source_evidence": "GLS dynamic tracking URL ends /HU/hu/3391414834",
+      "correction_reason": "clerical gold copy error"
+    },
+    {
+      "case_id": "H4-031",
+      "field": "tracking_id",
+      "frozen_gold_value": "3396938822",
+      "source_value": "3384269988",
+      "source_evidence": "GLS dynamic tracking URL ends /HU/hu/3384269988",
+      "correction_reason": "clerical gold copy error"
+    }
+  ],
+  "deterministic_id_audit": {
+    "gold_cases_checked": 96,
+    "non_null_expected_ids_missing_from_subject_plus_semantic_text": 2,
+    "missing_id_cases": ["H4-019", "H4-031"]
+  },
+  "frozen_blind_result": {
+    "luna_exact": 94,
+    "goldable": 96,
+    "luna_exact_pct": 97.9,
+    "local_exact": 34,
+    "local_exact_pct": 35.4,
+    "local_gold_technical_errors": 31,
+    "local_total_technical_errors": 32
+  },
+  "posthoc_known_correction_view": {
+    "luna_exact": 96,
+    "goldable": 96,
+    "luna_exact_pct": 100.0,
+    "local_exact": 36,
+    "local_exact_pct": 37.5,
+    "local_valid_gold_outputs": 65,
+    "local_exact_on_valid_outputs": 36,
+    "local_exact_on_valid_outputs_pct": 55.4,
+    "local_best_case_if_all_31_gold_technical_errors_were_exact": 67,
+    "local_best_case_pct_under_only_these_known_gold_corrections": 69.8
+  },
+  "notes": [
+    "The posthoc corrected percentages are not blind benchmark headline scores and must not replace the frozen pre-model gold score.",
+    "H4 is spent after model outputs were revealed.",
+    "The two source corrections happen to match both Luna and local predictions, but the correction evidence is the frozen source text itself.",
+    "Further semantic gold errors are not ruled out by this ID-presence audit; it only deterministically checks explicit ID consistency."
+  ]
+}
