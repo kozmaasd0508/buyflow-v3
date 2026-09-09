@@ -71,6 +71,26 @@ test('prefers provider plain text and fails closed on conflicting auth verdicts'
   assert.equal(document.authentication.trusted, false);
 });
 
+test('provider bodyText that is actually HTML is converted to compact semantic text', () => {
+  const email = baseEmail({
+    bodyText: `<!DOCTYPE html>
+      <html><head><style>.hidden{display:none}</style></head><body>
+        <p>Sikeresen fizettel 2527 Ft-ot bankkartyaval.</p>
+        <p>Rendeles elfogadohelyen nyilvantartott azonositoja: <strong>796186821</strong></p>
+        <a href="https://shop.example/orders/796186821">Rendeles</a>
+      </body></html>`,
+  });
+
+  const document = normalizeEmailDocumentV1(email);
+  assert.equal(document.normalizerVersion, 'normalized-email-document-v1.2');
+  assert.equal(document.normalization.bodyTextSource, 'html_derived');
+  assert.equal(document.normalization.hiddenHtmlRemoved, true);
+  assert.match(document.semanticText ?? '', /Sikeresen fizettel/);
+  assert.match(document.semanticText ?? '', /796186821/);
+  assert.doesNotMatch(document.semanticText ?? '', /<!DOCTYPE|<html|<style/i);
+  assert.ok(document.links.some((link) => link.href.includes('/orders/796186821')));
+});
+
 test('malformed or oversized structured data never becomes a parsed record', () => {
   const email = baseEmail({
     bodyHtml: '<script type="application/ld+json">{invalid}</script><p>Hello</p>',
