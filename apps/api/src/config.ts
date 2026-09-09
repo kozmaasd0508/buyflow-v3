@@ -29,7 +29,14 @@ const envSchema = z.object({
     .min(1)
     .default(BUYFLOW_RUNTIME_OPENAI_MODEL)
     .transform(() => BUYFLOW_RUNTIME_OPENAI_MODEL),
+  // Legacy automatic-AI authority flag. Kept OFF by default.
   BUYFLOW_AI_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  // Luna may analyze unmatched transactional mail in shadow/observe mode only.
+  // This never grants Purchase/Shipment/Document write authority.
+  BUYFLOW_LUNA_SHADOW_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 
   // Gate B is read-only by construction. This switch is an operational kill
   // switch only; disabling it never changes the production protocol registry.
@@ -48,6 +55,10 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+
+export function isLunaShadowConfigured(): boolean {
+  return env.BUYFLOW_LUNA_SHADOW_ENABLED && Boolean(env.OPENAI_API_KEY);
+}
 
 export function requireSupabaseAdminConfig() {
   const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
