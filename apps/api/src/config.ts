@@ -37,6 +37,12 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  // One-shot operational verification only. Uses a static synthetic email and
+  // never reads Gmail/Nylas or writes BuyFlow data. Keep false outside a smoke.
+  BUYFLOW_LUNA_STARTUP_SMOKE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 
   // Gate B is read-only by construction. This switch is an operational kill
   // switch only; disabling it never changes the production protocol registry.
