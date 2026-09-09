@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { extractEmailWithOpenAIResult } from './ai/openai-email-extractor.js';
 
 export const BUYFLOW_RUNTIME_OPENAI_MODEL = 'gpt-5.6-luna' as const;
 
@@ -73,6 +74,32 @@ console.info('[luna-runtime-config]', JSON.stringify({
   openaiKeyConfigured: Boolean(env.OPENAI_API_KEY),
   lunaShadowConfigured: isLunaShadowConfigured(),
 }));
+
+if (env.BUYFLOW_LUNA_STARTUP_SMOKE && isLunaShadowConfigured() && env.OPENAI_API_KEY) {
+  void extractEmailWithOpenAIResult({
+    apiKey: env.OPENAI_API_KEY,
+    model: env.OPENAI_MODEL,
+    subject: 'BuyFlow synthetic runtime smoke',
+    fromDomains: ['smoke.invalid'],
+    bodyText: 'This is a synthetic BuyFlow runtime verification message. It is not a purchase and contains no real user data.',
+  })
+    .then((result) => {
+      console.info('[luna-startup-smoke]', JSON.stringify({
+        ok: true,
+        model: env.OPENAI_MODEL,
+        responseIdPresent: Boolean(result.responseId),
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+      }));
+    })
+    .catch((error: unknown) => {
+      console.error('[luna-startup-smoke]', JSON.stringify({
+        ok: false,
+        model: env.OPENAI_MODEL,
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      }));
+    });
+}
 
 export function requireSupabaseAdminConfig() {
   const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
