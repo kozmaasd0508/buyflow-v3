@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Inspect current Render runtime once
+      - name: Inspect current Render runtime and containing branches
         shell: bash
         env:
           HEALTH_URL: https://buyflow-v3-api-dev.onrender.com/health
@@ -28,6 +28,11 @@ jobs:
           expected_runtime="$(git log -1 --format=%H -- apps/ package.json package-lock.json)"
           echo "expected_runtime_commit=$expected_runtime"
           body="$(curl -fsS --max-time 30 "$HEALTH_URL")"
+          deployed="$(printf '%s' "$body" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
+              const h=JSON.parse(s); process.stdout.write(String(h.commit ?? ""));
+            });
+          ')"
           printf '%s' "$body" | node -e '
             let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{
               const h=JSON.parse(s); const w=h.webhook || {};
@@ -40,3 +45,6 @@ jobs:
               console.log(`pipeline_failed=${w.pipelineFailed ?? -1}`);
             });
           '
+          echo "branches_containing_deployed_commit:"
+          git branch -r --contains "$deployed" | sed 's/^/  /' || true
+          echo "main_contains_deployed_commit=$(git merge-base --is-ancestor "$deployed" origin/main && echo true || echo false)"
