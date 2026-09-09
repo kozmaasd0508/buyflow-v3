@@ -1,0 +1,130 @@
+{
+  "benchmark": "buyflow-real100-h3-review-resolution-v33",
+  "selection_sha256": "59650c8dbb687be609361b3e3576a404f9acdba5ea13f71985dcd0dc2451b04f",
+  "mail_lens_normalizer": "normalized-email-document-v1.1",
+  "baseline_prompt_commit": "2eacf018ff6c7d2eef306a2449f1e76bb689f249",
+  "policy_commit": "7d65ea51bc9923b9139458f3f2416a78298ec0e9",
+  "source_gold_commit": "a5c54940643374803ba344a4014ba44ae183e240",
+  "status": "post_blind_review_resolution",
+  "warning": "H3 is spent after these resolutions. This file is for v3.3 regression only, not fresh blind accuracy.",
+  "review_count": 11,
+  "cases": [
+    {
+      "case_id": "H3-009",
+      "route": "model",
+      "expected": {
+        "event_type": "PAYMENT",
+        "perspective": "merchant_outbound",
+        "order_id": null,
+        "tracking_id": null,
+        "link_status": "not_applicable"
+      }
+    },
+    {
+      "case_id": "H3-013",
+      "route": "model",
+      "expected": {
+        "event_type": "OTHER",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "3396938822",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-027",
+      "route": "model",
+      "expected": {
+        "event_type": "OTHER",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "3382964736",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-048",
+      "route": "model",
+      "expected": {
+        "event_type": "SHIPPED",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "Z3502850057",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-057",
+      "route": "model",
+      "expected": {
+        "event_type": "OTHER",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "3398658635",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-058",
+      "route": "review_input_incomplete",
+      "model_call_allowed": false,
+      "lifecycle_write_allowed": false,
+      "expected_gate": "REVIEW_INPUT_INCOMPLETE"
+    },
+    {
+      "case_id": "H3-072",
+      "route": "model",
+      "expected": {
+        "event_type": "OTHER",
+        "perspective": "non_purchase",
+        "order_id": null,
+        "tracking_id": null,
+        "link_status": "not_applicable"
+      }
+    },
+    {
+      "case_id": "H3-078",
+      "route": "model",
+      "expected": {
+        "event_type": "OTHER",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "3391050994",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-083",
+      "route": "model",
+      "expected": {
+        "event_type": "DELAYED",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "Z3502850057",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-086",
+      "route": "model",
+      "expected": {
+        "event_type": "OTHER",
+        "perspective": "buyer",
+        "order_id": null,
+        "tracking_id": "3382490409",
+        "link_status": "unresolved"
+      }
+    },
+    {
+      "case_id": "H3-100",
+      "route": "model",
+      "expected": {
+        "event_type": "PAYMENT",
+        "perspective": "merchant_outbound",
+        "order_id": null,
+        "tracking_id": null,
+        "link_status": "not_applicable"
+      }
+    }
+  ]
+}
