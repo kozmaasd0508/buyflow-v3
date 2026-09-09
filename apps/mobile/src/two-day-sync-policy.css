@@ -1,0 +1,23 @@
+.bf-two-day-policy {
+  margin: 12px 0 4px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  display: grid;
+  gap: 5px;
+}
+
+.bf-two-day-policy strong {
+  font-size: 14px;
+}
+
+.bf-two-day-policy span {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.72;
+}
+
+#buyflow-gmail-settings-overlay .gmail-scan-actions {
+  display: none !important;
+}
