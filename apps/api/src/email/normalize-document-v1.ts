@@ -9,7 +9,7 @@ import { extractNormalizedEmailLinks } from './link-extraction-v1.js';
 import { extractStructuredDataRecords } from './structured-markup.js';
 import type { NormalizedEmail } from './types.js';
 
-export const NORMALIZED_EMAIL_DOCUMENT_V1_NORMALIZER = 'normalized-email-document-v1.1';
+export const NORMALIZED_EMAIL_DOCUMENT_V1_NORMALIZER = 'normalized-email-document-v1.2';
 
 export interface NormalizeEmailDocumentV1Options {
   rawRef?: RawEmailReference | null;
@@ -50,6 +50,15 @@ function stripHiddenHtml(html: string): { html: string; removed: boolean } {
   }
 
   return { html: next, removed: next !== before };
+}
+
+function looksLikeHtmlMarkup(value: string): boolean {
+  const probe = value.slice(0, 12_000);
+  if (/^\s*<!doctype\s+html\b/i.test(probe) || /<html\b/i.test(probe) || /<body\b/i.test(probe)) {
+    return true;
+  }
+  const structuralTags = probe.match(/<(?:head|meta|style|div|table|tr|td|p|span|a|img)\b/gi);
+  return (structuralTags?.length ?? 0) >= 4;
 }
 
 function quotedHistoryBoundary(text: string): number | null {
@@ -114,12 +123,17 @@ export function normalizeEmailDocumentV1(
   let rawBodyText: string | null = null;
 
   const suppliedText = email.bodyText?.trim() || null;
-  if (suppliedText) {
+  const suppliedTextIsHtml = Boolean(suppliedText && looksLikeHtmlMarkup(suppliedText));
+  const effectiveHtml = suppliedTextIsHtml
+    ? suppliedText
+    : (email.bodyHtml?.trim() || null);
+
+  if (suppliedText && !suppliedTextIsHtml) {
     bodyTextSource = 'provider_plain';
     rawBodyText = suppliedText;
-  } else if (email.bodyHtml) {
+  } else if (effectiveHtml) {
     bodyTextSource = 'html_derived';
-    const sanitized = stripHiddenHtml(decodeNumericHtmlEntities(email.bodyHtml));
+    const sanitized = stripHiddenHtml(decodeNumericHtmlEntities(effectiveHtml));
     hiddenHtmlRemoved = sanitized.removed;
     rawBodyText = htmlToCompactText(sanitized.html, maxBodyTextChars + 1).trim() || null;
   } else if (email.snippet?.trim()) {
@@ -133,11 +147,11 @@ export function normalizeEmailDocumentV1(
   const bodyText = boundedBody.value || null;
   const semantic = semanticTextOf(bodyText, maxBodyTextChars);
 
-  const structuredData = email.bodyHtml
-    ? extractStructuredDataRecords(email.bodyHtml)
+  const structuredData = effectiveHtml
+    ? extractStructuredDataRecords(effectiveHtml)
     : [];
   const links = extractNormalizedEmailLinks({
-    bodyHtml: email.bodyHtml ?? null,
+    bodyHtml: effectiveHtml,
     bodyText,
     structuredData,
   });
