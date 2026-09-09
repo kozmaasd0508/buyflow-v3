@@ -1,4 +1,4 @@
-name: GPT-5.4 Nano Read-only Smoke
+name: GPT-5.6 Luna Read-only Smoke
 
 on:
   workflow_dispatch:
@@ -29,11 +29,11 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: GPT-5.4 nano read-only smoke
+      - name: GPT-5.6 Luna read-only smoke
         run: npm run openai:nano-smoke --workspace @buyflow/api
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: gpt-5.4-nano
+          OPENAI_MODEL: gpt-5.6-luna
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
           NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
           NYLAS_API_URI: https://api.eu.nylas.com
