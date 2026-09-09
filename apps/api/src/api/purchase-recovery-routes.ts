@@ -2,12 +2,14 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
+  enqueueInitialEmailScan,
   enqueueTargetedEmailScan,
   processEmailScanJob,
 } from '../ingestion/email-scan-jobs.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
 
-const ALLOWED_WINDOWS = new Set([7, 30, 90]);
+const ALLOWED_WINDOWS = new Set([7, 30, 90, 365]);
+type TargetedWindowDays = 7 | 30 | 90 | 365;
 
 async function requireUser(request: FastifyRequest, reply: FastifyReply) {
   const user = await resolveAuthenticatedApiUser(request.headers.authorization);
@@ -26,12 +28,12 @@ function normalizeSearchTerm(value: unknown): string {
     .trim();
 }
 
-function scheduleRecovery(app: FastifyInstance, jobId: string) {
+function scheduleScan(app: FastifyInstance, jobId: string, label: string) {
   setImmediate(() => {
     void processEmailScanJob(jobId, env.BUYFLOW_AUTOMATION_MODE).catch((error) => {
       app.log.error({
         errorType: error instanceof Error ? error.name : 'UnknownError',
-      }, 'Targeted purchase recovery failed and was scheduled for retry');
+      }, `${label} failed and was scheduled for retry`);
     });
   });
 }
@@ -40,6 +42,9 @@ function safeResult(value: unknown) {
   if (!value || typeof value !== 'object') return null;
   const source = value as Record<string, unknown>;
   const number = (key: string) => typeof source[key] === 'number' ? source[key] : 0;
+  const matchedPurchaseIds = Array.isArray(source.matchedPurchaseIds)
+    ? source.matchedPurchaseIds.filter((value): value is string => typeof value === 'string').slice(0, 20)
+    : [];
   return {
     checked: number('checked'),
     processed: number('processed'),
@@ -49,10 +54,64 @@ function safeResult(value: unknown) {
     purchaseWrites: number('purchaseWrites'),
     shipmentWrites: number('shipmentWrites'),
     documentWrites: number('documentWrites'),
+    matchedPurchaseIds,
   };
 }
 
 export async function registerPurchaseRecoveryRoutes(app: FastifyInstance) {
+  app.post('/api/app-reset', async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const db = getSupabaseAdmin() as any;
+    const { data: resetResult, error: resetError } = await db.rpc('reset_buyflow_user_data', {
+      p_user_id: user.id,
+    });
+
+    if (resetError) {
+      request.log.error({ errorType: 'BuyFlowUserResetError' }, 'Failed to reset BuyFlow user data');
+      return reply.code(500).send({ error: 'app_reset_unavailable' });
+    }
+
+    const { data: connections, error: connectionError } = await db
+      .from('email_connections')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('provider', 'nylas')
+      .eq('status', 'active');
+
+    if (connectionError) {
+      request.log.error({ errorType: 'BuyFlowResetConnectionReadError' }, 'Reset completed but active Gmail connections could not be read');
+      return reply.code(500).send({ error: 'app_reset_scan_unavailable', reset: resetResult ?? null });
+    }
+
+    const scanJobIds: string[] = [];
+    for (const connection of connections ?? []) {
+      try {
+        const jobId = await enqueueInitialEmailScan({
+          userId: user.id,
+          emailConnectionId: connection.id,
+          windowDays: 2,
+        });
+        scanJobIds.push(jobId);
+        scheduleScan(app, jobId, 'Two-day reset bootstrap scan');
+      } catch (error) {
+        request.log.error({
+          errorType: error instanceof Error ? error.name : 'UnknownError',
+          connectionId: connection.id,
+        }, 'Reset completed but two-day bootstrap scan could not be scheduled');
+      }
+    }
+
+    return reply.code(200).send({
+      ok: true,
+      reset: resetResult ?? null,
+      automaticScanWindowDays: 2,
+      scanJobIds,
+      emailConnectionsPreserved: (connections ?? []).length,
+    });
+  });
+
   app.post<{
     Body: { searchTerm?: string; windowDays?: number };
   }>('/api/purchase-recovery', async (request, reply) => {
@@ -93,9 +152,9 @@ export async function registerPurchaseRecoveryRoutes(app: FastifyInstance) {
         userId: user.id,
         emailConnectionId: connection.id,
         searchTerm,
-        windowDays: windowDays as 7 | 30 | 90,
+        windowDays: windowDays as TargetedWindowDays,
       });
-      scheduleRecovery(app, jobId);
+      scheduleScan(app, jobId, 'Targeted purchase recovery');
       return reply.code(202).send({
         jobId,
         status: 'pending',
