@@ -1,0 +1,70 @@
+Classify this commerce email for BuyFlow. Return exactly one JSON object with event_type, perspective, order_id, tracking_id, link_status. Do not invent facts and do not explain the answer.
+
+Allowed event_type: ORDER_CREATED, ORDER_PROCESSING, PAYMENT, INVOICE, SHIPMENT_CREATED, SHIPPED, IN_TRANSIT, OUT_FOR_DELIVERY, READY_FOR_PICKUP, DELIVERED, DELAYED, CANCELLED, REFUNDED, RETURN, OTHER.
+Allowed perspective: buyer, merchant_outbound, non_purchase.
+Allowed link_status: linked, unresolved, not_applicable.
+
+Follow this decision order strictly:
+1. Determine perspective/scope.
+2. Determine the newest current state that is already true now.
+3. Extract explicit buyer-side IDs and their roles.
+4. Determine link_status.
+5. Run a final consistency check.
+
+PERSPECTIVE:
+- buyer = mailbox owner is customer/recipient side.
+- merchant_outbound = mailbox owner acts as seller/shipper/merchant partner and the message concerns pickup, fulfillment, delivery, COD settlement or other merchant-side logistics/payment flow.
+- non_purchase = survey, review request, marketing, security, preference, account-admin or other non-purchase content.
+- Carrier pickup FROM the mailbox owner/sender is merchant_outbound, never buyer delivery.
+- A carrier/payment message addressed to the mailbox owner as partner/merchant and confirming COD receipt/settlement is PAYMENT + merchant_outbound.
+- Survey/review-request mail is non_purchase even if it quotes a prior order/shipment/delivery.
+- non_purchase => OTHER + null IDs + not_applicable.
+- merchant_outbound => buyer-side IDs null + not_applicable. Merchant_outbound can still have PAYMENT, SHIPMENT_CREATED or another current merchant-side event.
+
+CURRENT STATE:
+- ORDER_CREATED = buyer order received/accepted; no later processing state.
+- ORDER_PROCESSING = buyer order is being prepared/processed; no shipment/pre-advice state yet.
+- SHIPMENT_CREATED = shipment/tracking/pre-advice exists, or parcel is packed/waiting for carrier, but physical carrier acceptance/handoff has not yet happened.
+- SHIPPED = completed posting/sending/physical carrier acceptance is directly asserted, with no stronger later carrier-network state.
+- If a message directly says the parcel was just posted/sent and also uses generic wording such as 'on the way', keep SHIPPED unless it separately asserts concrete carrier-network processing/movement.
+- Do NOT promote to SHIPPED merely because a tracking/waybill number exists or a subject says 'on the way'. Future handoff, waiting for courier or pre-advice is SHIPMENT_CREATED.
+- IN_TRANSIT = concrete carrier-network movement or carrier-hub processing after physical acceptance. If collected from partner/locker and now moving to carrier warehouse/depot, use IN_TRANSIT.
+- OUT_FOR_DELIVERY = assigned to today's final-mile courier/vehicle.
+- READY_FOR_PICKUP = physically at pickup point/locker and available.
+- DELIVERED = recipient handoff completed.
+- DELAYED = a concrete order/shipment is explicitly delayed or its ETA is explicitly moved later.
+- REFUNDED = money actually returned/completed.
+- RETURN = returned parcel physically received by merchant/returns warehouse.
+- Future/planned events are not current states.
+- Prefer newest directly asserted state over headings, progress bars, generic labels, quoted history or future ETA text.
+
+INFORMATIONAL TRACKING:
+- A dynamic-tracking invitation that only says tracking is available or ETA is continuously refreshed, but does not directly assert a lifecycle state, is OTHER, not SHIPMENT_CREATED/IN_TRANSIT/OUT_FOR_DELIVERY.
+- Such a message remains perspective=buyer; extract an explicit tracking_id if clearly present in carrier tracking; with only tracking available use link_status=unresolved.
+
+SUBSCRIPTION / ACCOUNT ADMIN:
+- If a subscription cancellation is only future-dated, service is still active, and the message is account-management/admin rather than a completed commerce lifecycle event, use OTHER + non_purchase + null IDs + not_applicable.
+
+ID ROLES:
+- order_id only when explicitly identified as buyer order number/order ID.
+- tracking_id only when explicitly identified as shipment/tracking/parcel/waybill ID or clearly used in carrier tracking.
+- Ignore invoice/document/transaction/authorization/product/coupon/generic reference IDs unless explicitly buyer order/tracking ID.
+- Same literal may populate both only if explicitly used as both order and shipment/tracking identifier.
+- Do not invent IDs.
+
+LINKING:
+- linked = exact buyer order ID exists for this event, or explicit exact order-to-tracking relation exists.
+- unresolved = buyer-side event/informational tracking item exists but no exact purchase link is available, or only tracking ID is available.
+- not_applicable = merchant_outbound or non_purchase.
+
+FINAL CHECK:
+- survey/review => OTHER + non_purchase + null IDs + not_applicable.
+- merchant_outbound => null buyer IDs + not_applicable.
+- merchant COD receipt/settlement => PAYMENT + merchant_outbound.
+- dynamic tracking without an asserted state => OTHER + buyer; keep explicit tracking; unresolved if no exact purchase link.
+- packed/waiting/future handoff => not SHIPPED.
+- explicit completed posting/sending/acceptance => SHIPPED unless a later concrete carrier-network state is asserted.
+- explicit concrete delay => DELAYED.
+- collected and now moving to carrier warehouse/depot => IN_TRANSIT.
+- buyer + only tracking ID => unresolved.
+- verify order_id/tracking_id roles before output.
