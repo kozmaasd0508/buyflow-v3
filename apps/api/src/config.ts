@@ -60,6 +60,14 @@ export function isLunaShadowConfigured(): boolean {
   return env.BUYFLOW_LUNA_SHADOW_ENABLED && Boolean(env.OPENAI_API_KEY);
 }
 
+// Safe runtime receipt: intentionally reports booleans/model only, never secrets.
+console.info('[luna-runtime-config]', JSON.stringify({
+  model: env.OPENAI_MODEL,
+  shadowEnabled: env.BUYFLOW_LUNA_SHADOW_ENABLED,
+  openaiKeyConfigured: Boolean(env.OPENAI_API_KEY),
+  lunaShadowConfigured: isLunaShadowConfigured(),
+}));
+
 export function requireSupabaseAdminConfig() {
   const secretKey = env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
 
