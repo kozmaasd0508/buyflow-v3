@@ -75,3 +75,5 @@ jobs:
 
           echo "Expected runtime commit $expected_runtime was not present in the deployed Render ancestry. last_deployed=${last_deployed:-unknown}"
           exit 1
+
+# diagnostic trigger: 2026-09-09
