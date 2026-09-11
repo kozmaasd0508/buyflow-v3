@@ -123,6 +123,24 @@ function latestShipmentEvent(rows: Array<Record<string, unknown>>): { status: st
   return { status: latestStatus, at: latestAt };
 }
 
+export async function loadLifecycleSources(db: any, userId: string): Promise<Array<Record<string, any>>> {
+  const sources: Array<Record<string, any>> = [];
+  const pageSize = 200;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await db.from('source_emails')
+      .select('id,user_id,from_address,received_at,classification,validated_result,validation_status')
+      .eq('user_id', userId)
+      .in('classification', [...SUPPORTED_LIFECYCLE_EVENTS])
+      .order('received_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(`Lifecycle reconciliation source scan failed: ${error.message}`);
+    const page = (data ?? []) as Array<Record<string, any>>;
+    sources.push(...page);
+    if (page.length < pageSize) return sources;
+  }
+}
+
 export async function reconcileDeterministicLifecycleStatesForGrant(grantId: string): Promise<{ scanned: number; applied: number }> {
   const db = getSupabaseAdmin() as any;
   const { data: connection, error: connectionError } = await db.from('email_connections')
@@ -130,12 +148,7 @@ export async function reconcileDeterministicLifecycleStatesForGrant(grantId: str
   if (connectionError) throw new Error(`Lifecycle reconciliation grant lookup failed: ${connectionError.message}`);
   if (!connection?.user_id) return { scanned: 0, applied: 0 };
 
-  const { data: sources, error: sourceError } = await db.from('source_emails')
-    .select('id,user_id,from_address,received_at,classification,validated_result,validation_status')
-    .eq('user_id', connection.user_id)
-    .in('classification', [...SUPPORTED_LIFECYCLE_EVENTS])
-    .order('received_at', { ascending: true }).limit(200);
-  if (sourceError) throw new Error(`Lifecycle reconciliation source scan failed: ${sourceError.message}`);
+  const sources = await loadLifecycleSources(db, connection.user_id);
 
   let applied = 0;
   for (const source of (sources ?? []) as Array<Record<string, any>>) {

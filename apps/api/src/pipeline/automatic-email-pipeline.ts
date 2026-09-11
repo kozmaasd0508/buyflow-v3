@@ -35,6 +35,7 @@ import {
   canAutomaticallyWritePurchase,
   canAutomaticallyWriteShipment,
   isTrustedAutomaticEvidence,
+  asAiObservation,
 } from './automatic-write-gate.js';
 
 const PROMPT_VERSION = 'nano-email-extraction-v2-products-evidence';
@@ -349,9 +350,7 @@ function latest(rows: ShipmentResolutionEvidence[]): string | null {
   return [...rows].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0]?.receivedAt ?? null;
 }
 
-async function reconcileUser(userId: string, mode: AutomationMode) {
-  const supabase = getSupabaseAdmin();
-  const db = supabase as any;
+export async function reconcileUser(userId: string, mode: AutomationMode, db: any = getSupabaseAdmin()) {
   const cutoff = new Date(Date.now() - RECONCILIATION_WINDOW_DAYS * 86_400_000).toISOString();
 
   const { data: sourceRows, error: sourceError } = await db
@@ -571,6 +570,7 @@ export async function processNylasMessage(input: {
   grantId: string;
   messageId: string;
   mode: AutomationMode;
+  allowAiObservation?: boolean;
 }): Promise<AutomaticPipelineResult> {
   const supabase = getSupabaseAdmin();
   const db = supabase as any;
@@ -633,7 +633,9 @@ export async function processNylasMessage(input: {
   }
 
   let aiCalls = 0;
-  const reextractV2 = shouldReextractWithV2(validatedResult);
+  const reextractV2 = shouldReextractWithV2(validatedResult) || Boolean(
+    input.allowAiObservation && validatedResult?.parser_version === 'deterministic-ai-off-fallback-v1'
+  );
   const needsExtraction = !validatedResult || reextractV2;
 
   if (needsExtraction) {
@@ -673,14 +675,14 @@ export async function processNylasMessage(input: {
       });
       aiCalls = 1;
       const extraction = result.extraction;
-      const extractionJson = extractionToJson(extraction);
+      const extractionJson = JSON.parse(JSON.stringify(asAiObservation(toJson(extractionToJson(extraction))))) as Json;
       const validated: ValidatedEmailExtraction = validateEmailExtraction({
         extraction,
         senderDomains: senderDomains(email),
         subject: email.subject,
         bodyText: compactBody,
       });
-      validatedResult = toJson(validated);
+      validatedResult = asAiObservation(toJson(validated));
       const now = new Date().toISOString();
 
       const aiRunResult: Json = {
@@ -713,7 +715,7 @@ export async function processNylasMessage(input: {
           classification: extraction.event_type,
           structured_result: extractionJson,
           validated_result: validatedResult,
-          validation_status: validated.validation_status,
+          validation_status: 'review',
           validated_at: now,
           processed_at: now,
           processing_status: 'review',

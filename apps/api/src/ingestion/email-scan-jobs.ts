@@ -1,18 +1,11 @@
+import { processCommerceMessage as processSharedCommerceMessage } from '../pipeline/process-commerce-message.js';
 import { env } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
-import {
-  processNylasMessage,
-  type AutomaticPipelineResult,
-  type AutomationMode,
-} from '../pipeline/automatic-email-pipeline.js';
+import type { AutomationMode } from '../pipeline/automatic-email-pipeline.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from './automatic-targeted-recovery.js';
-import { guardNylasMessageWhenAiDisabled } from './deterministic-ai-off-fallback.js';
-import { preprocessDeterministicNylasMessage } from './deterministic-commerce-parser.js';
-import { preprocessDeterministicLifecycleNylasMessage } from './deterministic-lifecycle-parser.js';
 import { reconcileDeterministicLifecycleStatesForGrant } from './deterministic-lifecycle-state.js';
 import { processEmailForAuditBenchmark } from './email-audit-benchmark.js';
-import { preprocessLimoneOrderNylasMessage } from './limone-order-adapter.js';
 
 interface EmailScanJobRow {
   id: string;
@@ -75,18 +68,6 @@ function emptyScanResult(): InitialEmailScanResult {
     purchaseWrites: 0,
     shipmentWrites: 0,
     documentWrites: 0,
-  };
-}
-
-function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
-  return {
-    ok: true,
-    status: 'review',
-    ...(sourceEmailId ? { sourceEmailId } : {}),
-    purchaseWrites: 0,
-    shipmentWrites: 0,
-    documentWrites: 0,
-    aiCalls: 0,
   };
 }
 
@@ -365,45 +346,12 @@ export async function processEmailScanJob(
     const seenProviderMessageIds = new Set<string>();
 
     const processCommerceMessage = async (messageId: string, sourceQuery: string) => {
-      const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
+      const pipeline = await processSharedCommerceMessage({
         grantId: emailConnection.provider_account_id!,
         messageId,
+        sourceQuery,
+        mode: effectiveMode,
       });
-
-      let limoneMatched = false;
-      if (!lifecyclePreprocess.matched) {
-        const limonePreprocess = await preprocessLimoneOrderNylasMessage({
-          grantId: emailConnection.provider_account_id!,
-          messageId,
-        });
-        limoneMatched = limonePreprocess.matched;
-      }
-
-      let commerceMatched = false;
-      if (!lifecyclePreprocess.matched && !limoneMatched) {
-        const commercePreprocess = await preprocessDeterministicNylasMessage({
-          grantId: emailConnection.provider_account_id!,
-          messageId,
-        });
-        commerceMatched = commercePreprocess.matched;
-      }
-
-      const deterministicMatched = lifecyclePreprocess.matched || limoneMatched || commerceMatched;
-      const aiOffGuard = !deterministicMatched
-        ? await guardNylasMessageWhenAiDisabled({
-          grantId: emailConnection.provider_account_id!,
-          messageId,
-          sourceQuery,
-        })
-        : null;
-
-      const pipeline = aiOffGuard?.guarded
-        ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
-        : await processNylasMessage({
-          grantId: emailConnection.provider_account_id!,
-          messageId,
-          mode: effectiveMode,
-        });
 
       if (pipeline.sourceEmailId) observedSourceEmailIds.add(pipeline.sourceEmailId);
 
@@ -501,7 +449,9 @@ export async function processEmailScanJob(
     }
 
     if (scanJob.kind !== 'audit') {
-      await reconcileDeterministicLifecycleStatesForGrant(emailConnection.provider_account_id);
+      if (effectiveMode === 'write') {
+        await reconcileDeterministicLifecycleStatesForGrant(emailConnection.provider_account_id);
+      }
       await refreshScanOutcomeCounts(db, result, observedSourceEmailIds);
     }
 

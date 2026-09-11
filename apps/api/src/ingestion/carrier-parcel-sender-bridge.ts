@@ -1,10 +1,10 @@
+import { isTrustedAutomaticEvidence } from '../pipeline/automatic-write-gate.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { isCarrierSenderDomain } from '../validation/email-extraction-validator.js';
 import { normalizeCarrierSlug } from '../resolution/shipment-resolution.js';
 
 const WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const LOOKBACK_DAYS = 45;
-const TRUSTED_VALIDATION = new Set(['validated', 'guardrailed']);
 const MIN_VERIFIED_PURCHASE_CONFIDENCE = 0.95;
 
 type BridgeShipmentStatus = 'in_transit' | 'ready_for_pickup';
@@ -368,7 +368,7 @@ export async function reconcileCarrierParcelSenderBridgesForGrant(grantId: strin
     const validation = String(result.validation_status ?? source.validation_status ?? '');
     const confidence = numberOrNull(result.confidence);
     const eventType = result.event_type;
-    if (!TRUSTED_VALIDATION.has(validation) || confidence === null || confidence < 0.7 || (eventType !== 'shipment' && eventType !== 'delivery')) continue;
+    if (!isTrustedAutomaticEvidence(validation, result) || confidence === null || confidence < 0.7 || (eventType !== 'shipment' && eventType !== 'delivery')) continue;
     evidenceRows.push({
       sourceEmailId: String(source.id),
       userId: String(source.user_id),

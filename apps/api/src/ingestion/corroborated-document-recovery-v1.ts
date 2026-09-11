@@ -1,3 +1,4 @@
+import { automaticValidationStatus } from '../pipeline/automatic-write-gate.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
   resolveCorroboratedDocumentCandidates,
@@ -59,7 +60,7 @@ function numberOrNull(value: unknown): number | null {
 }
 
 function effectiveValidationStatus(row: SourceRow): string | null {
-  return stringOrNull(row.validated_result?.validation_status) ?? row.validation_status;
+  return automaticValidationStatus(row.validation_status, row.validated_result);
 }
 
 function toSource(row: SourceRow): CorroboratedDocumentSource | null {

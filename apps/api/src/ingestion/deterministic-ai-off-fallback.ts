@@ -49,8 +49,9 @@ export async function guardNylasMessageWhenAiDisabled(input: {
   grantId: string;
   messageId: string;
   sourceQuery?: string;
+  forceDisabled?: boolean;
 }): Promise<DeterministicAiOffFallbackResult> {
-  if (env.BUYFLOW_AI_ENABLED) {
+  if (env.BUYFLOW_AI_ENABLED && !input.forceDisabled) {
     return { guarded: false, reason: 'ai_enabled' };
   }
 

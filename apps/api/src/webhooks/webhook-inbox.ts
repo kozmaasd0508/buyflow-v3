@@ -1,17 +1,12 @@
-import { env, isLunaShadowConfigured } from '../config.js';
+import { processCommerceMessage } from '../pipeline/process-commerce-message.js';
+import { env } from '../config.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { enqueueAutomaticTargetedRecoveryForSource } from '../ingestion/automatic-targeted-recovery.js';
-import { guardNylasMessageWhenAiDisabled } from '../ingestion/deterministic-ai-off-fallback.js';
-import { preprocessDeterministicNylasMessage } from '../ingestion/deterministic-commerce-parser.js';
-import { preprocessDeterministicLifecycleNylasMessage } from '../ingestion/deterministic-lifecycle-parser.js';
 import { reconcileDeterministicLifecycleStatesForGrant } from '../ingestion/deterministic-lifecycle-state.js';
-import { preprocessGenericLifecycleNylasMessage } from '../ingestion/generic-lifecycle-preprocessor.js';
-import { preprocessLimoneOrderNylasMessage } from '../ingestion/limone-order-adapter.js';
-import {
-  processNylasMessage,
-  type AutomaticPipelineResult,
-  type AutomationMode,
+import type {
+  AutomaticPipelineResult,
+  AutomationMode,
 } from '../pipeline/automatic-email-pipeline.js';
 import { emitProductionShadowEmailObservation } from '../protocols/production-shadow.js';
 
@@ -53,18 +48,6 @@ async function observeProtocolProductionShadow(input: {
     // privacy-reduced error class is logged; message/grant IDs are omitted.
     console.warn('[protocol-production-shadow-error]', safeErrorCode(error));
   }
-}
-
-function guardedReviewPipeline(sourceEmailId?: string): AutomaticPipelineResult {
-  return {
-    ok: true,
-    status: 'review',
-    ...(sourceEmailId ? { sourceEmailId } : {}),
-    purchaseWrites: 0,
-    shipmentWrites: 0,
-    documentWrites: 0,
-    aiCalls: 0,
-  };
 }
 
 export async function enqueueNylasMessageEvent(input: {
@@ -156,60 +139,16 @@ export async function processWebhookInboxEvent(
       messageId: event.provider_message_id,
     });
 
-    const lifecyclePreprocess = await preprocessDeterministicLifecycleNylasMessage({
+    const pipeline = await processCommerceMessage({
       grantId: event.grant_id,
       messageId: event.provider_message_id,
+      sourceQuery: 'webhook:message.created',
+      mode,
     });
 
-    let limoneMatched = false;
-    if (!lifecyclePreprocess.matched) {
-      const limonePreprocess = await preprocessLimoneOrderNylasMessage({
-        grantId: event.grant_id,
-        messageId: event.provider_message_id,
-      });
-      limoneMatched = limonePreprocess.matched;
+    if (mode === 'write') {
+      await reconcileDeterministicLifecycleStatesForGrant(event.grant_id);
     }
-
-    let commerceMatched = false;
-    if (!lifecyclePreprocess.matched && !limoneMatched) {
-      const commercePreprocess = await preprocessDeterministicNylasMessage({
-        grantId: event.grant_id,
-        messageId: event.provider_message_id,
-      });
-      commerceMatched = commercePreprocess.matched;
-    }
-
-    let genericLifecycleMatched = false;
-    if (!lifecyclePreprocess.matched && !limoneMatched && !commerceMatched) {
-      const genericLifecyclePreprocess = await preprocessGenericLifecycleNylasMessage({
-        grantId: event.grant_id,
-        messageId: event.provider_message_id,
-      });
-      genericLifecycleMatched = genericLifecyclePreprocess.matched;
-    }
-
-    const deterministicMatched = lifecyclePreprocess.matched
-      || limoneMatched
-      || commerceMatched
-      || genericLifecycleMatched;
-    const lunaShadow = !deterministicMatched && isLunaShadowConfigured();
-    const aiOffGuard = !deterministicMatched && !lunaShadow
-      ? await guardNylasMessageWhenAiDisabled({
-        grantId: event.grant_id,
-        messageId: event.provider_message_id,
-        sourceQuery: 'webhook:message.created',
-      })
-      : null;
-
-    const pipeline = aiOffGuard?.guarded
-      ? guardedReviewPipeline(aiOffGuard.sourceEmailId)
-      : await processNylasMessage({
-        grantId: event.grant_id,
-        messageId: event.provider_message_id,
-        mode: lunaShadow ? 'observe' : mode,
-      });
-
-    await reconcileDeterministicLifecycleStatesForGrant(event.grant_id);
 
     if (pipeline.status === 'unlinked' && pipeline.sourceEmailId) {
       await enqueueAutomaticTargetedRecoveryForSource(pipeline.sourceEmailId);

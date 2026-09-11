@@ -28,7 +28,7 @@ function auditResult(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test('materializes trusted audit evidence without requesting new AI work', () => {
+test('materializes audit observations in review without granting write authority', () => {
   const materialized = materializeAuditBackfill({
     aiEventType: 'shipment',
     aiValidationStatus: 'validated',
@@ -38,7 +38,10 @@ test('materializes trusted audit evidence without requesting new AI work', () =>
 
   assert.ok(materialized);
   assert.equal(materialized.classification, 'shipment');
-  assert.equal(materialized.initialStatus, 'pending');
+  assert.equal(materialized.initialStatus, 'review');
+  assert.equal(materialized.validationStatus, 'review');
+  assert.equal(materialized.validatedResult.shadow_only, true);
+  assert.equal(materialized.validatedResult.would_write, false);
   assert.equal(materialized.structuredResult.schema_version, 2);
   assert.equal(materialized.validatedResult.schema_version, 2);
 });

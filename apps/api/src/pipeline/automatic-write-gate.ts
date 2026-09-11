@@ -36,23 +36,49 @@ export function isShadowOnlyParserVersion(value: unknown): boolean {
   );
 }
 
+// Old AI V2 rows have original_event_type but no deterministic provenance.
+// Fail closed for these rows too: an old observation must not gain authority
+// merely because it predates the durable shadow marker.
+export function isObservationOnlyEvidence(result: Record<string, unknown> | null): boolean {
+  return Boolean(result && (
+    result.shadow_only === true
+    || result.would_write === false
+    || result.extraction_source === 'ai'
+    || result.extraction_source === 'ai_shadow'
+    || isShadowOnlyParserVersion(result.parser_version)
+    || (typeof result.original_event_type === 'string'
+      && !result.parser_version && !result.extraction_source)
+  ));
+}
+
+export function automaticValidationStatus(
+  validationStatus: unknown,
+  result: Record<string, unknown> | null,
+): string | null {
+  if (isObservationOnlyEvidence(result)) return 'review';
+  return typeof result?.validation_status === 'string'
+    ? result.validation_status
+    : typeof validationStatus === 'string' ? validationStatus : null;
+}
+
+export function asAiObservation<T extends Record<string, unknown>>(result: T) {
+  return {
+    ...result,
+    extraction_source: 'ai_shadow',
+    shadow_only: true,
+    would_write: false,
+    semantic_validation_status: result.validation_status ?? null,
+    validation_status: 'review',
+    eligible_for_purchase_creation: false,
+  };
+}
+
 export function isTrustedAutomaticEvidence(
   validationStatus: unknown,
   validatedResult: Record<string, unknown> | null,
 ): boolean {
-  if (isShadowOnlyParserVersion(validatedResult?.parser_version)) {
-    return false;
-  }
-
-  const nestedStatus = validatedResult?.validation_status;
-  const effectiveStatus =
-    typeof nestedStatus === 'string'
-      ? nestedStatus
-      : typeof validationStatus === 'string'
-        ? validationStatus
-        : null;
-
-  return effectiveStatus !== null && TRUSTED_VALIDATION_STATUSES.has(effectiveStatus);
+  const status = automaticValidationStatus(validationStatus, validatedResult);
+  return status !== null && TRUSTED_VALIDATION_STATUSES.has(status);
 }
 
 export function canAutomaticallyWritePurchase(
