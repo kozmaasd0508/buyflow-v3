@@ -1,3 +1,4 @@
+import { asAiObservation } from '../pipeline/automatic-write-gate.js';
 export type AuditBackfillEventType =
   | 'order_created'
   | 'order_updated'
@@ -78,7 +79,7 @@ export function materializeAuditBackfill(
   }
 
   const classification = input.aiEventType as AuditBackfillEventType;
-  const validationStatus = input.aiValidationStatus as AuditBackfillValidationStatus;
+  const validationStatus: AuditBackfillValidationStatus = 'review';
   const initialStatus = classification === 'other'
     ? 'ignored'
     : validationStatus === 'review'
@@ -88,14 +89,8 @@ export function materializeAuditBackfill(
   return {
     classification,
     validationStatus,
-    structuredResult: {
-      ...extraction,
-      schema_version: 2,
-    },
-    validatedResult: {
-      ...validated,
-      schema_version: 2,
-    },
+    structuredResult: asAiObservation({ ...extraction, schema_version: 2 }),
+    validatedResult: asAiObservation({ ...validated, schema_version: 2 }),
     initialStatus,
   };
 }

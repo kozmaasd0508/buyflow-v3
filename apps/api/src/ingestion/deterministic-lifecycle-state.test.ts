@@ -50,3 +50,37 @@ test('order progress never overwrites payment failure or physical and terminal p
 test('newer shipment evidence wins over older order packing', () => {
   assert.deepEqual(decideLifecyclePurchasePatch({ ...base, lifecycleEvent: 'order_packing', currentState: 'processing', hasShipment: true, latestShipmentStatus: 'in_transit', latestShipmentEventAt: '2026-08-11T10:00:00.000Z' }), { current_state: 'in_transit' });
 });
+
+// Exercise the production evidence loader, including pages beyond the former cap.
+test('lifecycle loading reaches newer evidence beyond 200 rows and orders timestamp ties by id', async () => {
+  const { loadLifecycleSources } = await import('./deterministic-lifecycle-state.js');
+  const rows = Array.from({ length: 405 }, (_, index) => ({ id: String(index).padStart(4, '0'), received_at: '2026-09-11T10:00:00Z' }));
+  const ranges: number[][] = [];
+  const orders: string[] = [];
+  const db = { from() {
+    const query: any = {
+      select() { return query; }, eq() { return query; }, in() { return query; },
+      order(column: string) { orders.push(column); return query; },
+      async range(start: number, end: number) { ranges.push([start, end]); return { data: rows.slice(start, end + 1), error: null }; },
+    };
+    return query;
+  } };
+  const loaded = await loadLifecycleSources(db, 'user-1');
+  assert.deepEqual(loaded, rows);
+  assert.deepEqual(ranges, [[0, 199], [200, 399], [400, 599]]);
+  assert.deepEqual(orders, ['received_at', 'id', 'received_at', 'id', 'received_at', 'id']);
+});
+
+test('lifecycle loading propagates a later page failure instead of reporting partial success', async () => {
+  const { loadLifecycleSources } = await import('./deterministic-lifecycle-state.js');
+  const db = { from() {
+    const query: any = {
+      select() { return query; }, eq() { return query; }, in() { return query; }, order() { return query; },
+      async range(start: number) { return start === 0
+        ? { data: Array.from({ length: 200 }, (_, id) => ({ id })), error: null }
+        : { data: null, error: { message: 'synthetic page failure' } }; },
+    };
+    return query;
+  } };
+  await assert.rejects(loadLifecycleSources(db, 'user-1'), /synthetic page failure/);
+});

@@ -1,3 +1,4 @@
+import { automaticValidationStatus } from '../pipeline/automatic-write-gate.js';
 import { createHash } from 'node:crypto';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import {
@@ -74,7 +75,7 @@ function eventTypeOrNull(value: unknown): InvoiceAnchorEventType | null {
 }
 
 function effectiveValidationStatus(source: SourceRow): string | null {
-  return stringOrNull(source.validated_result?.validation_status) ?? source.validation_status;
+  return automaticValidationStatus(source.validation_status, source.validated_result);
 }
 
 function toEvidence(source: SourceRow): InvoiceAnchorEvidence | null {

@@ -1,3 +1,4 @@
+import { automaticValidationStatus } from '../pipeline/automatic-write-gate.js';
 import { createHash } from 'node:crypto';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 
@@ -136,7 +137,7 @@ function withinDays(a: string, b: string, days: number): boolean {
 }
 
 function effectiveValidation(source: SourceRow): string | null {
-  return stringOrNull(source.validated_result?.validation_status) ?? source.validation_status;
+  return automaticValidationStatus(source.validation_status, source.validated_result);
 }
 
 function toEvidence(source: SourceRow): AlzaRecoveryEvidence | null {

@@ -1,3 +1,4 @@
+import { automaticValidationStatus } from '../pipeline/automatic-write-gate.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 import {
@@ -94,7 +95,7 @@ function eventTypeOrNull(value: unknown): HistoricalReconstructionEventType | nu
 }
 
 function effectiveValidationStatus(source: SourceRow): string | null {
-  return stringOrNull(source.validated_result?.validation_status) ?? source.validation_status;
+  return automaticValidationStatus(source.validation_status, source.validated_result);
 }
 
 function toEvidence(source: SourceRow): HistoricalReconstructionEvidence | null {
