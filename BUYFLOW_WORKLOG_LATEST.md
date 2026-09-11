@@ -9,4 +9,4 @@
 - Deterministic lifecycle evidence is paginated in stable received_at/id order instead of stopping at the oldest 200 rows. Webhook/scan callers only run lifecycle writes in write mode.
 - Validation: 794/794 offline API tests PASS; API typecheck and API/mobile build PASS. Added persisted/replayed AI authority, mixed deterministic evidence, ingestion route parity, AI-off and >200-row pagination regressions.
 - No live customer mail read, database mutation, migration, protocol activation, or model/prompt change. Runtime accuracy on real mail remains unproven by these regression tests.
-- Release pending: PR CI, merge, exact main CI and exact Render smoke. Do not claim deployed until those gates pass.
+- Released in PR #320, merge `464f00cd5d0c1a23de3169d1aecbcb2a3a04fdd5`. PR CI #34631655269 and main CI #34631830995 SUCCESS; exact Render Webhook Smoke #34631908053 SUCCESS (2026-09-11).
