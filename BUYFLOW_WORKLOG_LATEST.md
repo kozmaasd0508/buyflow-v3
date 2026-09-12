@@ -1,12 +1,12 @@
-# BuyFlow V3 — latest recovery worklog
+# BuyFlow — latest worklog entry
 
-## 2026-09-11 — Durable AI observation isolation and ingestion parity
+## 2026-09-12 — Audit repair 1: identity conflicts and document access
 
-- Based on main `0ad651b06557d46c4f97d03b651149c551387479` (PR #318).
-- Review found that Luna observe mode was per invocation only: stored validated AI results could later enter a write reconciliation. New AI and audit-backfill results now persist review status, AI provenance, `shadow_only=true`, `would_write=false`, and preserve semantic validation separately.
-- The common authority gate also excludes legacy AI V2 rows identified by `original_event_type` without parser/extraction provenance. Secondary recovery readers and the carrier bridge use the same policy. Existing purchases are not deleted or repaired by this change.
-- Webhooks, initial scans and targeted scans share deterministic parser order, generic lifecycle fallback and Luna observation handling. AI-off fallback rows can be analyzed once when shadow is configured; repeat AI results are reused. The legacy AI-enabled flag cannot bypass the shared shadow kill switch.
-- Deterministic lifecycle evidence is paginated in stable received_at/id order instead of stopping at the oldest 200 rows. Webhook/scan callers only run lifecycle writes in write mode.
-- Validation: 794/794 offline API tests PASS; API typecheck and API/mobile build PASS. Added persisted/replayed AI authority, mixed deterministic evidence, ingestion route parity, AI-off and >200-row pagination regressions.
-- No live customer mail read, database mutation, migration, protocol activation, or model/prompt change. Runtime accuracy on real mail remains unproven by these regression tests.
-- Released in PR #320, merge `464f00cd5d0c1a23de3169d1aecbcb2a3a04fdd5`. PR CI #34631655269 and main CI #34631830995 SUCCESS; exact Render Webhook Smoke #34631908053 SUCCESS (2026-09-11).
+- Baseline main: `766a23794406feea0dd60b7902eda5699cb3709e`; branch `fix/audit-identity-document-security`.
+- Exact order/tracking/thread identities now veto conflicting automatic links even when soft evidence creates a large score gap. Contradictory candidates return REVIEW with no selected Purchase; consistent identities still link.
+- Private attachment signing requires the fixed documents bucket and the authenticated user's canonical attachment path. Stored attachment external URLs cannot bypass this check.
+- Migration removes direct client writes to nine commerce/evidence tables while preserving existing reads/RLS and backend privileges. It verifies effective table and column privileges and aborts if unsafe grants remain.
+- Added isolated PostgreSQL CI coverage: execute denied client INSERT/UPDATE/DELETE and preserved backend writes. The connected staging project uses a different schema and is not modified.
+- Local API tests: 801/801 PASS. API/mobile build and PR/database CI are release gates; production migration and exact Render verification must be checked separately.
+- No historical data repair, AI/model change, protocol activation, SES activation or frontend change in this batch.
+- Next: complete this release, then recoverable processing leases, SES readiness, unified UI status/pagination/multi-account search, and MailLens integration with real-mail E2E evaluation.

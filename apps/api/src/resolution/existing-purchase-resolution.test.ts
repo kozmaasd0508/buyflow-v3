@@ -131,3 +131,57 @@ test('purchase matching is isolated per user', () => {
   assert.equal(result.decision, 'unmatched');
   assert.equal(result.purchaseId, null);
 });
+
+test('order A and tracking B stay in review even when soft evidence strongly favours A', () => {
+  const result = resolveExistingPurchase(evidence({
+    senderDomain: 'shop.example.com', merchant: 'Example Shop', total: 9560, currency: 'HUF',
+    trackingNumber: 'TRACK-B',
+  }), [purchase(), purchase({purchaseId:'purchase-2', orderNumber:'ORDER-222222',
+    merchantDomain:'other.example', merchantName:'Other Shop', totalAmount:20000})],
+  [{purchaseId:'purchase-2', userId:'user-1', trackingNumber:'TRACK-B'}]);
+  assert.equal(result.decision, 'review');
+  assert.equal(result.purchaseId, null);
+  assert.ok(result.score - result.runnerUpScore >= 30);
+  assert.ok(result.reasons.includes('conflicting_purchase_identifiers'));
+});
+
+test('tracking and linked thread cannot vote for different purchases', () => {
+  const result = resolveExistingPurchase(evidence({orderNumber:null,trackingNumber:'TRACK',providerThreadId:'THREAD',
+    senderDomain:'shop.example.com',merchant:'Example Shop',total:9560,currency:'HUF'}),
+  [purchase(),purchase({purchaseId:'purchase-2',orderNumber:'OTHER',merchantDomain:'other.example',merchantName:null})],
+  [{purchaseId:'purchase-1',userId:'user-1',trackingNumber:'TRACK'}],
+  [{purchaseId:'purchase-2',userId:'user-1',providerThreadId:'THREAD'}]);
+  assert.equal(result.decision,'review');
+  assert.equal(result.purchaseId,null);
+});
+
+test('a known tracking cannot override a contradictory order that has no candidate yet', () => {
+  const result=resolveExistingPurchase(evidence({orderNumber:'NEW-999999',trackingNumber:'TRACK'}),[purchase()],
+    [{purchaseId:'purchase-1',userId:'user-1',trackingNumber:'TRACK'}]);
+  assert.equal(result.decision,'review');
+  assert.equal(result.purchaseId,null);
+});
+
+test('a thread linked to multiple purchases remains review despite a large score gap', () => {
+  const result=resolveExistingPurchase(evidence({orderNumber:null,providerThreadId:'THREAD',
+    senderDomain:'shop.example.com',merchant:'Example Shop',total:9560,currency:'HUF'}),
+  [purchase(),purchase({purchaseId:'purchase-2',merchantDomain:'other.example',merchantName:null,totalAmount:null})],[],
+  ['purchase-1','purchase-2'].map(purchaseId=>({purchaseId,userId:'user-1',providerThreadId:'THREAD'})));
+  assert.equal(result.decision,'review');
+  assert.equal(result.purchaseId,null);
+});
+
+test('consistent order, tracking and thread still link; other user identities are ignored', () => {
+  const result=resolveExistingPurchase(evidence({trackingNumber:'TRACK',providerThreadId:'THREAD'}),[purchase()],
+  [{purchaseId:'purchase-1',userId:'user-1',trackingNumber:'TRACK'},
+    {purchaseId:'foreign',userId:'user-2',trackingNumber:'TRACK'}],
+  [{purchaseId:'purchase-1',userId:'user-1',providerThreadId:'THREAD'},
+    {purchaseId:'foreign',userId:'user-2',providerThreadId:'THREAD'}]);
+  assert.equal(result.decision,'linkable');
+  assert.equal(result.purchaseId,'purchase-1');
+});
+
+test('an unseen tracking is not a conflict with an exact order', () => {
+  const result=resolveExistingPurchase(evidence({trackingNumber:'NEW-TRACK'}),[purchase()]);
+  assert.equal(result.decision,'linkable');
+});
