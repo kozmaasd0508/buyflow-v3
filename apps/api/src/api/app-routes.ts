@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { resolveAuthenticatedApiUser } from './auth.js';
 import {
   DOCUMENT_SIGNED_URL_TTL_SECONDS,
-  isPrivateStoredPdf,
+  canSignStoredPdf,
 } from './document-access.js';
 import { applyUserProductOverrides, loadUserProductOverrideRuns } from './product-user-overrides.js';
 
@@ -244,7 +244,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
     }
 
     const documents = await Promise.all((documentResult.data ?? []).map(async (row: any) => {
-      if (row.external_url) return row;
+      if (row.source_type !== 'email_attachment') return row;
 
       const access = {
         sourceType: row.source_type as string | null,
@@ -252,7 +252,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
         storageBucket: row.storage_bucket as string | null,
         storagePath: row.storage_path as string | null,
       };
-      if (!isPrivateStoredPdf(access)) return row;
+      if (!canSignStoredPdf(access, user.id)) return { ...row, external_url: null };
 
       const { data: signed, error: signedError } = await supabase.storage
         .from(access.storageBucket!)
@@ -260,7 +260,7 @@ export async function registerAppApiRoutes(app: FastifyInstance) {
 
       if (signedError || !signed?.signedUrl) {
         request.log.warn({ errorType: 'DocumentSignedUrlError', documentId: row.id }, 'Private document signed URL could not be created');
-        return row;
+        return { ...row, external_url: null };
       }
 
       return {

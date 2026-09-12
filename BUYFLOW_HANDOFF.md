@@ -1,6 +1,6 @@
 # BuyFlow V3 — current handoff
 
-Updated: 2026-09-11. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
+Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
 
 ## Verified runtime release
 
@@ -41,6 +41,12 @@ Updated: 2026-09-11. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 - Historical matching decisions and existing AI-derived purchases need a separate read-only audit before proposing data repair.
 - Root handoff previously described an August release as current; main code and GitHub CI are stronger evidence.
 
+## Audit repair in progress
+
+- Branch `fix/audit-identity-document-security`: hard identity-conflict REVIEW, owner-scoped private attachment signing, and migration restricting client commerce writes.
+- Local 801 API tests pass; migration includes effective-privilege assertions and a disposable PostgreSQL CI test. See newest worklog and GitHub checks for release status. Do not assume the migration is live from this file alone.
+- No frontend, AI/model, SES activation or historical data changes in this batch.
+
 ## Next action
 
-Evaluate the actual runtime end-to-end on a frozen real-mail set, including duplicate/out-of-order deliveries and correct final UI state; do not substitute a standalone model benchmark.
+Finish the audit-repair PR/CI release and apply/verify the reviewed permission migration. Then address processing leases, SES schema/runtime readiness, UI status/pagination/multi-account recovery and MailLens integration. Validate the final email-to-UI flow on a frozen real-mail set; a standalone model benchmark is insufficient.

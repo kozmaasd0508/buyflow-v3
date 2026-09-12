@@ -19,3 +19,15 @@ export function isPrivateStoredPdf(document: StoredDocumentAccess): boolean {
     && Boolean(document.storageBucket?.trim())
     && Boolean(document.storagePath?.trim());
 }
+
+// The attachment writer uses user UUID / source UUID / SHA-256 prefix.pdf.
+// Never sign an arbitrary path just because the document row is user-owned.
+export function canSignStoredPdf(document: StoredDocumentAccess, userId: string): boolean {
+  if (!isPrivateStoredPdf(document) || !UUID_PATTERN.test(userId)
+    || document.storageBucket !== 'buyflow-purchase-documents') return false;
+  const parts = document.storagePath?.split('/') ?? [];
+  return parts.length === 3
+    && parts[0] === userId
+    && UUID_PATTERN.test(parts[1] ?? '')
+    && /^[a-f0-9]{40}\.pdf$/.test(parts[2] ?? '');
+}

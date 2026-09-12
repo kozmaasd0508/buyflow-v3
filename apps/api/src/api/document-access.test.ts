@@ -38,3 +38,20 @@ test('only private stored PDF attachments are signable', () => {
 test('signed document URLs are intentionally short lived', () => {
   assert.equal(DOCUMENT_SIGNED_URL_TTL_SECONDS, 60);
 });
+
+test('signing requires the fixed bucket and canonical path under the authenticated owner', async () => {
+  const { canSignStoredPdf } = await import('./document-access.js');
+  const user='52f22f74-460b-4cbe-a975-caedb25b6463';
+  const source='62f22f74-460b-4cbe-a975-caedb25b6463';
+  const file='a'.repeat(40)+'.pdf';
+  const document={sourceType:'email_attachment',mimeType:'application/pdf',
+    storageBucket:'buyflow-purchase-documents',storagePath:`${user}/${source}/${file}`};
+  assert.equal(canSignStoredPdf(document,user),true);
+  assert.equal(canSignStoredPdf(document,source),false);
+  assert.equal(canSignStoredPdf({...document,storageBucket:'other-private-bucket'},user),false);
+  for(const path of [`${user}/../${file}`,`${user}/${source}/../../${file}`,
+    `${user}/${source}/%2e%2e%2ffile.pdf`,`${user}suffix/${source}/${file}`,
+    `${user}\\${source}\\${file}`,`/${user}/${source}/${file}`,`${document.storagePath}?download=1`]) {
+    assert.equal(canSignStoredPdf({...document,storagePath:path},user),false,path);
+  }
+});

@@ -182,6 +182,34 @@ export function resolveExistingPurchase(
     };
   }
 
+  // Exact identities are constraints, not votes. Soft merchant/amount/date
+  // points must never outweigh an identifier already linked to another order.
+  const orderPurchaseIds = new Set(ownPurchases
+    .filter((purchase) => order && normalizeIdentifier(purchase.orderNumber) === order)
+    .map((purchase) => purchase.purchaseId));
+  const identityPurchaseIds = new Set([
+    ...orderPurchaseIds, ...trackingPurchaseIds, ...threadPurchaseIds,
+  ]);
+  const linkedIdentityOrderConflict = Boolean(order && ownPurchases.some((purchase) =>
+    (trackingPurchaseIds.has(purchase.purchaseId) || threadPurchaseIds.has(purchase.purchaseId))
+      && normalizeIdentifier(purchase.orderNumber)
+      && normalizeIdentifier(purchase.orderNumber) !== order,
+  ));
+  if (identityPurchaseIds.size > 1 || linkedIdentityOrderConflict
+    || (identityPurchaseIds.size === 1 && !identityPurchaseIds.has(best.purchase.purchaseId))) {
+    const closeScores = runnerUpScore > 0 && best.score >= 80 && best.score - runnerUpScore < 30;
+    return {
+      sourceEmailId: evidence.sourceEmailId,
+      userId: evidence.userId,
+      purchaseId: null,
+      decision: 'review',
+      score: best.score,
+      runnerUpScore,
+      reasons: [...best.reasons, 'conflicting_purchase_identifiers',
+        ...(closeScores ? ['top_candidates_too_close'] : [])],
+    };
+  }
+
   const strongAnchor = best.reasons.some((reason) =>
     reason === 'exact_tracking_match' ||
     reason === 'linked_email_thread_match' ||
