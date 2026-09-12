@@ -5,8 +5,9 @@ Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 ## Verified runtime release
 
 - Repository: kozmaasd0508/buyflow-v3.
-- Previous baseline: `0ad651b06557d46c4f97d03b651149c551387479` (PR #318: reset, two-day initial scan, targeted lifecycle recovery).
-- Released in PR #320, merge `464f00cd5d0c1a23de3169d1aecbcb2a3a04fdd5`. PR CI #34631655269 and main CI #34631830995 SUCCESS; exact Render Webhook Smoke #34631908053 SUCCESS (2026-09-11). Later documentation-only commits may have a different SHA; check current main before acting.
+- Latest runtime: PR #322, merge `253de7f93fa45c08f48911d75a0fc77c64e5e8bd` (2026-09-12). PR CI #34712428424, main CI #34712496392 and exact Render smoke #34712535387 SUCCESS. Later documentation-only commits may change SHA; always check current main.
+- Production permission migration applied and verified: nine commerce/evidence tables reject client writes; backend access and RLS preserved.
+- Previous runtime PR #320 introduced durable AI observation isolation, common ingestion and lifecycle pagination.
 - Preview: https://buyflow-v3-api-dev.onrender.com/app/ ; health: /health.
 
 ## Architecture and actual runtime
@@ -31,22 +32,23 @@ Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 - Ambiguous identity matches stay REVIEW. No guessed order/tracking/merchant relationships.
 - Generic parser families and AI observations cannot gain write authority from confidence or subsequent processing.
 - Shipment label/pre-advice, ready-for-pickup and actual delivery remain distinct.
-- No protocol activation, model/prompt change or DDL in this release.
+- No protocol activation or model/prompt change. Audit repair 1 adds the reviewed permission migration.
 
 ## Verification and limits
 
-- Local and PR verification: 794/794 API tests, API typecheck, API/mobile build PASS.
+- Local and PR verification: 801/801 API tests, API typecheck, API/mobile build PASS.
 - Regressions cover persisted/repeated AI observations, deterministic-only source linking, shared ingestion/AI-off policy and pagination beyond 200 rows.
 - Tests use synthetic data and mocked providers/database boundaries. No real-mail E2E accuracy or live database integrity certification is claimed.
 - Historical matching decisions and existing AI-derived purchases need a separate read-only audit before proposing data repair.
 - Root handoff previously described an August release as current; main code and GitHub CI are stronger evidence.
 
-## Audit repair in progress
+## Released audit repair 1
 
-- Branch `fix/audit-identity-document-security`: hard identity-conflict REVIEW, owner-scoped private attachment signing, and migration restricting client commerce writes.
-- Local 801 API tests pass; migration includes effective-privilege assertions and a disposable PostgreSQL CI test. See newest worklog and GitHub checks for release status. Do not assume the migration is live from this file alone.
-- No frontend, AI/model, SES activation or historical data changes in this batch.
+- Conflicting exact order/tracking/thread identities now return REVIEW with no selected Purchase, even when merchant/amount/date scores favour one candidate.
+- Private PDF signing requires the fixed bucket and authenticated owner's canonical attachment path; stored attachment URLs cannot bypass this gate.
+- Client commerce writes revoked on nine tables. Effective grant assertions and disposable PostgreSQL CI regression protect this boundary; product edits continue through the authenticated API override route.
+- 801 API tests, API/mobile build, PR/main CI, exact Render smoke and live DB grants verified. No historical data repair, frontend, AI/model or SES activation changes.
 
 ## Next action
 
-Finish the audit-repair PR/CI release and apply/verify the reviewed permission migration. Then address processing leases, SES schema/runtime readiness, UI status/pagination/multi-account recovery and MailLens integration. Validate the final email-to-UI flow on a frozen real-mail set; a standalone model benchmark is insufficient.
+Continue the authorized audit repair: recoverable source-processing leases and explicit external-call timeouts; SES schema/runtime readiness; unified UI status, pagination and multi-account recovery; MailLens normalization and runtime integration. Preserve existing AI observation-only authority. Validate email-to-UI behavior on a frozen real-mail set; standalone benchmarks are insufficient. Full authenticated browser E2E and real-mail accuracy remain unverified.
