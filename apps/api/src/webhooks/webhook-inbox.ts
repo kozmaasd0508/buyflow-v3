@@ -183,6 +183,9 @@ export async function drainWebhookInbox(
   const now = new Date().toISOString();
   const staleCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
 
+  const { error: recoveryError } = await db.rpc('requeue_stale_source_extractions');
+  if (recoveryError) throw new Error(`Source extraction recovery failed: ${recoveryError.message}`);
+
   const { data, error } = await db
     .from('webhook_inbox')
     .select('id,status,next_attempt_at,locked_at')

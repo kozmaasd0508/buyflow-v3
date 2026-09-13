@@ -1,11 +1,8 @@
 # BuyFlow — latest worklog entry
 
-## 2026-09-13 — Deterministic authored-evidence boundary (in progress)
+## 2026-09-13 — Source recovery integrated with MailLens (PR #325)
 
-- Continues `fix/maillens-semantic-evidence` after `d4d79da02e0dfd4997972d6503352a8370f14bed`.
-- Reproduced an AI-independent write-authority bug: quoted Limone confirmation becomes order_created, and the existing validator marks it eligible_for_purchase_creation with non-review status. Also reproduced hidden historical cancellation becoming a lifecycle event.
-- Shared deterministic evidence boundary now feeds lifecycle, commerce, Limone, GLS, Express One terminal receipt, generic lifecycle, provider-neutral inbound and Foxpost repair. It excludes known hidden/quoted subtrees and inherited reply subjects; empty/truncated current text cannot establish automatic parser authority.
-- Preserved existing URL marker format for product parsers. Added Hungarian/Outlook quote boundaries and excluded document titles. Raw subjects/bodies remain unchanged for source storage; normalization metadata accompanies recognized results.
-- Verification: 820 offline API tests PASS, API/mobile build PASS. Focused decision regression confirms old quoted-order automatic eligibility and its rejection after repair; genuine order, product quantity/URL and current cancellation still parse. No paid AI calls or customer data changes.
-- GitHub PR creation remains blocked by connector internal error. No production deployment, migration or historical data repair. Existing stored decisions need a separate read-only audit; this change does not rewrite them. Full CSS rendering, unrecognized quote formats and real-mail accuracy remain limitations.
+- PR #324 merged as `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`; PR CI #34760802949 passed. Main CI #34760844420 and exact Render smoke #34760881629 passed; MailLens repair is live.
+- PR #325 source recovery passed PostgreSQL 17 CI #34760752051 before integration. Branch now merges current main and preserves MailLens authored evidence/diagnostics inside the fenced extraction transaction.
+- Combined 821 local API tests and API/mobile build PASS; refreshed PR CI remains the next gate. Production migration remains unapplied until those gates are verified. No historical customer data repair.
 

@@ -62,3 +62,11 @@ jobs:
           PGPASSWORD: ci-only-password
           PGDATABASE: buyflow_permissions_test
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/client-commerce-grants.sql
+      - name: Verify extraction crash recovery and stale worker fencing
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: ci-only-password
+          PGDATABASE: buyflow_permissions_test
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/source-extraction-leases.sql

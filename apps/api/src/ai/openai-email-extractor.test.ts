@@ -48,6 +48,8 @@ test('preserves explicit product links while compacting order HTML', () => {
 test('requests strict V2 structured output with purchased products', async () => {
   let requestBody: Record<string, unknown> | undefined;
   const fakeFetch = async (_url: string | URL | Request, init?: RequestInit) => {
+    assert.ok(init?.signal instanceof AbortSignal);
+    assert.equal(init.signal.aborted, false);
     requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return new Response(
       JSON.stringify({

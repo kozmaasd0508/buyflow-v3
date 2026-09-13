@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { extractMailLensObservation } from '../ai/mail-lens-observation.js';
 import type { Json } from '../db/database.types.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
@@ -623,7 +624,7 @@ export async function processNylasMessage(input: {
   const reextractV2 = shouldReextractWithV2(validatedResult) || Boolean(
     input.allowAiObservation && validatedResult?.parser_version === 'deterministic-ai-off-fallback-v1'
   );
-  const needsExtraction = !validatedResult || reextractV2;
+  const needsExtraction = sourceStatus === 'processing' || !validatedResult || reextractV2;
 
   if (needsExtraction) {
     const filter = filterCommerceEmail(email);
@@ -635,19 +636,17 @@ export async function processNylasMessage(input: {
       return { ok: true, status: sourceStatus === 'processed' ? 'processed' : 'review', sourceEmailId: sourceId, purchaseWrites: 0, shipmentWrites: 0, documentWrites: 0, aiCalls: 0 };
     }
 
-    const claimQuery = db
-      .from('source_emails')
-      .update({ processing_status: 'processing' })
-      .eq('id', sourceId);
-    const { data: claim, error: claimError } = reextractV2
-      ? await claimQuery.eq('processing_status', sourceStatus).select('id').maybeSingle()
-      : await claimQuery.in('processing_status', ['pending', 'error']).select('id').maybeSingle();
+    // Configuration errors must not leave a source claimed forever.
+    const openai = requireOpenAIConfig();
+    const claimToken = randomUUID();
+    const { data: claim, error: claimError } = await db.rpc('claim_source_extraction', {
+      p_id: sourceId, p_expected_status: sourceStatus, p_claim: claimToken,
+    });
     if (claimError) throw new Error(`Failed to claim webhook source email: ${claimError.message}`);
-    if (!claim) {
-      return { ok: true, status: 'already_processing', sourceEmailId: sourceId, purchaseWrites: 0, shipmentWrites: 0, documentWrites: 0, aiCalls: 0 };
+    if (claim !== true) {
+      return { ok: false, status: 'already_processing', sourceEmailId: sourceId, purchaseWrites: 0, shipmentWrites: 0, documentWrites: 0, aiCalls: 0 };
     }
 
-    const openai = requireOpenAIConfig();
     try {
       const { result, evidence } = await extractMailLensObservation({
         email, apiKey: openai.apiKey, model: openai.model,
@@ -662,8 +661,6 @@ export async function processNylasMessage(input: {
         bodyText: evidence.bodyText,
       });
       validatedResult = asAiObservation({ ...toJson(validated), normalization: evidence.normalization });
-      const now = new Date().toISOString();
-
       const aiRunResult: Json = {
         extraction: extractionJson,
         openai_response_id: result.responseId,
@@ -672,41 +669,22 @@ export async function processNylasMessage(input: {
         normalization: evidence.normalization,
       };
 
-      const { error: runError } = await db.from('ai_processing_runs').insert({
-        user_id: connection.user_id,
-        source_email_id: sourceId,
-        purchase_id: null,
-        purpose: 'email_extraction',
-        provider: 'openai',
-        model: openai.model,
-        prompt_version: PROMPT_VERSION,
-        status: 'completed',
-        input_tokens: result.inputTokens,
-        output_tokens: result.outputTokens,
-        estimated_cost: null,
-        confidence: extraction.confidence,
-        result: aiRunResult,
+      // Audit record and source result commit together, only for the current claim.
+      const { data: saved, error: saveError } = await db.rpc('finish_source_extraction', {
+        p_id: sourceId,
+        p_claim: claimToken,
+        p_extraction: extractionJson,
+        p_validated: validatedResult,
+        p_run: {
+          model: openai.model, prompt_version: PROMPT_VERSION,
+          input_tokens: result.inputTokens, output_tokens: result.outputTokens,
+          confidence: extraction.confidence, result: aiRunResult,
+        },
       });
-      if (runError) throw new Error(`Failed to save automatic AI run: ${runError.message}`);
-
-      const { error: updateError } = await db
-        .from('source_emails')
-        .update({
-          classification: extraction.event_type,
-          structured_result: extractionJson,
-          validated_result: validatedResult,
-          validation_status: 'review',
-          validated_at: now,
-          processed_at: now,
-          processing_status: 'review',
-        })
-        .eq('id', sourceId);
-      if (updateError) throw new Error(`Failed to save automatic extraction: ${updateError.message}`);
+      if (saveError) throw new Error(`Failed to save automatic extraction: ${saveError.message}`);
+      if (saved !== true) throw new Error('Source extraction claim expired or was superseded');
     } catch (error) {
-      await db
-        .from('source_emails')
-        .update({ processing_status: reextractV2 ? sourceStatus : 'error' })
-        .eq('id', sourceId);
+      await db.rpc('release_source_extraction', { p_id: sourceId, p_claim: claimToken });
       throw error;
     }
   }
@@ -724,7 +702,7 @@ export async function processNylasMessage(input: {
     : shouldStayUnlinked(validatedResult?.validation_status, validatedResult)
       ? 'unlinked'
       : 'review';
-  await db.from('source_emails').update({ processing_status: finalStatus }).eq('id', sourceId);
+  await db.from('source_emails').update({ processing_status: finalStatus }).eq('id', sourceId).neq('processing_status', 'processing');
 
   return {
     ok: true,

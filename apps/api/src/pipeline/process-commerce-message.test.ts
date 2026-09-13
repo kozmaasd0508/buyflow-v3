@@ -49,3 +49,16 @@ test('observe mode never becomes write mode even for recognized messages', async
   await processCommerceMessage({ grantId: 'g', messageId: 'm', sourceQuery: 'scan:initial', mode: 'observe' }, h.dependencies);
   assert.equal(h.processed[0].mode, 'observe');
 });
+
+test('busy extraction makes webhook and scan callers retry instead of reporting completion', async () => {
+  for (const sourceQuery of ['webhook:message.created', 'scan:initial', 'scan:targeted']) {
+    const h = harness(null);
+    const dependencies = { ...h.dependencies, process: async () => ({
+      ok: true, status: 'already_processing' as const, sourceEmailId: 'busy',
+      purchaseWrites: 0, shipmentWrites: 0, documentWrites: 0, aiCalls: 0,
+    }) };
+    await assert.rejects(processCommerceMessage({
+      grantId: 'g', messageId: 'm', sourceQuery, mode: 'write',
+    }, dependencies), { name: 'SourceProcessingRetry' });
+  }
+});

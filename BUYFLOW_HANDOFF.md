@@ -58,6 +58,11 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 
 - Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
 
+## Integration in progress
+
+- PR #324 is merged as `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`; main CI #34760844420 and exact Render smoke #34760881629 passed.
+- PR #325 merges current main into the recovery branch. PostgreSQL 17 pre-integration CI passed; combined CI and migration/deployment remain pending. GitHub PR creation is working again.
+
 ## Next action
 
 Continue the authorized audit repair: recoverable source-processing leases and explicit external-call timeouts; SES schema/runtime readiness; unified UI status, pagination and multi-account recovery; MailLens normalization and runtime integration. Preserve existing AI observation-only authority. Validate email-to-UI behavior on a frozen real-mail set; standalone benchmarks are insufficient. Full authenticated browser E2E and real-mail accuracy remain unverified.
