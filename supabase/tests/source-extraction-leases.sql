@@ -3,7 +3,7 @@
 begin;
 create role anon;
 create role authenticated;
-create role service_role;
+create role service_role bypassrls;
 grant usage on schema public to anon, authenticated, service_role;
 create table public.email_connections (
  id uuid primary key, user_id uuid, provider text, status text, provider_account_id text
@@ -66,6 +66,8 @@ begin
  if public.requeue_stale_source_extractions() <> 1 then raise exception 'lost webhook not recovered'; end if;
  if public.requeue_stale_source_extractions() <> 0 then raise exception 'retry backoff overwritten'; end if;
  if not exists(select 1 from public.webhook_inbox where id=event_id and status='retry') then raise exception 'retry missing'; end if;
+ -- The legacy inbox claim uses transaction-stable now(); make it due within this test transaction.
+ update public.webhook_inbox set next_attempt_at=now() where id=event_id;
  if not public.claim_webhook_inbox_event(event_id) then raise exception 'retry unclaimable'; end if;
  if public.requeue_stale_source_extractions() <> 0 then raise exception 'active webhook stolen'; end if;
 end;

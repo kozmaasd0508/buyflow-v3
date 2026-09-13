@@ -52,7 +52,8 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 ## Audit repair 2 in progress
 
 - Branch `fix/recoverable-processing-and-ui`: fenced extraction leases, atomic audit/result persistence, external-call deadline and durable source retry recovery.
-- 802 local API tests and typecheck pass. New migration and database tests require CI and live verification; not yet released.
+- 802 local API tests, typecheck and API/mobile build pass. SQL regressions pass on disposable PGlite PostgreSQL 18.3; required PostgreSQL 17 CI remains pending.
+- GitHub branch is saved. PR creation fails with connector internal errors; no PR exists as verified by listing. Production migration was not applied and runtime was not released. Resume by opening the PR, passing CI, applying/verifying the additive migration, then merging and checking main CI/exact Render smoke.
 
 ## Next action
 
