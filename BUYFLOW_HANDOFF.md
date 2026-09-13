@@ -36,6 +36,12 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; reconcile aga
 - Existing security advisor findings remain: leaked-password protection warning and backend RLS/no-policy infos. Existing performance findings include missing FK indexes/initplan; the new lease index initially reports unused.
 - Historical matching and AI-derived purchases require read-only audit before proposed data repair.
 
+## Latest diagnostic
+
+- Offline app-readiness simulation against main bc52a72: 155 legacy parser fixtures, 7 actual UI message-function cases. Reproducible runner and reports in scripts/testlab/app-readiness-simulation.mjs and docs/audits/2026-09-13-app-readiness.*.
+- Known UI failures reproduced: refunded-after-delivery reports delivered; pickup-ready and label-created report in transit. 4/7 message cases correct. No runtime fix in this test change.
+- Legacy direct-parser coverage: demo 20/20 required positives; diverse set 9/70 commerce; web-derived 3/24. These are NOT complete current ingestion or Luna accuracy measurements. Real model/provider/database/browser E2E remains untested.
+
 ## Next action
 
 Address UI status/next-action mismatches, purchase/inbox pagination, multi-account recovery and SES schema/runtime readiness. Preserve AI observation-only authority and evaluate the email-to-UI flow on a frozen real-mail set before claiming real accuracy. Browser-first for frontend changes; APK only on explicit request.
