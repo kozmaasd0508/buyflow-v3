@@ -1,68 +1,40 @@
 # BuyFlow V3 — current handoff
 
-Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
+Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; reconcile against GitHub main and exact deployment evidence before acting.
 
-## Verified runtime release
+## Verified runtime
 
-- Repository: kozmaasd0508/buyflow-v3.
-- Latest runtime: PR #322, merge `253de7f93fa45c08f48911d75a0fc77c64e5e8bd` (2026-09-12). PR CI #34712428424, main CI #34712496392 and exact Render smoke #34712535387 SUCCESS. Later documentation-only commits may change SHA; always check current main.
-- Production permission migration applied and verified: nine commerce/evidence tables reject client writes; backend access and RLS preserved.
-- Previous runtime PR #320 introduced durable AI observation isolation, common ingestion and lifecycle pagination.
+- Repository: kozmaasd0508/buyflow-v3. Latest verified runtime is PR #325, main `21236b06f57002606d0fabbba24a7c0cc2bb5484`.
+- PR #325 integrated CI #34760972022, main CI #34761064257 and exact Render smoke #34761105588 SUCCESS. 821 API tests and API/mobile build passed.
+- PR #324 MailLens release `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`: PR CI #34760802949, main CI #34760844420 and exact Render smoke #34760881629 SUCCESS.
 - Preview: https://buyflow-v3-api-dev.onrender.com/app/ ; health: /health.
-
-## Architecture and actual runtime
-
-- TypeScript API: apps/api; mobile/web: apps/mobile; Supabase database; Nylas email ingestion.
-- Durable webhook inbox and scan jobs, deterministic merchant/lifecycle parsers, evidence-based purchase/shipment/document resolution.
-- Runtime model is pinned to gpt-5.6-luna. Shadow is enabled by default but requires OPENAI_API_KEY. BUYFLOW_AUTOMATION_MODE defaults to observe; deployed values must be verified independently.
-- The runtime uses the V2 products/evidence extraction prompt and htmlToCompactText (20,000-character cap). It is not the MailLens local benchmark pipeline. Sol O2's 90% score is not app-wide accuracy.
-- Production protocol registry remains empty; protocol research/test readiness does not authorize activation.
+- TypeScript API/mobile, Supabase, Nylas; runtime model pinned to gpt-5.6-luna. Shadow requires OPENAI_API_KEY; automation defaults to observe. Actual deployed flags require independent verification.
 
 ## Released behavior
 
-- Every newly persisted AI extraction and audit-backfill result is review-only with durable AI provenance and no-write flags. Semantic validation is preserved separately.
-- Common write/recovery gates reject observations, generic shadow parsers and legacy AI V2 results lacking deterministic provenance. No historical Purchase is deleted or auto-repaired.
-- Webhook, initial and targeted scanning use processCommerceMessage: deterministic lifecycle -> Limone -> commerce -> generic lifecycle -> optional Luna observation -> review fallback.
-- When AI shadow is disabled, unmatched transactional mail stays in review. When configured, old AI-off fallback can receive one observation. Repeated observations reuse persisted extraction.
-- Lifecycle evidence loads all pages ordered by received_at then id. Caller observe mode does not invoke the deterministic lifecycle write pass.
+- AI results are durable review-only observations, including repeated processing and recovery. Confidence never authorizes purchase/shipment/document writes. Legacy AI without deterministic provenance is also blocked.
+- Common ingestion runs deterministic lifecycle, Limone, commerce, generic lifecycle, optional Luna observation and review fallback. Generic parser families remain shadow-only.
+- MailLens v2 tree parsing excludes known hidden subtrees and quoted history, preserves product URLs and emits normalization/truncation diagnostics. Automatic deterministic parsers and AI consume authored text; raw provider evidence is retained. Historical benchmark paths stay frozen.
+- Deterministic automatic parsing rejects empty/truncated authored bodies and inherited reply subjects. Reproduced quoted-order eligibility and hidden cancellation regressions are covered.
+- Source extraction uses fenced, five-minute claims and a 60-second external-call timeout. Audit/result writes are atomic; expired workers cannot overwrite new claims. Busy callers retry and stale sources are requeued durably.
+- Production migration `20260912192905_recoverable_source_extraction.sql` applied. Four invoker RPCs: client execute denied, service execute allowed, no-op claims verified. PostgreSQL 17 CI passed. No historical customer data rewrite.
+- PR #322 exact identity conflict review, owner-scoped PDF signing and client commerce-write revocation remain intact. Lifecycle evidence pagination is stable and exhaustive.
 
-## Invariants
+## Current branch
 
-- Lifecycle-only mail never creates a Purchase in normal flow.
-- Ambiguous identity matches stay REVIEW. No guessed order/tracking/merchant relationships.
-- Generic parser families and AI observations cannot gain write authority from confidence or subsequent processing.
-- Shipment label/pre-advice, ready-for-pickup and actual delivery remain distinct.
-- No protocol activation or model/prompt change. Audit repair 1 adds the reviewed permission migration.
+- `fix/luna-evidence-prompt` addresses the user's explicit Luna prompt review request.
+- Prompt v2.1 clarifies actual vs negated/future events, order creation, completed payment/refund, six logistics phases, conflicting/multiple-order evidence and untrusted email instructions.
+- One strict Zod schema defines requested and accepted AI output. Required shipment_phase/evidence_issues fields; carrier purchase fields are null-only. Invalid and incomplete responses fail validation.
+- Application-enforced incomplete-input issues and inherited subject suppression accompany the prompt. Evidence issues force semantic review and prevent purchase eligibility; pickup-ready/delivery conflicts also require review.
+- Local: 838 API tests, typecheck and API/mobile build PASS. Release CI/merge/exact smoke pending. Model unchanged; no paid model evaluation. Existing observations are not automatically reprocessed.
 
-## Verification and limits
+## Invariants and limits
 
-- Local and PR verification: 801/801 API tests, API typecheck, API/mobile build PASS.
-- Regressions cover persisted/repeated AI observations, deterministic-only source linking, shared ingestion/AI-off policy and pagination beyond 200 rows.
-- Tests use synthetic data and mocked providers/database boundaries. No real-mail E2E accuracy or live database integrity certification is claimed.
-- Historical matching decisions and existing AI-derived purchases need a separate read-only audit before proposing data repair.
-- Root handoff previously described an August release as current; main code and GitHub CI are stronger evidence.
-
-## Released audit repair 1
-
-- Conflicting exact order/tracking/thread identities now return REVIEW with no selected Purchase, even when merchant/amount/date scores favour one candidate.
-- Private PDF signing requires the fixed bucket and authenticated owner's canonical attachment path; stored attachment URLs cannot bypass this gate.
-- Client commerce writes revoked on nine tables. Effective grant assertions and disposable PostgreSQL CI regression protect this boundary; product edits continue through the authenticated API override route.
-- 801 API tests, API/mobile build, PR/main CI, exact Render smoke and live DB grants verified. No historical data repair, frontend, AI/model or SES activation changes.
-
-## Pending audit branches
-
-- `fix/recoverable-processing-and-ui`: fenced extraction leases and durable retries, commit `f0a1666b403dbd0abfdf115dcf8db2300c4b9ab3`. 802 API tests and disposable PGlite SQL tests passed; required PostgreSQL 17 CI and production migration/deployment were blocked by GitHub PR-creation errors. Not live.
-- `fix/maillens-semantic-evidence`: independent branch from current main. MailLens text v2 fixes five reproduced normalization failures and feeds current authored text to automatic AI extraction/validation, preserving review-only authority. 820 local API tests and API/mobile build pass. Not live until exact release verification.
-- Automatic deterministic lifecycle/commerce/Limone/GLS/Express One/generic/inbound/Foxpost-repair input now shares the authored-evidence boundary. Reproduced quoted-order automatic eligibility and hidden cancellation are rejected; genuine positive cases and product URLs are covered.
-- Historical benchmark launchers remain frozen. Existing stored decisions are not rewritten. Full CSS visibility, unrecognized quote formats, authenticated E2E and real-mail accuracy remain unverified.
-
-- Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
-
-## Integration in progress
-
-- PR #324 is merged as `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`; main CI #34760844420 and exact Render smoke #34760881629 passed.
-- PR #325 merges current main into the recovery branch. PostgreSQL 17 pre-integration CI passed; combined CI and migration/deployment remain pending. GitHub PR creation is working again.
+- Lifecycle-only mail cannot create a purchase. Ambiguous identities require REVIEW. No protocol or SES activation; production protocol registry remains empty.
+- No claim of whole-app correctness, full CSS visibility, universal quote recognition, real-mail Luna accuracy or authenticated browser E2E coverage. Offline fixtures/mock Responses cannot prove model semantics.
+- Existing security advisor findings remain: leaked-password protection warning and backend RLS/no-policy infos. Existing performance findings include missing FK indexes/initplan; the new lease index initially reports unused.
+- Historical matching and AI-derived purchases require read-only audit before proposed data repair.
 
 ## Next action
 
-Continue the authorized audit repair: recoverable source-processing leases and explicit external-call timeouts; SES schema/runtime readiness; unified UI status, pagination and multi-account recovery; MailLens normalization and runtime integration. Preserve existing AI observation-only authority. Validate email-to-UI behavior on a frozen real-mail set; standalone benchmarks are insufficient. Full authenticated browser E2E and real-mail accuracy remain unverified.
+Finish the prompt branch release gates. Then address UI status/next-action mismatches, purchase/inbox pagination, multi-account recovery and SES schema/runtime readiness. Preserve AI observation-only authority and evaluate the email-to-UI flow on a frozen real-mail set before claiming real accuracy. Browser-first for frontend changes; APK only on explicit request.

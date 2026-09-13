@@ -1,5 +1,5 @@
 import type { NormalizedEmail } from '../email/types.js';
-import { normalizeMailLensText } from '../email/mail-lens-text.js';
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { extractEmailWithOpenAIResult } from './openai-email-extractor.js';
 
 /** Extraction and validation must consume exactly the same authored evidence. */
@@ -9,16 +9,22 @@ export async function extractMailLensObservation(input: {
   model: string;
   fetchImpl?: typeof fetch;
 }) {
-  const normalized = normalizeMailLensText(input.email);
+  const normalized = prepareDeterministicEvidence(input.email, 20_000);
   const evidence = {
-    subject: input.email.subject,
+    subject: normalized.subject ?? undefined,
     fromDomains: [...new Set(input.email.from.map(address => address.email.trim().toLowerCase())
       .filter(address => address.includes('@')).map(address => address.slice(address.lastIndexOf('@') + 1)).filter(Boolean))],
-    bodyText: normalized.semanticText,
+    bodyText: normalized.bodyText,
     normalization: normalized.normalization,
   };
   const result = await extractEmailWithOpenAIResult({
-    ...evidence, apiKey: input.apiKey, model: input.model, fetchImpl: input.fetchImpl,
+    ...evidence,
+    diagnostics: {
+      truncated: normalized.normalization.semanticTextTruncated,
+      snippetOnly: normalized.normalization.bodyTextSource === 'snippet',
+      emptyBody: !normalized.bodyText.trim(),
+    },
+    apiKey: input.apiKey, model: input.model, fetchImpl: input.fetchImpl,
   });
   return { result, evidence };
 }

@@ -4,7 +4,7 @@ import type { Json } from '../db/database.types.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { filterCommerceEmail } from '../ingestion/commerce-email-filter.js';
-import type { EmailExtraction } from '../ai/openai-email-extractor.js';
+import { BUYFLOW_EXTRACTION_PROMPT_VERSION, type EmailExtraction } from '../ai/openai-email-extractor.js';
 import { requireOpenAIConfig } from '../config.js';
 import {
   validateEmailExtraction,
@@ -35,7 +35,7 @@ import {
   asAiObservation,
 } from './automatic-write-gate.js';
 
-const PROMPT_VERSION = 'nano-email-extraction-v2-products-evidence';
+const PROMPT_VERSION = BUYFLOW_EXTRACTION_PROMPT_VERSION;
 const RECONCILIATION_WINDOW_DAYS = 45;
 
 export type AutomationMode = 'observe' | 'write';

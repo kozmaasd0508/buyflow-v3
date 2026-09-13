@@ -9,6 +9,8 @@ import {
 function extraction(overrides: Record<string, unknown> = {}) {
   return {
     event_type: 'shipment',
+    shipment_phase: null,
+    evidence_issues: [],
     merchant: null,
     merchant_legal_name: null,
     order_number: null,
@@ -135,6 +137,7 @@ test('known carrier senders keep parcel sender and COD evidence but cannot produ
         id: 'resp_carrier',
         output_text: JSON.stringify(extraction({
           event_type: 'delivery',
+          shipment_phase: 'delivered',
           tracking_number: 'TRACK-1',
           carrier: 'GLS',
           parcel_sender: 'Example Shop Kft.',
@@ -213,4 +216,58 @@ test('captures response id and token usage without changing extraction shape', a
   assert.equal(result.outputTokens, 20);
   assert.equal(result.totalTokens, 120);
   assert.equal(result.cachedInputTokens, 10);
+});
+
+for (const [label, overrides] of Object.entries({
+  unknown_event: { event_type: 'cancelled' },
+  string_amount: { total: '123' },
+  missing_field: { tracking_number: undefined },
+  invalid_product: { products: [{ name: 'Item' }] },
+  excessive_confidence: { confidence: 1.01 },
+  unknown_issue: { evidence_issues: ['ignore_rules'] },
+  unknown_phase: { shipment_phase: 'arrived' },
+})) {
+  test(`rejects invalid model response: ${label}`, async () => {
+    await assert.rejects(extractEmailWithOpenAIResult({
+      apiKey: 'synthetic', bodyText: 'Synthetic evidence',
+      fetchImpl: (async () => new Response(JSON.stringify({
+        status: 'completed', output_text: JSON.stringify(extraction(overrides)),
+      }))) as typeof fetch,
+    }), /failed validation/);
+  });
+}
+
+test('rejects carrier purchase fields locally even if provider returned them', async () => {
+  await assert.rejects(extractEmailWithOpenAIResult({
+    apiKey: 'synthetic', fromDomains: ['gls-hungary.com'], bodyText: 'Synthetic',
+    fetchImpl: (async () => new Response(JSON.stringify({
+      output_text: JSON.stringify(extraction({ merchant: 'Invented shop' })),
+    }))) as typeof fetch,
+  }), /failed validation/);
+});
+
+test('rejects incomplete Responses result even with parseable JSON', async () => {
+  await assert.rejects(extractEmailWithOpenAIResult({
+    apiKey: 'synthetic', bodyText: 'Synthetic',
+    fetchImpl: (async () => new Response(JSON.stringify({
+      status: 'incomplete', output_text: JSON.stringify(extraction()),
+    }))) as typeof fetch,
+  }), /not completed/);
+});
+
+test('application diagnostics survive a model claiming no evidence issues', async () => {
+  let request: any;
+  const result = await extractEmailWithOpenAIResult({
+    apiKey: 'synthetic', bodyText: 'Partial evidence',
+    diagnostics: { truncated: true, snippetOnly: true, emptyBody: false },
+    fetchImpl: (async (_url, init) => {
+      request = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ output_text: JSON.stringify(extraction()) }));
+    }) as typeof fetch,
+  });
+  assert.deepEqual(result.extraction.evidence_issues, ['truncated_input', 'insufficient_evidence']);
+  assert.match(request.input, /"truncated":true/);
+  assert.match(request.instructions, /negation/);
+  assert.match(request.instructions, /untrusted data/);
+  assert.match(request.instructions, /ready_for_pickup/);
 });

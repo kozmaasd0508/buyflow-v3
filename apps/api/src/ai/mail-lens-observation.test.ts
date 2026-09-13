@@ -18,7 +18,7 @@ test('actual Responses request and validation evidence use the same MailLens tex
     fetchImpl: (async (_url, init) => {
       request = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({ output: [{ content: [{ type: 'output_text',
-        text: JSON.stringify({ event_type: 'other', confidence: 0.5, products: [], order_number: null }),
+        text: JSON.stringify({ event_type: 'other', shipment_phase: null, evidence_issues: [], confidence: 0.5, products: [], ...Object.fromEntries(['merchant', 'merchant_legal_name', 'order_number', 'subtotal', 'shipping_amount', 'discount_amount', 'total', 'currency', 'payment_status', 'payment_method', 'paid_amount', 'paid_currency', 'shipping_method', 'tracking_number', 'carrier', 'parcel_sender', 'cod_amount', 'cod_currency', 'invoice_number'].map(key => [key, null])) }),
       }] }] }), { status: 200 });
     }) as typeof fetch,
   });
@@ -34,7 +34,7 @@ test('actual Responses request and validation evidence use the same MailLens tex
 test('quote-only mail does not reintroduce old evidence via the snippet at the AI boundary', async () => {
   let request: any;
   await assert.rejects(extractMailLensObservation({
-    email: { ...base, bodyHtml: '<blockquote>DELIVERED</blockquote>', snippet: 'DELIVERED' },
+    email: { ...base, subject: 'Re: DELIVERED', bodyHtml: '<blockquote>DELIVERED</blockquote>', snippet: 'DELIVERED' },
     apiKey: 'synthetic-key', model: 'synthetic-model',
     fetchImpl: (async (_url, init) => {
       request = JSON.parse(String(init?.body));
