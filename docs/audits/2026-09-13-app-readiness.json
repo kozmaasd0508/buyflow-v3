@@ -1,0 +1,112 @@
+{
+  "commit": "bc52a72cef4d6b972d8c40c3b124c0ca6ce89f65",
+  "scope": "Offline component simulation. Not full ingestion/database/browser E2E; no real Luna call.",
+  "parserFixtures": 155,
+  "demo": {
+    "fixtures": 31,
+    "positives": 20,
+    "expectedPositives": 20,
+    "falsePositives": 0,
+    "shipmentJourney": {
+      "decision": "linkable",
+      "recommendedStatus": "delivered",
+      "carrierSlug": "express-one",
+      "evidenceCount": 3
+    },
+    "failedPaymentJourney": {
+      "state": "cancelled",
+      "paymentStatus": "failed",
+      "cancelledAt": "2026-07-12T08:00:00Z"
+    }
+  },
+  "diverseFixtureSet": {
+    "fixtures": 100,
+    "commerce": 70,
+    "recognized": 9,
+    "noise": 30,
+    "noiseFalsePositives": 0
+  },
+  "webDerivedFixtures": {
+    "fixtures": 24,
+    "recognized": 3,
+    "importantCoverageGaps": [
+      "shopify-order-edited",
+      "shopify-order-cancelled",
+      "shopify-partial-refund",
+      "shopify-shipping-confirmation",
+      "shopify-shipping-update",
+      "shopify-ready-local-pickup",
+      "shopify-picked-up",
+      "shopify-return-created",
+      "shopify-return-approved",
+      "shopify-exchange-balance-due",
+      "shopify-pending-payment-success",
+      "woo-failed-payment",
+      "woo-on-hold",
+      "woo-processing",
+      "woo-completed",
+      "woo-full-refund",
+      "woo-partial-refund",
+      "woo-invoice-payment-link"
+    ]
+  },
+  "ui": [
+    {
+      "id": "ordered",
+      "expected": "A rendelés rögzítve van",
+      "actual": "A rendelés rögzítve van",
+      "stateLabel": "Megrendelve",
+      "pass": true
+    },
+    {
+      "id": "paid",
+      "expected": "Fizetés rendben",
+      "actual": "Fizetés rendben",
+      "stateLabel": "Fizetve",
+      "pass": true
+    },
+    {
+      "id": "delivered",
+      "expected": "A rendelés megérkezett",
+      "actual": "A rendelés megérkezett",
+      "stateLabel": "Kézbesítve",
+      "pass": true
+    },
+    {
+      "id": "cancelled",
+      "expected": "A rendelés törölve lett",
+      "actual": "A rendelés törölve lett",
+      "stateLabel": "Törölve",
+      "pass": true
+    },
+    {
+      "id": "refunded-after-delivery",
+      "expected": "Visszatérítés rögzítve",
+      "actual": "A rendelés megérkezett",
+      "stateLabel": "Visszatérítve",
+      "pass": false
+    },
+    {
+      "id": "pickup-ready",
+      "expected": "Átvehető",
+      "actual": "A csomag úton van",
+      "stateLabel": "Átvehető",
+      "pass": false
+    },
+    {
+      "id": "label-created",
+      "expected": "Feladás előkészítve; még nincs igazolt fizikai szállítás",
+      "actual": "A csomag úton van",
+      "stateLabel": "shipment created",
+      "pass": false
+    }
+  ],
+  "readiness": "KNOWN_GAPS",
+  "untested": [
+    "Live Luna semantics",
+    "Provider ingestion and database persistence",
+    "Authenticated browser rendering",
+    "Invoice attachment download",
+    "Warranty/return user actions"
+  ]
+}
