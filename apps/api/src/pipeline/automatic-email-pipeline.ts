@@ -1,14 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { extractMailLensObservation } from '../ai/mail-lens-observation.js';
 import type { Json } from '../db/database.types.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
-import type { NormalizedEmail } from '../email/types.js';
 import { filterCommerceEmail } from '../ingestion/commerce-email-filter.js';
-import {
-  extractEmailWithOpenAIResult,
-  htmlToCompactText,
-  type EmailExtraction,
-} from '../ai/openai-email-extractor.js';
+import type { EmailExtraction } from '../ai/openai-email-extractor.js';
 import { requireOpenAIConfig } from '../config.js';
 import {
   validateEmailExtraction,
@@ -106,15 +102,6 @@ function senderDomain(fromAddress: string | null): string {
   if (!fromAddress) return '';
   const match = fromAddress.toLowerCase().match(/@([^>\s,;]+)/);
   return (match?.[1] ?? '').replace(/[)>]+$/, '').trim();
-}
-
-function senderDomains(email: NormalizedEmail): string[] {
-  return [...new Set(
-    email.from
-      .map((address) => address.email.trim().toLowerCase())
-      .map((address) => address.slice(address.lastIndexOf('@') + 1))
-      .filter((domain) => Boolean(domain) && !domain.includes('@')),
-  )];
 }
 
 function stringOrNull(value: unknown): string | null {
@@ -661,31 +648,25 @@ export async function processNylasMessage(input: {
     }
 
     try {
-      const compactBody = email.bodyHtml
-        ? htmlToCompactText(email.bodyHtml)
-        : (email.snippet ?? '').trim().slice(0, 20_000);
-      const result = await extractEmailWithOpenAIResult({
-        apiKey: openai.apiKey,
-        model: openai.model,
-        subject: email.subject,
-        fromDomains: senderDomains(email),
-        bodyText: compactBody,
+      const { result, evidence } = await extractMailLensObservation({
+        email, apiKey: openai.apiKey, model: openai.model,
       });
       aiCalls = 1;
       const extraction = result.extraction;
       const extractionJson = JSON.parse(JSON.stringify(asAiObservation(toJson(extractionToJson(extraction))))) as Json;
       const validated: ValidatedEmailExtraction = validateEmailExtraction({
         extraction,
-        senderDomains: senderDomains(email),
-        subject: email.subject,
-        bodyText: compactBody,
+        senderDomains: evidence.fromDomains,
+        subject: evidence.subject,
+        bodyText: evidence.bodyText,
       });
-      validatedResult = asAiObservation(toJson(validated));
+      validatedResult = asAiObservation({ ...toJson(validated), normalization: evidence.normalization });
       const aiRunResult: Json = {
         extraction: extractionJson,
         openai_response_id: result.responseId,
         total_tokens: result.totalTokens,
         cached_input_tokens: result.cachedInputTokens,
+        normalization: evidence.normalization,
       };
 
       // Audit record and source result commit together, only for the current claim.

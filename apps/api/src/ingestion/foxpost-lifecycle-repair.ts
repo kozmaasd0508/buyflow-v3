@@ -1,6 +1,7 @@
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
-import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extractor.js';
+import { type EmailExtraction } from '../ai/openai-email-extractor.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 
 const PARSER_VERSION = 'foxpost-lifecycle-v1.1';
@@ -150,16 +151,17 @@ export async function repairDeterministicFoxpostSourcesForGrant(grantId: string)
   for (const row of (rows ?? []) as Array<Record<string, any>>) {
     if (typeof row.provider_message_id !== 'string') continue;
     const email = await provider.getMessage(row.provider_message_id);
-    const bodyText = email.bodyHtml
-      ? htmlToCompactText(email.bodyHtml, MAX_BODY_CHARS)
-      : (email.snippet ?? '').trim().slice(0, MAX_BODY_CHARS);
+    const evidence = prepareDeterministicEvidence(email, MAX_BODY_CHARS);
+    if (!evidence.canParseAutomatically) continue;
+    const bodyText = evidence.bodyText;
     const domains = senderDomains(email.from);
-    const parsed = parseFoxpostLifecycleEmail({ senderDomains: domains, subject: email.subject, bodyText });
+    const parsed = parseFoxpostLifecycleEmail({ senderDomains: domains, subject: evidence.subject, bodyText });
     if (!parsed) continue;
 
-    const validated = validateEmailExtraction({ extraction: parsed.extraction, senderDomains: domains, subject: email.subject, bodyText });
+    const validated = validateEmailExtraction({ extraction: parsed.extraction, senderDomains: domains, subject: evidence.subject, bodyText });
     const now = new Date().toISOString();
     const structuredResult = {
+      normalization: evidence.normalization,
       schema_version: 2,
       ...parsed.extraction,
       shipment_phase: parsed.shipmentPhase,
@@ -168,6 +170,7 @@ export async function repairDeterministicFoxpostSourcesForGrant(grantId: string)
       parser_reasons: parsed.reasons,
     };
     const validatedResult = JSON.parse(JSON.stringify(validated)) as Record<string, unknown>;
+    validatedResult.normalization = evidence.normalization;
     validatedResult.shipment_phase = parsed.shipmentPhase;
     validatedResult.extraction_source = 'deterministic';
     validatedResult.parser_version = parsed.parserVersion;

@@ -2,15 +2,30 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
-## 2026-09-13 — Audit repair 2: recoverable source extraction (in progress)
+## 2026-09-13 — Source recovery integrated with MailLens (PR #325)
 
-- Branch `fix/recoverable-processing-and-ui`, based on main `c39a36e43fc00bcc14471098e3d05c726ef55e7b`.
-- Five-minute source claims fence stale workers; audit and review result save atomically. Explicit 60-second OpenAI request deadline; configuration checked before claiming.
-- Busy source processing now retries through the shared webhook/scan path. Recovery requeues expired sources even when an older webhook was already acknowledged, preserving active locks and retry backoff.
-- Synthetic PostgreSQL regressions cover stale/duplicate completion, rollback, reclaim, release, legacy unleased rows, durable recovery and client RPC permissions.
-- Local API typecheck, API/mobile build and 802 tests PASS. SQL recovery regressions also PASS on disposable PGlite PostgreSQL 18.3; this is not the required PostgreSQL 17 CI gate.
-- Code saved to GitHub branch at `63e9e84fe3e0032f3101bcf0ef12049101178f0f` with a follow-up test/log commit. GitHub create_pull_request returned internal errors, and a subsequent PR-list read confirmed no PR exists. PostgreSQL 17 CI, production migration and exact deployment verification remain blocked/pending; this batch is not live.
-- Remaining audit work: UI status/pagination, multi-account recovery, SES readiness and MailLens integration; real-mail and authenticated browser E2E remain unverified.
+- PR #324 merged as `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`; PR CI #34760802949 passed. Main CI #34760844420 and exact Render smoke #34760881629 passed; MailLens repair is live.
+- PR #325 source recovery passed PostgreSQL 17 CI #34760752051 before integration. Branch now merges current main and preserves MailLens authored evidence/diagnostics inside the fenced extraction transaction.
+- Combined 821 local API tests and API/mobile build PASS; refreshed PR CI remains the next gate. Production migration remains unapplied until those gates are verified. No historical customer data repair.
+
+## 2026-09-13 — Deterministic authored-evidence boundary (in progress)
+
+- Continues `fix/maillens-semantic-evidence` after `d4d79da02e0dfd4997972d6503352a8370f14bed`.
+- Reproduced an AI-independent write-authority bug: quoted Limone confirmation becomes order_created, and the existing validator marks it eligible_for_purchase_creation with non-review status. Also reproduced hidden historical cancellation becoming a lifecycle event.
+- Shared deterministic evidence boundary now feeds lifecycle, commerce, Limone, GLS, Express One terminal receipt, generic lifecycle, provider-neutral inbound and Foxpost repair. It excludes known hidden/quoted subtrees and inherited reply subjects; empty/truncated current text cannot establish automatic parser authority.
+- Preserved existing URL marker format for product parsers. Added Hungarian/Outlook quote boundaries and excluded document titles. Raw subjects/bodies remain unchanged for source storage; normalization metadata accompanies recognized results.
+- Verification: 820 offline API tests PASS, API/mobile build PASS. Focused decision regression confirms old quoted-order automatic eligibility and its rejection after repair; genuine order, product quantity/URL and current cancellation still parse. No paid AI calls or customer data changes.
+- GitHub PR creation remains blocked by connector internal error. No production deployment, migration or historical data repair. Existing stored decisions need a separate read-only audit; this change does not rewrite them. Full CSS rendering, unrecognized quote formats and real-mail accuracy remain limitations.
+
+## 2026-09-13 — MailLens semantic evidence repair (in progress)
+
+- Independent branch `fix/maillens-semantic-evidence`, based on main `c39a36e43fc00bcc14471098e3d05c726ef55e7b`; recovery/migration repair remains on its separate branch.
+- Reproduced five failures against frozen historical MailLens `f691954`: visible not-hidden classes removed, nested hidden delivery leaked, short replies retain history, placeholder plain text masks HTML, quote-only mail retains old delivery.
+- Added MailLens text v2 with HTML tree parsing, subtree visibility/quote filtering, exact placeholder fallback and explicit truncation/provenance. Current authored text is distinct from full visible body; an empty semantic result never falls back to quoted text or snippet.
+- Automatic Nylas AI extraction now uses this semantic text and passes identical evidence to validation. AI-run/validated-result metadata records normalization version and diagnostics; original provider email is unchanged. Existing AI observation-only authority remains intact.
+- Local API typecheck, clean-lockfile install, API/mobile build and 813 tests PASS, including actual mocked Responses request inspection. No paid AI call or customer data mutation.
+- Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
+- Limits: no full CSS rendering, no claim of universal quote detection or real-mail accuracy. Deterministic parsers and historical benchmark launchers are not switched by this change; their remaining input paths need separate audit. Stored observations are not automatically reprocessed. Production release requires PR CI, main CI and exact Render smoke.
 
 ## 2026-09-12 — Audit repair 1: identity conflicts and document access
 

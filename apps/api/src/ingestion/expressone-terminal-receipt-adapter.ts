@@ -1,4 +1,4 @@
-import { htmlToCompactText } from '../ai/openai-email-extractor.js';
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 
@@ -182,10 +182,10 @@ export async function preprocessExpressOneTerminalReceiptNylasMessage(input: {
 
   const provider = createEmailProvider({ provider: 'nylas', providerAccountId: input.grantId });
   const email = await provider.getMessage(input.messageId);
-  const bodyText = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml, 40_000)
-    : (email.snippet ?? '').trim().slice(0, 40_000);
-  const receipt = parseExpressOneTerminalReceipt({ from: email.from, subject: email.subject, bodyText });
+  const evidence = prepareDeterministicEvidence(email, 40_000);
+  if (!evidence.canParseAutomatically) return { matched: false };
+  const bodyText = evidence.bodyText;
+  const receipt = parseExpressOneTerminalReceipt({ from: email.from, subject: evidence.subject, bodyText });
   if (!receipt) return { matched: false };
 
   const { data: existing, error: existingError } = await db
@@ -233,7 +233,7 @@ export async function preprocessExpressOneTerminalReceiptNylasMessage(input: {
   }
 
   const resolution = resolveExpressOneTerminalReceipt({ receipt, receivedAt: email.receivedAt, candidates });
-  const payload = sourcePayload(receipt, resolution.reasons, existing?.validated_result ?? existing?.structured_result ?? null);
+  const payload = { ...sourcePayload(receipt, resolution.reasons, existing?.validated_result ?? existing?.structured_result ?? null), normalization: evidence.normalization };
   const now = new Date().toISOString();
 
   let sourceEmailId: string;

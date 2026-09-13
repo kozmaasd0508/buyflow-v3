@@ -49,11 +49,19 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 - Client commerce writes revoked on nine tables. Effective grant assertions and disposable PostgreSQL CI regression protect this boundary; product edits continue through the authenticated API override route.
 - 801 API tests, API/mobile build, PR/main CI, exact Render smoke and live DB grants verified. No historical data repair, frontend, AI/model or SES activation changes.
 
-## Audit repair 2 in progress
+## Pending audit branches
 
-- Branch `fix/recoverable-processing-and-ui`: fenced extraction leases, atomic audit/result persistence, external-call deadline and durable source retry recovery.
-- 802 local API tests, typecheck and API/mobile build pass. SQL regressions pass on disposable PGlite PostgreSQL 18.3; required PostgreSQL 17 CI remains pending.
-- GitHub branch is saved. PR creation fails with connector internal errors; no PR exists as verified by listing. Production migration was not applied and runtime was not released. Resume by opening the PR, passing CI, applying/verifying the additive migration, then merging and checking main CI/exact Render smoke.
+- `fix/recoverable-processing-and-ui`: fenced extraction leases and durable retries, commit `f0a1666b403dbd0abfdf115dcf8db2300c4b9ab3`. 802 API tests and disposable PGlite SQL tests passed; required PostgreSQL 17 CI and production migration/deployment were blocked by GitHub PR-creation errors. Not live.
+- `fix/maillens-semantic-evidence`: independent branch from current main. MailLens text v2 fixes five reproduced normalization failures and feeds current authored text to automatic AI extraction/validation, preserving review-only authority. 820 local API tests and API/mobile build pass. Not live until exact release verification.
+- Automatic deterministic lifecycle/commerce/Limone/GLS/Express One/generic/inbound/Foxpost-repair input now shares the authored-evidence boundary. Reproduced quoted-order automatic eligibility and hidden cancellation are rejected; genuine positive cases and product URLs are covered.
+- Historical benchmark launchers remain frozen. Existing stored decisions are not rewritten. Full CSS visibility, unrecognized quote formats, authenticated E2E and real-mail accuracy remain unverified.
+
+- Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
+
+## Integration in progress
+
+- PR #324 is merged as `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`; main CI #34760844420 and exact Render smoke #34760881629 passed.
+- PR #325 merges current main into the recovery branch. PostgreSQL 17 pre-integration CI passed; combined CI and migration/deployment remain pending. GitHub PR creation is working again.
 
 ## Next action
 
