@@ -1,4 +1,5 @@
-import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extractor.js';
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
+import { type EmailExtraction } from '../ai/openai-email-extractor.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
@@ -320,14 +321,16 @@ export async function preprocessGlsCarrierNylasMessage(input: {
 
   const provider = createEmailProvider({ provider: 'nylas', providerAccountId: input.grantId });
   const email = await provider.getMessage(input.messageId);
-  const bodyText = email.bodyHtml ? htmlToCompactText(email.bodyHtml, 50_000) : (email.snippet ?? '').trim().slice(0, 50_000);
-  const parsed = parseGlsLifecycleEmail({ from: email.from, subject: email.subject, bodyText });
+  const evidence = prepareDeterministicEvidence(email, 50_000);
+  if (!evidence.canParseAutomatically) return { matched: false };
+  const bodyText = evidence.bodyText;
+  const parsed = parseGlsLifecycleEmail({ from: email.from, subject: evidence.subject, bodyText });
   if (!parsed) return { matched: false };
 
   const validated = validateEmailExtraction({
     extraction: parsed.extraction,
     senderDomains: senderDomains(email.from),
-    subject: email.subject,
+    subject: evidence.subject,
     bodyText,
   });
 
@@ -378,6 +381,7 @@ export async function preprocessGlsCarrierNylasMessage(input: {
   }
 
   const validatedPayload = {
+    normalization: evidence.normalization,
     ...(JSON.parse(JSON.stringify(validated)) as Record<string, unknown>),
     shipment_phase: parsed.shipmentPhase,
     extraction_source: 'deterministic',
@@ -388,6 +392,7 @@ export async function preprocessGlsCarrierNylasMessage(input: {
     ...(existing?.validated_result ? { superseded_result: existing.validated_result } : {}),
   };
   const structuredPayload = {
+    normalization: evidence.normalization,
     schema_version: 2,
     ...parsed.extraction,
     shipment_phase: parsed.shipmentPhase,

@@ -31,6 +31,7 @@ export interface NormalizedEmail {
   receivedAt: string;
   snippet?: string;
   bodyHtml?: string;
+  bodyText?: string;
   headers?: EmailHeader[];
   folders: string[];
   attachments: EmailAttachmentMetadata[];

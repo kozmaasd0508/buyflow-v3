@@ -1,6 +1,6 @@
 # BuyFlow V3 — current handoff
 
-Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
+Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
 
 ## Verified runtime release
 
@@ -48,6 +48,15 @@ Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 - Private PDF signing requires the fixed bucket and authenticated owner's canonical attachment path; stored attachment URLs cannot bypass this gate.
 - Client commerce writes revoked on nine tables. Effective grant assertions and disposable PostgreSQL CI regression protect this boundary; product edits continue through the authenticated API override route.
 - 801 API tests, API/mobile build, PR/main CI, exact Render smoke and live DB grants verified. No historical data repair, frontend, AI/model or SES activation changes.
+
+## Pending audit branches
+
+- `fix/recoverable-processing-and-ui`: fenced extraction leases and durable retries, commit `f0a1666b403dbd0abfdf115dcf8db2300c4b9ab3`. 802 API tests and disposable PGlite SQL tests passed; required PostgreSQL 17 CI and production migration/deployment were blocked by GitHub PR-creation errors. Not live.
+- `fix/maillens-semantic-evidence`: independent branch from current main. MailLens text v2 fixes five reproduced normalization failures and feeds current authored text to automatic AI extraction/validation, preserving review-only authority. 820 local API tests and API/mobile build pass. Not live until exact release verification.
+- Automatic deterministic lifecycle/commerce/Limone/GLS/Express One/generic/inbound/Foxpost-repair input now shares the authored-evidence boundary. Reproduced quoted-order automatic eligibility and hidden cancellation are rejected; genuine positive cases and product URLs are covered.
+- Historical benchmark launchers remain frozen. Existing stored decisions are not rewritten. Full CSS visibility, unrecognized quote formats, authenticated E2E and real-mail accuracy remain unverified.
+
+- Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
 
 ## Next action
 
