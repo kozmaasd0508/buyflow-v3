@@ -4,7 +4,8 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; reconcile aga
 
 ## Verified runtime
 
-- Repository: kozmaasd0508/buyflow-v3. Latest verified runtime is PR #325, main `21236b06f57002606d0fabbba24a7c0cc2bb5484`.
+- Repository: kozmaasd0508/buyflow-v3. Latest verified runtime is PR #326, main `edb1c1f42eb4dbfe9915da1aaad512e54882ad39`.
+- PR #326 CI #34775854444, main CI #34775913614 and exact Render smoke #34775956674 SUCCESS; 838 offline tests and API/mobile build passed.
 - PR #325 integrated CI #34760972022, main CI #34761064257 and exact Render smoke #34761105588 SUCCESS. 821 API tests and API/mobile build passed.
 - PR #324 MailLens release `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`: PR CI #34760802949, main CI #34760844420 and exact Render smoke #34760881629 SUCCESS.
 - Preview: https://buyflow-v3-api-dev.onrender.com/app/ ; health: /health.
@@ -20,13 +21,13 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; reconcile aga
 - Production migration `20260912192905_recoverable_source_extraction.sql` applied. Four invoker RPCs: client execute denied, service execute allowed, no-op claims verified. PostgreSQL 17 CI passed. No historical customer data rewrite.
 - PR #322 exact identity conflict review, owner-scoped PDF signing and client commerce-write revocation remain intact. Lifecycle evidence pagination is stable and exhaustive.
 
-## Current branch
+## Released Luna prompt repair
 
-- `fix/luna-evidence-prompt` addresses the user's explicit Luna prompt review request.
+- PR #326 (`fix/luna-evidence-prompt`) addresses the user's explicit Luna prompt review request.
 - Prompt v2.1 clarifies actual vs negated/future events, order creation, completed payment/refund, six logistics phases, conflicting/multiple-order evidence and untrusted email instructions.
 - One strict Zod schema defines requested and accepted AI output. Required shipment_phase/evidence_issues fields; carrier purchase fields are null-only. Invalid and incomplete responses fail validation.
 - Application-enforced incomplete-input issues and inherited subject suppression accompany the prompt. Evidence issues force semantic review and prevent purchase eligibility; pickup-ready/delivery conflicts also require review.
-- Local: 838 API tests, typecheck and API/mobile build PASS. Release CI/merge/exact smoke pending. Model unchanged; no paid model evaluation. Existing observations are not automatically reprocessed.
+- Local: 838 API tests, typecheck and API/mobile build PASS. PR/main CI and exact Render smoke passed. Model unchanged; no paid model evaluation. Existing observations are not automatically reprocessed.
 
 ## Invariants and limits
 
@@ -37,4 +38,4 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; reconcile aga
 
 ## Next action
 
-Finish the prompt branch release gates. Then address UI status/next-action mismatches, purchase/inbox pagination, multi-account recovery and SES schema/runtime readiness. Preserve AI observation-only authority and evaluate the email-to-UI flow on a frozen real-mail set before claiming real accuracy. Browser-first for frontend changes; APK only on explicit request.
+Address UI status/next-action mismatches, purchase/inbox pagination, multi-account recovery and SES schema/runtime readiness. Preserve AI observation-only authority and evaluate the email-to-UI flow on a frozen real-mail set before claiming real accuracy. Browser-first for frontend changes; APK only on explicit request.
