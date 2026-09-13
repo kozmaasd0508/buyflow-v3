@@ -1,14 +1,11 @@
 # BuyFlow — latest worklog entry
 
-## 2026-09-12 — Audit repair 1: identity conflicts and document access
+## 2026-09-13 — MailLens semantic evidence repair (in progress)
 
-- Baseline main: `766a23794406feea0dd60b7902eda5699cb3709e`; branch `fix/audit-identity-document-security`.
-- Exact order/tracking/thread identities now veto conflicting automatic links even when soft evidence creates a large score gap. Contradictory candidates return REVIEW with no selected Purchase; consistent identities still link.
-- Private attachment signing requires the fixed documents bucket and the authenticated user's canonical attachment path. Stored attachment external URLs cannot bypass this check.
-- Migration removes direct client writes to nine commerce/evidence tables while preserving existing reads/RLS and backend privileges. It verifies effective table and column privileges and aborts if unsafe grants remain.
-- Added isolated PostgreSQL CI coverage: execute denied client INSERT/UPDATE/DELETE and preserved backend writes. The connected staging project uses a different schema and is not modified.
-- Validation: 801/801 API tests and API/mobile build PASS. Disposable PostgreSQL tests confirmed denied client DML and preserved backend writes.
-- PR #322 merged as `253de7f93fa45c08f48911d75a0fc77c64e5e8bd`. PR CI #34712428424, main CI #34712496392 and exact Render smoke #34712535387 all SUCCESS. Production `restrict_client_commerce_writes` migration applied; live verification: 9 protected tables, 0 client write grants, RLS enabled and backend SELECT/INSERT/UPDATE preserved.
-- Security advisors after migration: no new findings; existing leaked-password-protection warning and four backend-only RLS/no-policy informational findings remain.
-- No historical data repair, AI/model change, protocol activation, SES activation or frontend change in this batch.
-- Next: recoverable processing leases, SES readiness, unified UI status/pagination/multi-account search, and MailLens integration with real-mail E2E evaluation.
+- Independent branch `fix/maillens-semantic-evidence`, based on main `c39a36e43fc00bcc14471098e3d05c726ef55e7b`; recovery/migration repair remains on its separate branch.
+- Reproduced five failures against frozen historical MailLens `f691954`: visible not-hidden classes removed, nested hidden delivery leaked, short replies retain history, placeholder plain text masks HTML, quote-only mail retains old delivery.
+- Added MailLens text v2 with HTML tree parsing, subtree visibility/quote filtering, exact placeholder fallback and explicit truncation/provenance. Current authored text is distinct from full visible body; an empty semantic result never falls back to quoted text or snippet.
+- Automatic Nylas AI extraction now uses this semantic text and passes identical evidence to validation. AI-run/validated-result metadata records normalization version and diagnostics; original provider email is unchanged. Existing AI observation-only authority remains intact.
+- Local API typecheck, clean-lockfile install, API/mobile build and 813 tests PASS, including actual mocked Responses request inspection. No paid AI call or customer data mutation.
+- Limits: no full CSS rendering, no claim of universal quote detection or real-mail accuracy. Deterministic parsers and historical benchmark launchers are not switched by this change; their remaining input paths need separate audit. Stored observations are not automatically reprocessed. Production release requires PR CI, main CI and exact Render smoke.
+
