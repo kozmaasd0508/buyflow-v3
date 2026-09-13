@@ -146,7 +146,7 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
     subject: evidence.subject,
     bodyText,
   }));
-  const validatedResult = { ...buildGenericLifecycleValidatedEnvelope(validatedObservations), normalization: evidence.normalization };
+  const validatedResult: Record<string, unknown> = { ...buildGenericLifecycleValidatedEnvelope(validatedObservations), normalization: evidence.normalization };
 
   const structuredResult = {
     normalization: evidence.normalization,
