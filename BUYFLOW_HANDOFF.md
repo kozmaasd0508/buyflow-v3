@@ -55,6 +55,8 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 - `fix/maillens-semantic-evidence`: independent branch from current main. MailLens text v2 fixes five reproduced normalization failures and feeds current authored text to automatic AI extraction/validation, preserving review-only authority. 813 local API tests pass. Not live until exact release verification.
 - Historical benchmark launchers remain frozen. Deterministic parser normalization, full CSS visibility, authenticated E2E and real-mail accuracy are not covered by this repair.
 
+- Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
+
 ## Next action
 
 Continue the authorized audit repair: recoverable source-processing leases and explicit external-call timeouts; SES schema/runtime readiness; unified UI status, pagination and multi-account recovery; MailLens normalization and runtime integration. Preserve existing AI observation-only authority. Validate email-to-UI behavior on a frozen real-mail set; standalone benchmarks are insufficient. Full authenticated browser E2E and real-mail accuracy remain unverified.
