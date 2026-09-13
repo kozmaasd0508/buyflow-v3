@@ -1,4 +1,4 @@
-import { htmlToCompactText } from '../ai/openai-email-extractor.js';
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
@@ -129,12 +129,12 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
   const provider = createEmailProvider({ provider: 'nylas', providerAccountId: input.grantId });
   const email = await provider.getMessage(input.messageId);
   const domains = senderDomains(email.from);
-  const bodyText = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml, BODY_MAX_CHARS)
-    : (email.snippet ?? '').trim().slice(0, BODY_MAX_CHARS);
+  const evidence = prepareDeterministicEvidence(email, BODY_MAX_CHARS);
+  if (!evidence.canParseAutomatically) return { matched: false };
+  const bodyText = evidence.bodyText;
   const observations = parseGenericLifecycleObservations({
     senderDomains: domains,
-    subject: email.subject,
+    subject: evidence.subject,
     bodyText,
   });
   if (observations.length === 0) return { matched: false };
@@ -143,12 +143,13 @@ export async function preprocessGenericLifecycleNylasMessage(input: {
   const validatedObservations = observations.map((observation) => reviewValidation({
     parsed: observation,
     domains,
-    subject: email.subject,
+    subject: evidence.subject,
     bodyText,
   }));
-  const validatedResult = buildGenericLifecycleValidatedEnvelope(validatedObservations);
+  const validatedResult = { ...buildGenericLifecycleValidatedEnvelope(validatedObservations), normalization: evidence.normalization };
 
   const structuredResult = {
+    normalization: evidence.normalization,
     schema_version: 2,
     ...parsed.extraction,
     ...(parsed.shipmentPhase ? { shipment_phase: parsed.shipmentPhase } : {}),

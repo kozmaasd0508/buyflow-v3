@@ -5,7 +5,7 @@ export const MAIL_LENS_TEXT_VERSION = 'mail-lens-text-v2';
 
 type Node = DefaultTreeAdapterMap['node'];
 const BLOCKS = new Set(['address', 'article', 'blockquote', 'div', 'footer', 'h1', 'h2', 'h3', 'header', 'li', 'p', 'section', 'table', 'tr']);
-const NON_TEXT = new Set(['script', 'style', 'template', 'head', 'noscript']);
+const NON_TEXT = new Set(['script', 'style', 'template', 'head', 'title', 'noscript']);
 
 function tidy(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
@@ -15,15 +15,20 @@ function tidy(text: string): string {
 function currentText(text: string): { text: string; quoted: boolean } {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const output: string[] = [];
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
     const value = line.trim();
+    const headerWindow = lines.slice(index, index + 8).join("\n");
+    const quotedHeaders = /^(?:from|feladó|felado)\s*:/i.test(value)
+      && /(?:^|\n)\s*(?:to|címzett|cimzett)\s*:/i.test(headerWindow)
+      && /(?:^|\n)\s*(?:subject|tárgy|targy)\s*:/i.test(headerWindow);
     // Strong reply headers establish the boundary even for an empty/short reply.
-    if (/^-{2,}\s*(?:original message|forwarded message|eredeti üzenet|eredeti uzenet)\s*-{2,}$/i.test(value)
+    if (quotedHeaders || /^begin forwarded message\s*:\s*$/i.test(value) || /^-{2,}\s*(?:original message|forwarded message|eredeti üzenet|eredeti uzenet)\s*-{2,}$/i.test(value)
       || /^on .{3,200} wrote:\s*$/i.test(value)
       || /^am .{3,200} schrieb .{0,80}:\s*$/i.test(value)
       || /^le .{3,200} a écrit\s*:\s*$/i.test(value)
       || /^el .{3,200} escribió\s*:\s*$/i.test(value)
-      || /\bezt (?:írta|irta)\s*\(/i.test(value)) {
+      || /\bezt (?:írta|irta)\s*(?:\(|:)/i.test(value)) {
       return { text: tidy(output.join('\n')), quoted: true };
     }
     output.push(line);
@@ -65,7 +70,7 @@ function htmlText(html: string) {
       if (tag === 'a') {
         try {
           const url = new URL(attrs.get('href') ?? '');
-          if (['https:', 'http:'].includes(url.protocol) && url.href.length <= 4096) append(` (${url.href})`, inQuote);
+          if (['https:', 'http:'].includes(url.protocol) && url.href.length <= 4096) append(` [URL: ${url.href}]`, inQuote);
         } catch { /* Relative and unsafe URLs are not evidence. */ }
       }
       if (BLOCKS.has(tag) || tag === 'td' || tag === 'th') append(tag === 'td' || tag === 'th' ? ' ' : '\n', inQuote);

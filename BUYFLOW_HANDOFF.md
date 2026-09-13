@@ -52,8 +52,9 @@ Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 ## Pending audit branches
 
 - `fix/recoverable-processing-and-ui`: fenced extraction leases and durable retries, commit `f0a1666b403dbd0abfdf115dcf8db2300c4b9ab3`. 802 API tests and disposable PGlite SQL tests passed; required PostgreSQL 17 CI and production migration/deployment were blocked by GitHub PR-creation errors. Not live.
-- `fix/maillens-semantic-evidence`: independent branch from current main. MailLens text v2 fixes five reproduced normalization failures and feeds current authored text to automatic AI extraction/validation, preserving review-only authority. 813 local API tests pass. Not live until exact release verification.
-- Historical benchmark launchers remain frozen. Deterministic parser normalization, full CSS visibility, authenticated E2E and real-mail accuracy are not covered by this repair.
+- `fix/maillens-semantic-evidence`: independent branch from current main. MailLens text v2 fixes five reproduced normalization failures and feeds current authored text to automatic AI extraction/validation, preserving review-only authority. 820 local API tests and API/mobile build pass. Not live until exact release verification.
+- Automatic deterministic lifecycle/commerce/Limone/GLS/Express One/generic/inbound/Foxpost-repair input now shares the authored-evidence boundary. Reproduced quoted-order automatic eligibility and hidden cancellation are rejected; genuine positive cases and product URLs are covered.
+- Historical benchmark launchers remain frozen. Existing stored decisions are not rewritten. Full CSS visibility, unrecognized quote formats, authenticated E2E and real-mail accuracy remain unverified.
 
 - Saved on GitHub as `38945871e08d4c56ffd94237b2b5d68508587142` with a documentation follow-up. PR creation still returns a connector internal error; PR-list verification confirmed no PR exists. CI and production release remain blocked; no deployment or migration was performed.
 

@@ -1,6 +1,7 @@
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
-import { htmlToCompactText, type EmailExtraction } from '../ai/openai-email-extractor.js';
+import { type EmailExtraction } from '../ai/openai-email-extractor.js';
 import { isMerchantSender, merchantDisplayName } from '../email/sender-role.js';
 import { validateEmailExtraction } from '../validation/email-extraction-validator.js';
 import { parseAlzaLifecycleEmail } from './alza-lifecycle-adapter.js';
@@ -315,13 +316,16 @@ export async function preprocessDeterministicLifecycleNylasMessage(input: { gran
   const email = await provider.getMessage(input.messageId);
   const domains = senderDomains(email.from);
   const senderEmails = email.from.map((address) => address.email);
-  const bodyText = email.bodyHtml ? htmlToCompactText(email.bodyHtml) : (email.snippet ?? '').trim().slice(0, 20_000);
-  const parsed = parseDeterministicLifecycleEmail({ senderDomains: domains, senderEmails, subject: email.subject, bodyText });
+  const evidence = prepareDeterministicEvidence(email, 20_000);
+  if (!evidence.canParseAutomatically) return { matched: false };
+  const bodyText = evidence.bodyText;
+  const parsed = parseDeterministicLifecycleEmail({ senderDomains: domains, senderEmails, subject: evidence.subject, bodyText });
   if (!parsed) return { matched: false };
 
-  const validated = validateEmailExtraction({ extraction: parsed.extraction, senderDomains: domains, subject: email.subject, bodyText });
+  const validated = validateEmailExtraction({ extraction: parsed.extraction, senderDomains: domains, subject: evidence.subject, bodyText });
   const now = new Date().toISOString();
   const structuredResult = {
+    normalization: evidence.normalization,
     schema_version: 2,
     ...parsed.extraction,
     lifecycle_event: parsed.lifecycleEvent,
@@ -331,6 +335,7 @@ export async function preprocessDeterministicLifecycleNylasMessage(input: { gran
     parser_reasons: parsed.reasons,
   };
   const validatedResult = {
+    normalization: evidence.normalization,
     ...(JSON.parse(JSON.stringify(validated)) as Record<string, unknown>),
     lifecycle_event: parsed.lifecycleEvent,
     ...(parsed.shipmentPhase ? { shipment_phase: parsed.shipmentPhase } : {}),

@@ -1,7 +1,7 @@
+import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
 import {
-  htmlToCompactText,
   type EmailExtraction,
   type ProductExtraction,
 } from '../ai/openai-email-extractor.js';
@@ -187,20 +187,21 @@ export async function preprocessLimoneOrderNylasMessage(input: {
   const provider = createEmailProvider({ provider: 'nylas', providerAccountId: input.grantId });
   const email = await provider.getMessage(input.messageId);
   const domains = senderDomains(email.from);
-  const bodyText = email.bodyHtml
-    ? htmlToCompactText(email.bodyHtml)
-    : (email.snippet ?? '').trim().slice(0, 20_000);
-  const parsed = parseLimoneOrderEmail({ senderDomains: domains, subject: email.subject, bodyText });
+  const evidence = prepareDeterministicEvidence(email, 20_000);
+  if (!evidence.canParseAutomatically) return { matched: false };
+  const bodyText = evidence.bodyText;
+  const parsed = parseLimoneOrderEmail({ senderDomains: domains, subject: evidence.subject, bodyText });
   if (!parsed) return { matched: false };
 
   const validated = validateEmailExtraction({
     extraction: parsed.extraction,
     senderDomains: domains,
-    subject: email.subject,
+    subject: evidence.subject,
     bodyText,
   });
   const now = new Date().toISOString();
   const structuredResult = {
+    normalization: evidence.normalization,
     schema_version: 2,
     ...parsed.extraction,
     extraction_source: 'deterministic',
@@ -208,6 +209,7 @@ export async function preprocessLimoneOrderNylasMessage(input: {
     parser_reasons: parsed.reasons,
   };
   const validatedResult = {
+    normalization: evidence.normalization,
     ...(JSON.parse(JSON.stringify(validated)) as Record<string, unknown>),
     extraction_source: 'deterministic',
     parser_version: parsed.parserVersion,
