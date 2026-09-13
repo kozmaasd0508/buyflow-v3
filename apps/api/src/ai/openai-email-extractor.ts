@@ -353,6 +353,7 @@ export async function extractEmailWithOpenAIResult(input: {
 
   const response = await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
+    signal: AbortSignal.timeout(60_000),
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
       'Content-Type': 'application/json',

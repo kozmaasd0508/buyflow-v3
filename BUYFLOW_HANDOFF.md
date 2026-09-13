@@ -1,6 +1,6 @@
 # BuyFlow V3 — current handoff
 
-Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
+Updated: 2026-09-13. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub main and live state before acting. Older handoff experiments and protocol history remain in Git history.
 
 ## Verified runtime release
 
@@ -48,6 +48,11 @@ Updated: 2026-09-12. Read AGENTS.md and BUYFLOW_WORKLOG_LATEST.md; verify GitHub
 - Private PDF signing requires the fixed bucket and authenticated owner's canonical attachment path; stored attachment URLs cannot bypass this gate.
 - Client commerce writes revoked on nine tables. Effective grant assertions and disposable PostgreSQL CI regression protect this boundary; product edits continue through the authenticated API override route.
 - 801 API tests, API/mobile build, PR/main CI, exact Render smoke and live DB grants verified. No historical data repair, frontend, AI/model or SES activation changes.
+
+## Audit repair 2 in progress
+
+- Branch `fix/recoverable-processing-and-ui`: fenced extraction leases, atomic audit/result persistence, external-call deadline and durable source retry recovery.
+- 802 local API tests and typecheck pass. New migration and database tests require CI and live verification; not yet released.
 
 ## Next action
 

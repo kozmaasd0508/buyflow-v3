@@ -1,14 +1,11 @@
 # BuyFlow — latest worklog entry
 
-## 2026-09-12 — Audit repair 1: identity conflicts and document access
+## 2026-09-13 — Audit repair 2: recoverable source extraction (in progress)
 
-- Baseline main: `766a23794406feea0dd60b7902eda5699cb3709e`; branch `fix/audit-identity-document-security`.
-- Exact order/tracking/thread identities now veto conflicting automatic links even when soft evidence creates a large score gap. Contradictory candidates return REVIEW with no selected Purchase; consistent identities still link.
-- Private attachment signing requires the fixed documents bucket and the authenticated user's canonical attachment path. Stored attachment external URLs cannot bypass this check.
-- Migration removes direct client writes to nine commerce/evidence tables while preserving existing reads/RLS and backend privileges. It verifies effective table and column privileges and aborts if unsafe grants remain.
-- Added isolated PostgreSQL CI coverage: execute denied client INSERT/UPDATE/DELETE and preserved backend writes. The connected staging project uses a different schema and is not modified.
-- Validation: 801/801 API tests and API/mobile build PASS. Disposable PostgreSQL tests confirmed denied client DML and preserved backend writes.
-- PR #322 merged as `253de7f93fa45c08f48911d75a0fc77c64e5e8bd`. PR CI #34712428424, main CI #34712496392 and exact Render smoke #34712535387 all SUCCESS. Production `restrict_client_commerce_writes` migration applied; live verification: 9 protected tables, 0 client write grants, RLS enabled and backend SELECT/INSERT/UPDATE preserved.
-- Security advisors after migration: no new findings; existing leaked-password-protection warning and four backend-only RLS/no-policy informational findings remain.
-- No historical data repair, AI/model change, protocol activation, SES activation or frontend change in this batch.
-- Next: recoverable processing leases, SES readiness, unified UI status/pagination/multi-account search, and MailLens integration with real-mail E2E evaluation.
+- Branch `fix/recoverable-processing-and-ui`, based on main `c39a36e43fc00bcc14471098e3d05c726ef55e7b`.
+- Five-minute source claims fence stale workers; audit and review result save atomically. Explicit 60-second OpenAI request deadline; configuration checked before claiming.
+- Busy source processing now retries through the shared webhook/scan path. Recovery requeues expired sources even when an older webhook was already acknowledged, preserving active locks and retry backoff.
+- Synthetic PostgreSQL regressions cover stale/duplicate completion, rollback, reclaim, release, legacy unleased rows, durable recovery and client RPC permissions.
+- Local API typecheck and 802 tests PASS. Database CI, migration application and exact deployment verification remain pending; this batch is not yet live.
+- Remaining audit work: UI status/pagination, multi-account recovery, SES readiness and MailLens integration; real-mail and authenticated browser E2E remain unverified.
+

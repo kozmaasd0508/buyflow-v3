@@ -40,10 +40,17 @@ export async function processCommerceMessage(input: {
         purchaseWrites: 0, shipmentWrites: 0, documentWrites: 0, aiCalls: 0 };
     }
   }
-  return dependencies.process({
+  const result = await dependencies.process({
     grantId: input.grantId,
     messageId: input.messageId,
     mode: observeAi ? 'observe' : input.mode,
     allowAiObservation: observeAi,
   });
+  // A busy source is unfinished work: all durable callers must retry it.
+  if (result.status === 'already_processing' || !result.ok) {
+    const error = new Error('Source email processing is incomplete');
+    error.name = 'SourceProcessingRetry';
+    throw error;
+  }
+  return result;
 }
