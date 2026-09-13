@@ -2,6 +2,15 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-09-13 — Luna prompt and response validation
+
+- Branch `fix/luna-evidence-prompt` from verified main `21236b06f57002606d0fabbba24a7c0cc2bb5484`; user explicitly requested Luna prompt review.
+- Prompt now separates current affirmative facts from negation, inherited/quoted history, future promises and multi-record ambiguity. Adds explicit logistics phase and evidence issue fields.
+- Shared strict Zod response/request contract rejects malformed fields, carrier purchase inventions and incomplete Responses. Application-known incomplete input forces evidence issues even if the model omits them. AI and validation share suppressed inherited subjects/current body.
+- Semantic issues block purchase eligibility; pickup-ready/delivery conflicts require review. Existing durable AI shadow authority unchanged; no automatic re-extraction of old observations.
+- 838 offline tests, typecheck and API/mobile build PASS. No paid AI calls or real-mail accuracy claim. PR/CI/release pending.
+- Reconciled prior release: PR #325 integrated CI #34760972022, main CI #34761064257 and exact Render smoke #34761105588 SUCCESS. Production extraction lease migration applied; client-denied/service-allowed RPC grants and safe no-op calls verified. Existing advisors only; no historical data rewrite.
+
 ## 2026-09-13 — Source recovery integrated with MailLens (PR #325)
 
 - PR #324 merged as `240cf36c8b058a49f165f119cc61bcaf1a4e0e68`; PR CI #34760802949 passed. Main CI #34760844420 and exact Render smoke #34760881629 passed; MailLens repair is live.

@@ -128,6 +128,18 @@ export function validateEmailExtraction(
   const reasons: string[] = [];
   const blockedFields: string[] = [];
   let requiresReview = false;
+  if (validated.evidence_issues?.length) {
+    requiresReview = true;
+    reasons.push(...validated.evidence_issues.map(issue => `evidence_issue:${issue}`));
+  }
+  // Legacy deterministic results predate this field; the new AI contract requires it.
+  if ('shipment_phase' in validated && (
+    (validated.event_type === 'delivery' && validated.shipment_phase !== 'delivered') ||
+    (validated.event_type === 'shipment' && validated.shipment_phase === 'delivered')
+  )) {
+    requiresReview = true;
+    reasons.push('shipment_phase_event_conflict');
+  }
   const senderIsCarrier = input.senderDomains.some(isCarrierSenderDomain);
   const contextText = `${input.subject ?? ''}\n${input.bodyText ?? ''}`;
 
@@ -212,6 +224,7 @@ export function validateEmailExtraction(
   );
 
   const eligibleForPurchaseCreation = Boolean(
+    !requiresReview &&
     hasCompleteOrderIdentity &&
     validated.confidence >= 0.9,
   );

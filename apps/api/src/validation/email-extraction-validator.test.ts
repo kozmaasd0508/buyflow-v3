@@ -240,3 +240,25 @@ test('payment completed requires explicit paid status before automatic trust', (
   assert.equal(result.validation_status, 'review');
   assert.ok(result.reasons.includes('payment_completed_without_explicit_paid_status'));
 });
+
+for (const issue of ['multiple_orders', 'multiple_shipments', 'conflicting_evidence', 'insufficient_evidence', 'truncated_input', 'too_many_products'] as const) {
+  test(`high-confidence order with ${issue} cannot become purchase eligible`, () => {
+    const result = validateEmailExtraction({
+      extraction: { ...base, event_type: 'order_created', merchant: 'Shop', order_number: 'ORDER-1', evidence_issues: [issue] },
+      senderDomains: ['shop.example'], bodyText: 'Order ORDER-1 confirmed by Shop.',
+    });
+    assert.equal(result.validation_status, 'review');
+    assert.equal(result.eligible_for_purchase_creation, false);
+    assert.ok(result.reasons.includes(`evidence_issue:${issue}`));
+  });
+}
+
+test('pickup-ready observation cannot validate as completed delivery', () => {
+  const result = validateEmailExtraction({
+    extraction: { ...base, event_type: 'delivery', shipment_phase: 'ready_for_pickup', evidence_issues: [] },
+    senderDomains: ['shop.example'], bodyText: 'Ready for pickup',
+  });
+  assert.equal(result.validation_status, 'review');
+  assert.ok(result.reasons.includes('shipment_phase_event_conflict'));
+  assert.equal(result.shipment_phase, 'ready_for_pickup');
+});
