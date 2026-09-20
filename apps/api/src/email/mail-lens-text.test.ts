@@ -57,3 +57,22 @@ test('authored truncation is explicit and quotes do not consume the semantic bud
 test('plain interleaved replies preserve unquoted authored lines', () => {
   assert.equal(normalize({ bodyText: '> Delivered\nNot received\n> Signed\nNot by me' }).semanticText, 'Not received\nNot by me');
 });
+
+
+test('provider body outranks a shorter snippet and preserves late order tracking and payment evidence', () => {
+  const body = [
+    'Rendelését rögzítettük.',
+    'Megrendelés azonosító: 98691-106839',
+    'Csomagszám: CLFOX178971847766417',
+    'Fizetett összeg: 140 000 HUF',
+  ].join('\n');
+  const result = normalize({
+    snippet: 'Rendelését rögzítettük.',
+    bodyText: body,
+  });
+  assert.equal(result.normalization.bodyTextSource, 'provider_plain');
+  assert.equal(result.semanticText, body);
+  assert.match(result.semanticText, /98691-106839/);
+  assert.match(result.semanticText, /CLFOX178971847766417/);
+  assert.match(result.semanticText, /140 000 HUF/);
+});
