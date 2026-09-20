@@ -1,8 +1,8 @@
 # BuyFlow — latest worklog entry
 
-## 2026-09-13 — Luna prompt repair released (PR #326)
+## 2026-09-20 — MailLens evidence envelope hardened (PR #329)
 
-- Merge `edb1c1f42eb4dbfe9915da1aaad512e54882ad39`; PR CI #34775854444, main CI #34775913614 and exact Render smoke #34775956674 SUCCESS. 838 offline tests, typecheck and API/mobile build passed.
-- Event-evidence prompt, strict response contract, application-enforced incomplete-input issues and semantic review gates are live. Model remains Luna; AI remains observation-only.
-- No paid model evaluation, real-mail accuracy claim, DDL, historical rewrite or automatic re-extraction. Next: UI state/next action, pagination/multi-account recovery, SES readiness and authenticated real-mail E2E.
-
+- Merge `d651b41f6f1d2aa9167f0e7d0689c20a8542e0f7`; PR CI #35526559348, main CI #35526625907 and exact Render smoke #35526656180 SUCCESS. 842/842 API tests passed; API/mobile typecheck and builds passed.
+- Fixed the `snippet_fallback` diagnostic mismatch, so snippet-only evidence now forces `insufficient_evidence`. The AI request now receives sanitized From metadata, received_at, subject, sender domains/role and the same current authored body validation consumes.
+- Full provider body remains authoritative over snippets; regressions cover late order/tracking/payment evidence and quote-only snippet suppression. AI remains observation-only; no DDL, customer-data rewrite, historical re-extraction or paid model evaluation.
+- Next: rebuild a fresh/current frozen real-mail evaluation through the production MailLens path and compare Luna versus Sol; do not use historical v1.1 launchers as current-runtime accuracy evidence.
