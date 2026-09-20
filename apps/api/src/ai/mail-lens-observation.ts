@@ -2,10 +2,14 @@ import type { NormalizedEmail } from '../email/types.js';
 import { prepareDeterministicEvidence } from '../email/deterministic-evidence.js';
 import { extractEmailWithOpenAIResult } from './openai-email-extractor.js';
 
+function compactMetadata(value: string | undefined, maxChars: number): string {
+  return (value ?? '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxChars);
+}
+
 function formatSender(address: NormalizedEmail['from'][number]): string {
-  const email = address.email.trim();
-  const name = address.name?.trim();
-  if (!email) return name ?? '';
+  const email = compactMetadata(address.email, 320);
+  const name = compactMetadata(address.name, 256);
+  if (!email) return name;
   return name ? `${name} <${email}>` : email;
 }
 
@@ -30,7 +34,7 @@ export async function extractMailLensObservation(input: {
     ...evidence,
     diagnostics: {
       truncated: normalized.normalization.semanticTextTruncated,
-      snippetOnly: normalized.normalization.bodyTextSource === 'snippet',
+      snippetOnly: normalized.normalization.bodyTextSource === 'snippet_fallback',
       emptyBody: !normalized.bodyText.trim(),
     },
     apiKey: input.apiKey, model: input.model, fetchImpl: input.fetchImpl,
