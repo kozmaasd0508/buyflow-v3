@@ -2,6 +2,13 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-09-20 — Luna logistics-boundary prompt v2.3 released (PR #331)
+
+- Merge `1c670dd34d40d61f249fc1224a9f8f7a8c5370cd`; PR CI #35529312991, main CI #35529374707 and exact Render smoke #35529425612 SUCCESS. API/mobile typecheck, tests/builds and database/crash-recovery gates passed.
+- Prompt audit version `email-extraction-v2.3-logistics-boundaries` adds general logistics/payment boundary rules: packed or ready-for-shipping merchant mail stays `order_updated` until physical carrier acceptance; courier pickup bookings stay `other`; pickup/service request IDs are not tracking IDs; physical carrier inbound/acceptance is `shipped`; conditional carrier pre-notifications are `shipment_created`; completed subscription charges stay payment/receipt events; COD/locker receipts prefer `invoice_or_receipt`.
+- Current-MailLens REAL30 human-gold baseline before tuning: Luna 22/30 exact (73.3%), Sol 27/30 (90%). Same tuning set after v2.3: Luna 29/30 (96.7%), identity 30/30, shipment_phase 30/30; Sol 28/30 (93.3%). Because the prompt was tuned against this set, these numbers are not an unseen-mail generalization claim.
+- AI remains observation-only. No DDL, customer-data rewrite, historical re-extraction or AI write-authority change. Next evaluation should use an unseen human-gold holdout.
+
 ## 2026-09-20 — MailLens evidence envelope hardened (PR #329)
 
 - Merge `d651b41f6f1d2aa9167f0e7d0689c20a8542e0f7`; PR CI #35526559348, main CI #35526625907 and exact Render smoke #35526656180 SUCCESS. 842/842 API tests passed; API/mobile typecheck and builds passed.
