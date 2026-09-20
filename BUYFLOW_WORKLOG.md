@@ -2,6 +2,14 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-09-20 — MailLens evidence envelope hardened (PR #329)
+
+- Merge `d651b41f6f1d2aa9167f0e7d0689c20a8542e0f7`; PR CI #35526559348, main CI #35526625907 and exact Render smoke #35526656180 SUCCESS. 842/842 API tests passed; API/mobile typecheck and builds passed.
+- Fixed a production diagnostic mismatch: MailLens reports `bodyTextSource=snippet_fallback`, but the AI boundary checked for `snippet`. Snippet-only evidence now forces `insufficient_evidence` even if the model omits it.
+- The AI evidence envelope now includes sanitized From metadata, received_at, subject, sender domains/role and the same current authored body used by validation. Full provider body still outranks snippets; regressions preserve late order/tracking/payment evidence and prevent quote-only snippet reintroduction.
+- Extraction audit version is now `email-extraction-v2.2-evidence-envelope`. AI remains observation-only; no DDL, customer-data rewrite, historical re-extraction or paid model evaluation.
+- Historical REAL60/REAL100 MailLens v1.1 launchers retain an explicit `semanticText || snippet` fallback, so the next Luna/Sol evaluation must rebuild a fresh/current frozen set through the production MailLens path rather than reuse those launchers as current-runtime evidence.
+
 ## 2026-09-13 — Luna prompt repair released (PR #326)
 
 - Merge `edb1c1f42eb4dbfe9915da1aaad512e54882ad39`; PR CI #34775854444, main CI #34775913614 and exact Render smoke #34775956674 SUCCESS. 838 offline tests, typecheck and API/mobile build passed.
