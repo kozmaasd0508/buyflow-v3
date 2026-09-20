@@ -6,6 +6,7 @@ on:
       - test/maillens-holdout30-20260920
     paths:
       - apps/api/src/scripts/mail-lens-real30-unseen-holdout.ts
+      - apps/api/src/scripts/mail-lens-holdout-luna-risk-probe.ts
       - .github/workflows/maillens-real30-unseen-holdout.yml
       - apps/api/src/ai/**
       - apps/api/src/email/**
@@ -36,8 +37,8 @@ jobs:
       - name: MailLens regressions
         run: node --import tsx --test apps/api/src/email/mail-lens-text.test.ts apps/api/src/ai/mail-lens-observation.test.ts apps/api/src/ai/openai-email-extractor.test.ts
 
-      - name: Unseen REAL30 human-gold Luna vs Sol
-        run: npx tsx apps/api/src/scripts/mail-lens-real30-unseen-holdout.ts
+      - name: Luna-only holdout risk probe
+        run: npx tsx apps/api/src/scripts/mail-lens-holdout-luna-risk-probe.ts
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
