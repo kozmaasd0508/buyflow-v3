@@ -91,6 +91,7 @@ async function main(){
   if(selected.length!==30) throw new Error('HOLDOUT_SELECTION_COUNT_INVALID');
   const selectionSha256=H(selected.map(x=>x.providerMessageId).join('\n'));
   if(selectionSha256!==EXPECTED_HOLDOUT_SELECTION_SHA256){
+    console.log(JSON.stringify({ selectionProbe: selected.map((x,index)=>({case:index+1,messageHash:H(x.providerMessageId),threadHash:H(x.providerThreadId?.trim()||('message:'+x.providerMessageId))})), selectionSha256 }, null, 2));
     throw new Error('HOLDOUT_SELECTION_MISMATCH:'+selectionSha256);
   }
 
