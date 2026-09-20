@@ -2,6 +2,14 @@
 
 > Concise newest-first history. `BUYFLOW_HANDOFF.md` is the current-state snapshot; older granular detail remains available in Git history.
 
+## 2026-09-20 — Luna-first selective Sol verification released (PR #333)
+
+- Merge `2638ee1d93d12ef74443f0eb687137af4639555c`; final PR CI #35531231754, main CI #35531391000 and exact Render smoke #35531437379 SUCCESS. API/mobile typecheck, tests/builds and database/crash-recovery gates passed.
+- Luna is the mandatory first pass. Sol is a selective second pass only for generic high-risk semantic boundaries; successful Sol becomes the selected shadow observation, while verifier failure falls back to Luna. `BUYFLOW_SOL_VERIFIER_ENABLED=false` disables the second pass without changing Luna.
+- Routing/audit persists the gate reasons, selected/primary/verifier models, core agreement, response IDs and combined token usage. AI authority is unchanged: all AI results remain `ai_shadow`, review-only and non-writing.
+- Disjoint unseen-by-thread REAL30: Luna-only 23/30 exact (76.7%), full Sol 28/30 (93.3%). Final receipt-free selective routing used Sol on 5/30 (16.7%) and achieved 27/30 exact (90%), 28/30 semantic exact (93.3%) and 28/30 identity exact (93.3%); tracking/invoice/payment were 30/30.
+- Remaining measured gaps: receipt/order-number linking and one rescheduled-delivery shipment-phase edge. Any further tuning should be validated on a third unseen holdout rather than reusing this one as unseen evidence.
+
 ## 2026-09-20 — Luna logistics-boundary prompt v2.3 released (PR #331)
 
 - Merge `1c670dd34d40d61f249fc1224a9f8f7a8c5370cd`; PR CI #35529312991, main CI #35529374707 and exact Render smoke #35529425612 SUCCESS. API/mobile typecheck, tests/builds and database/crash-recovery gates passed.
