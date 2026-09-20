@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { extractMailLensObservation } from '../ai/mail-lens-observation.js';
+import { extractWithSelectiveSolVerification, sumAiUsage } from '../ai/selective-email-observation.js';
 import type { Json } from '../db/database.types.js';
 import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { createEmailProvider } from '../email/factory.js';
@@ -648,11 +648,21 @@ export async function processNylasMessage(input: {
     }
 
     try {
-      const { result, evidence } = await extractMailLensObservation({
-        email, apiKey: openai.apiKey, model: openai.model,
+      const selective = await extractWithSelectiveSolVerification({
+        email,
+        apiKey: openai.apiKey,
+        primaryModel: openai.model,
+        verifierEnabled: openai.verifierEnabled,
+        verifierModel: openai.verifierModel,
       });
-      aiCalls = 1;
+      aiCalls = selective.aiCalls;
+
+      const { result, evidence } = selective.selected;
       const extraction = result.extraction;
+      const usage = sumAiUsage(
+        selective.primary.result,
+        selective.verifier?.result ?? null,
+      );
       const extractionJson = JSON.parse(JSON.stringify(asAiObservation(toJson(extractionToJson(extraction))))) as Json;
       const validated: ValidatedEmailExtraction = validateEmailExtraction({
         extraction,
@@ -664,9 +674,26 @@ export async function processNylasMessage(input: {
       const aiRunResult: Json = {
         extraction: extractionJson,
         openai_response_id: result.responseId,
-        total_tokens: result.totalTokens,
-        cached_input_tokens: result.cachedInputTokens,
+        total_tokens: usage.totalTokens,
+        cached_input_tokens: usage.cachedInputTokens,
         normalization: evidence.normalization,
+        verification: {
+          policy: 'luna-first-selective-sol-v1',
+          primary_model: openai.model,
+          verifier_model: openai.verifierModel,
+          selected_model: selective.selectedModel,
+          verifier_enabled: openai.verifierEnabled,
+          verify_requested: selective.verification.verify,
+          reasons: selective.verification.reasons,
+          attempted: selective.verification.attempted,
+          completed: selective.verification.completed,
+          core_agreement: selective.verification.coreAgreement,
+          verifier_error_type: selective.verification.verifierErrorType,
+          primary_response_id: selective.primary.result.responseId,
+          verifier_response_id: selective.verifier?.result.responseId ?? null,
+          primary_total_tokens: selective.primary.result.totalTokens,
+          verifier_total_tokens: selective.verifier?.result.totalTokens ?? null,
+        },
       };
 
       // Audit record and source result commit together, only for the current claim.
@@ -676,8 +703,8 @@ export async function processNylasMessage(input: {
         p_extraction: extractionJson,
         p_validated: validatedResult,
         p_run: {
-          model: openai.model, prompt_version: PROMPT_VERSION,
-          input_tokens: result.inputTokens, output_tokens: result.outputTokens,
+          model: selective.selectedModel, prompt_version: PROMPT_VERSION,
+          input_tokens: usage.inputTokens, output_tokens: usage.outputTokens,
           confidence: extraction.confidence, result: aiRunResult,
         },
       });
