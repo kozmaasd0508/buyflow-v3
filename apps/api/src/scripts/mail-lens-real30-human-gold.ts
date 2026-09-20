@@ -133,7 +133,7 @@ async function main(){
       exact:{count:s.exact,pct:pct(s.exact,30)},
       semanticExact:{count:s.semanticExact,pct:pct(s.semanticExact,30)},
       identityExact:{count:s.identityExact,pct:pct(s.identityExact,30)},
-      fieldAccuracy:Object.fromEntries(FIELDS.map(f=>[f,{count:s.field[f],pct:pct(s.field[f],30)}])),
+      fieldAccuracy:Object.fromEntries(FIELDS.map(f=>[f,{count:s.field[f] ?? 0,pct:pct(s.field[f] ?? 0,30)}])),
       technicalErrors:s.errors,
     };
   }
