@@ -41,6 +41,6 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
-          NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
           NYLAS_API_URI: https://api.eu.nylas.com
           EMAIL_DISCOVERY_QUERY: category:purchases newer_than:60d -in:spam -in:trash
