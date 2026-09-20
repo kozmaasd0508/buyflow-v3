@@ -191,7 +191,7 @@ async function main() {
 
       for (const field of ['order_number', 'tracking_number', 'invoice_number'] as const) {
         if (!evidenceContainsIdentifier(extraction, field, evidenceText)) {
-          identifierEvidenceMisses[item.model][field] += 1;
+          identifierEvidenceMisses[item.model][field] = (identifierEvidenceMisses[item.model][field] ?? 0) + 1;
         }
       }
 
