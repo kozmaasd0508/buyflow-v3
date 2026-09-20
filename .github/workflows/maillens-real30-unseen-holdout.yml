@@ -1,0 +1,45 @@
+name: MailLens REAL30 Unseen Holdout
+
+on:
+  push:
+    branches:
+      - test/maillens-holdout30-20260920
+    paths:
+      - apps/api/src/scripts/mail-lens-real30-unseen-holdout.ts
+      - .github/workflows/maillens-real30-unseen-holdout.yml
+      - apps/api/src/ai/**
+      - apps/api/src/email/**
+
+permissions:
+  contents: read
+
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: API typecheck
+        run: npm run typecheck --workspace @buyflow/api
+
+      - name: MailLens regressions
+        run: node --import tsx --test apps/api/src/email/mail-lens-text.test.ts apps/api/src/ai/mail-lens-observation.test.ts apps/api/src/ai/openai-email-extractor.test.ts
+
+      - name: Unseen REAL30 human-gold Luna vs Sol
+        run: npx tsx apps/api/src/scripts/mail-lens-real30-unseen-holdout.ts
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
