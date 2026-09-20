@@ -80,3 +80,33 @@ test('full authored body wins over a short snippet and preserves late commerce e
   assert.match(request.input, /Utánvétes fizetés/);
   assert.doesNotMatch(request.input, /SNIPPET_ONLY_SHOULD_NOT_WIN/);
 });
+
+
+test('snippet-only fallback is marked insufficient instead of trusted as a full body', async () => {
+  let request: any;
+  const result = await extractMailLensObservation({
+    email: {
+      ...base,
+      bodyText: undefined,
+      bodyHtml: undefined,
+      snippet: 'Rendelés visszaigazolva: 98691-106839',
+    },
+    apiKey: 'synthetic-key',
+    model: 'synthetic-model',
+    fetchImpl: (async (_url, init) => {
+      request = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ output_text: JSON.stringify({
+        event_type: 'other',
+        shipment_phase: null,
+        evidence_issues: [],
+        confidence: 0.5,
+        products: [],
+        ...Object.fromEntries(['merchant', 'merchant_legal_name', 'order_number', 'subtotal', 'shipping_amount', 'discount_amount', 'total', 'currency', 'payment_status', 'payment_method', 'paid_amount', 'paid_currency', 'shipping_method', 'tracking_number', 'carrier', 'parcel_sender', 'cod_amount', 'cod_currency', 'invoice_number'].map(key => [key, null])),
+      }) }));
+    }) as typeof fetch,
+  });
+
+  assert.equal(result.evidence.normalization.bodyTextSource, 'snippet_fallback');
+  assert.match(request.input, /"snippetOnly":true/);
+  assert.deepEqual(result.result.extraction.evidence_issues, ['insufficient_evidence']);
+});
