@@ -6,7 +6,7 @@ import { extractMailLensObservation } from '../ai/mail-lens-observation.js';
 const QUERY='category:purchases newer_than:60d -in:spam -in:trash';
 const PRIOR_SEED='buyflow-maillens-real30-2026-09-20-v1';
 const HOLDOUT_SEED='buyflow-maillens-holdout30-2026-09-20-v1';
-const EXPECTED_HOLDOUT_SELECTION_SHA256='66288373dbbed6b3eec596150a566a7bd6f9cd5fed1a5a605c036cc0406e50c5';
+const EXPECTED_HOLDOUT_SELECTION_SHA256='23b021c848e9e1e48d4e6ffda7436f8fe81c3ec2f31ad9a10623b449cd37dc1d';
 const MODELS=['gpt-5.6-luna','gpt-5.6-sol'] as const;
 const FIELDS=['event_type','shipment_phase','order_number','tracking_number','invoice_number','payment_status'] as const;
 
@@ -29,6 +29,7 @@ const GOLD:Gold[]=[
   {event_type:'shipment',shipment_phase:'out_for_delivery',order_hash:null,tracking_hash:'318c0fc64a3f9d4db3bd8f4a8382668fb5dde2d911bbb3c4735ea47a53f443f0',invoice_hash:null,payment_status:null},
   {event_type:'shipment',shipment_phase:'shipment_created',order_hash:null,tracking_hash:'eab51c7c3617795e95099edfe9eaf7eae65d6edeaf1705abb4859788c2755b54',invoice_hash:null,payment_status:null},
   {event_type:'invoice_or_receipt',shipment_phase:null,order_hash:null,tracking_hash:null,invoice_hash:null,payment_status:null},
+  {event_type:'order_created',shipment_phase:null,order_hash:'770b90d876e186174bbb7f0a3ca616f1ac27c24f38b6de7aac2be21d6733ceea',tracking_hash:null,invoice_hash:null,payment_status:'cash_on_delivery'},
   {event_type:'other',shipment_phase:null,order_hash:null,tracking_hash:null,invoice_hash:null,payment_status:null},
   {event_type:'order_updated',shipment_phase:null,order_hash:'9ab245175cca1cefe9b5a61c1f71bdfe6d7ad1ea25cb7eece3ff546999da92f4',tracking_hash:'768c9bffb89da8db015fb8f5da70ed62adfb74778dfd7ccaad277805b53e3768',invoice_hash:null,payment_status:null},
   {event_type:'other',shipment_phase:null,order_hash:null,tracking_hash:null,invoice_hash:null,payment_status:null},
@@ -52,7 +53,6 @@ const GOLD:Gold[]=[
   {event_type:'other',shipment_phase:null,order_hash:null,tracking_hash:null,invoice_hash:null,payment_status:null},
   {event_type:'order_updated',shipment_phase:null,order_hash:'ba52a7bb3032947c29e4c6e4ed260fb0ebc6bdb18dadcfc96993e30524ca6617',tracking_hash:'dc3d9696d5136e7654e5253edd14451bbf7c2b689f52ca870cbf6574e927ae38',invoice_hash:null,payment_status:null},
   {event_type:'invoice_or_receipt',shipment_phase:null,order_hash:'9d76a4a48e8fc7355814c445bf12f27f90bf259f38e7aee6dd89970d34623c45',tracking_hash:null,invoice_hash:'1d8423a34e08f0a4e0a013d128a22acc34fe6d033de4a4cd9175112d632f95dc',payment_status:'paid'},
-  {event_type:'other',shipment_phase:null,order_hash:null,tracking_hash:null,invoice_hash:null,payment_status:null},
 ];
 
 function hashOrNull(v:string|null|undefined){return v?H(v):null;}
