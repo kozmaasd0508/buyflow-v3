@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { NormalizedEmail } from '../email/types.js';
 import type { EmailExtraction } from './openai-email-extractor.js';
-import { extractWithSelectiveSolVerification, sumAiUsage } from './selective-email-observation.js';
+import { extractWithSelectiveSolVerification, mergeVerifiedExtraction, sumAiUsage } from './selective-email-observation.js';
 
 const email: NormalizedEmail = {
   provider: 'nylas',
@@ -88,6 +88,7 @@ test('safe Luna result remains one-call Luna-only', async () => {
   assert.equal(result.aiCalls, 1);
   assert.equal(result.selectedModel, 'gpt-5.6-luna');
   assert.equal(result.verification.attempted, false);
+  assert.equal(result.verification.selectionStrategy, 'luna_only');
 });
 
 test('risky Luna result is verified by Sol and successful Sol becomes selected', async () => {
@@ -110,6 +111,7 @@ test('risky Luna result is verified by Sol and successful Sol becomes selected',
   assert.equal(result.selected.result.responseId, 'sol');
   assert.equal(result.verification.completed, true);
   assert.equal(result.verification.coreAgreement, false);
+  assert.equal(result.verification.selectionStrategy, 'sol_semantic_merge');
   assert.ok(result.verification.reasons.includes('shipment_phase_missing'));
 });
 
@@ -130,6 +132,7 @@ test('Sol verifier failure falls back to Luna shadow observation', async () => {
   assert.equal(result.verification.attempted, true);
   assert.equal(result.verification.completed, false);
   assert.equal(result.verification.verifierErrorType, 'TypeError');
+  assert.equal(result.verification.selectionStrategy, 'luna_fallback');
 });
 
 test('combined usage accounts for both model calls', () => {
@@ -147,4 +150,63 @@ test('combined usage accounts for both model calls', () => {
     totalTokens: 120,
     cachedInputTokens: 40,
   });
+});
+
+
+test('semantic merge keeps Luna commerce fields while accepting Sol event boundary', () => {
+  const primary = extraction({
+    event_type: 'shipment',
+    shipment_phase: 'shipment_created',
+    order_number: 'ORDER-1',
+    tracking_number: 'TRACK-1',
+    payment_status: 'cash_on_delivery',
+    invoice_number: null,
+    confidence: 0.99,
+  });
+  const verifier = extraction({
+    event_type: 'order_updated',
+    shipment_phase: null,
+    order_number: 'ORDER-2',
+    tracking_number: null,
+    payment_status: null,
+    invoice_number: 'INV-1',
+    confidence: 0.97,
+  });
+
+  const merged = mergeVerifiedExtraction(primary, verifier);
+  assert.equal(merged.event_type, 'order_updated');
+  assert.equal(merged.shipment_phase, null);
+  assert.equal(merged.order_number, 'ORDER-1');
+  assert.equal(merged.tracking_number, 'TRACK-1');
+  assert.equal(merged.payment_status, 'cash_on_delivery');
+  assert.equal(merged.invoice_number, 'INV-1');
+  assert.equal(merged.confidence, 0.97);
+});
+
+test('selective verification does not let Sol erase a correct Luna payment status', async () => {
+  const result = await extractWithSelectiveSolVerification({
+    email, apiKey: 'key', primaryModel: 'gpt-5.6-luna',
+    verifierEnabled: true, verifierModel: 'gpt-5.6-sol',
+  }, {
+    extract: (async (input: any) => input.model === 'gpt-5.6-luna'
+      ? observation(extraction({
+          event_type: 'shipment',
+          shipment_phase: 'shipment_created',
+          order_number: 'ORDER-1',
+          tracking_number: 'TRACK-1',
+          payment_status: 'cash_on_delivery',
+        }), 'luna')
+      : observation(extraction({
+          event_type: 'order_updated',
+          shipment_phase: null,
+          order_number: 'ORDER-1',
+          tracking_number: 'TRACK-1',
+          payment_status: null,
+        }), 'sol')) as any,
+  });
+
+  assert.equal(result.selected.result.extraction.event_type, 'order_updated');
+  assert.equal(result.selected.result.extraction.shipment_phase, null);
+  assert.equal(result.selected.result.extraction.payment_status, 'cash_on_delivery');
+  assert.equal(result.verification.selectionStrategy, 'sol_semantic_merge');
 });
