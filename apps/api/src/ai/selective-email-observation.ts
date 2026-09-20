@@ -1,6 +1,6 @@
 import type { NormalizedEmail } from '../email/types.js';
 import { extractMailLensObservation } from './mail-lens-observation.js';
-import type { OpenAIEmailExtractionResult } from './openai-email-extractor.js';
+import type { EmailExtraction, OpenAIEmailExtractionResult } from './openai-email-extractor.js';
 import {
   BUYFLOW_SOL_VERIFIER_MODEL,
   decideSolVerification,
@@ -22,6 +22,7 @@ export interface SelectiveAiObservationResult {
     completed: boolean;
     coreAgreement: boolean | null;
     verifierErrorType: string | null;
+    selectionStrategy: 'luna_only' | 'sol_semantic_merge' | 'luna_fallback';
   };
 }
 
@@ -34,6 +35,36 @@ function sameEvidenceEnvelope(a: Observation['evidence'], b: Observation['eviden
     && JSON.stringify(a.fromDomains) === JSON.stringify(b.fromDomains)
     && JSON.stringify(a.normalization) === JSON.stringify(b.normalization)
   );
+}
+
+
+export function mergeVerifiedExtraction(
+  primary: EmailExtraction,
+  verifier: EmailExtraction,
+): EmailExtraction {
+  const evidenceIssues = [...new Set([
+    ...(primary.evidence_issues ?? []),
+    ...(verifier.evidence_issues ?? []),
+  ])];
+
+  // Luna remains the worker: preserve its detailed commerce extraction.
+  // Sol is the verifier: override the semantic event boundary and phase, and
+  // only fill durable identifiers that Luna missed. Never let verification
+  // erase a Luna identifier or alter unrelated payment/product fields.
+  return {
+    ...primary,
+    event_type: verifier.event_type,
+    shipment_phase: verifier.shipment_phase ?? null,
+    evidence_issues: evidenceIssues,
+    order_number: primary.order_number ?? verifier.order_number,
+    tracking_number: primary.tracking_number ?? verifier.tracking_number,
+    invoice_number: primary.invoice_number ?? verifier.invoice_number,
+    merchant: primary.merchant ?? verifier.merchant,
+    merchant_legal_name: primary.merchant_legal_name ?? verifier.merchant_legal_name,
+    carrier: primary.carrier ?? verifier.carrier,
+    parcel_sender: primary.parcel_sender ?? verifier.parcel_sender,
+    confidence: Math.min(primary.confidence, verifier.confidence),
+  };
 }
 
 /**
@@ -72,6 +103,7 @@ export async function extractWithSelectiveSolVerification(input: {
         completed: false,
         coreAgreement: null,
         verifierErrorType: null,
+        selectionStrategy: 'luna_only',
       },
     };
   }
@@ -88,8 +120,19 @@ export async function extractWithSelectiveSolVerification(input: {
       throw new Error('SOL_VERIFIER_EVIDENCE_MISMATCH');
     }
 
+    const selected: Observation = {
+      ...verifier,
+      result: {
+        ...verifier.result,
+        extraction: mergeVerifiedExtraction(
+          primary.result.extraction,
+          verifier.result.extraction,
+        ),
+      },
+    };
+
     return {
-      selected: verifier,
+      selected,
       primary,
       verifier,
       selectedModel: verifierModel,
@@ -103,6 +146,7 @@ export async function extractWithSelectiveSolVerification(input: {
           verifier.result.extraction,
         ),
         verifierErrorType: null,
+        selectionStrategy: 'sol_semantic_merge',
       },
     };
   } catch (error) {
@@ -118,6 +162,7 @@ export async function extractWithSelectiveSolVerification(input: {
         completed: false,
         coreAgreement: null,
         verifierErrorType: error instanceof Error ? error.name : 'UnknownError',
+        selectionStrategy: 'luna_fallback',
       },
     };
   }
