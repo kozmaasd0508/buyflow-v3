@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { z } from 'zod';
 import { extractEmailWithOpenAIResult } from './ai/openai-email-extractor.js';
+import { BUYFLOW_SOL_VERIFIER_MODEL } from './ai/sol-verification-policy.js';
 
 export const BUYFLOW_RUNTIME_OPENAI_MODEL = 'gpt-5.6-luna' as const;
 
@@ -38,6 +39,12 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  // Sol is a selective second-pass verifier for risky Luna observations only.
+  // It shares the same API key and never receives independent write authority.
+  BUYFLOW_SOL_VERIFIER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   // One-shot operational verification only. Uses a static synthetic email and
   // never reads Gmail/Nylas or writes BuyFlow data. Keep false outside a smoke.
   BUYFLOW_LUNA_STARTUP_SMOKE: z
@@ -67,12 +74,19 @@ export function isLunaShadowConfigured(): boolean {
   return env.BUYFLOW_LUNA_SHADOW_ENABLED && Boolean(env.OPENAI_API_KEY);
 }
 
+export function isSolVerifierConfigured(): boolean {
+  return env.BUYFLOW_SOL_VERIFIER_ENABLED && Boolean(env.OPENAI_API_KEY);
+}
+
 // Safe runtime receipt: intentionally reports booleans/model only, never secrets.
 console.info('[luna-runtime-config]', JSON.stringify({
   model: env.OPENAI_MODEL,
   shadowEnabled: env.BUYFLOW_LUNA_SHADOW_ENABLED,
   openaiKeyConfigured: Boolean(env.OPENAI_API_KEY),
   lunaShadowConfigured: isLunaShadowConfigured(),
+  solVerifierEnabled: env.BUYFLOW_SOL_VERIFIER_ENABLED,
+  solVerifierConfigured: isSolVerifierConfigured(),
+  solVerifierModel: BUYFLOW_SOL_VERIFIER_MODEL,
 }));
 
 if (env.BUYFLOW_LUNA_STARTUP_SMOKE && isLunaShadowConfigured() && env.OPENAI_API_KEY) {
@@ -156,6 +170,8 @@ export function requireOpenAIConfig() {
   return {
     apiKey: env.OPENAI_API_KEY,
     model: env.OPENAI_MODEL,
+    verifierEnabled: isSolVerifierConfigured(),
+    verifierModel: BUYFLOW_SOL_VERIFIER_MODEL,
   };
 }
 
