@@ -1,0 +1,46 @@
+name: MailLens Real30 Luna Sol Compare
+
+on:
+  push:
+    branches:
+      - test/maillens-real30-luna-sol-20260920
+    paths:
+      - apps/api/src/scripts/mail-lens-real30-luna-sol.ts
+      - .github/workflows/maillens-real30-luna-sol.yml
+      - apps/api/src/ai/**
+      - apps/api/src/email/**
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: API typecheck
+        run: npm run typecheck --workspace @buyflow/api
+
+      - name: MailLens regressions
+        run: node --import tsx --test apps/api/src/email/mail-lens-text.test.ts apps/api/src/ai/mail-lens-observation.test.ts apps/api/src/ai/openai-email-extractor.test.ts
+
+      - name: Fresh real30 Luna vs Sol comparison
+        run: npx tsx apps/api/src/scripts/mail-lens-real30-luna-sol.ts
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+          EMAIL_DISCOVERY_QUERY: category:purchases newer_than:60d -in:spam -in:trash
