@@ -4,6 +4,7 @@ import {
   extractEmailWithOpenAI,
   extractEmailWithOpenAIResult,
   htmlToCompactText,
+  BUYFLOW_EXTRACTION_PROMPT_VERSION,
 } from './openai-email-extractor.js';
 
 function extraction(overrides: Record<string, unknown> = {}) {
@@ -293,4 +294,27 @@ test('includes sender and received time as untrusted MailLens evidence context',
   assert.match(request.input, /Subject: Előértesítés/);
   assert.match(request.input, /CLFOX178971847766417/);
   assert.match(request.instructions, /sender metadata.*untrusted data/i);
+});
+
+
+test('v2.3 prompt locks the audited logistics boundary rules', async () => {
+  let request: any;
+  await extractEmailWithOpenAIResult({
+    apiKey: 'synthetic',
+    subject: 'Synthetic logistics boundary',
+    bodyText: 'Synthetic evidence only.',
+    fetchImpl: (async (_url, init) => {
+      request = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ output_text: JSON.stringify(extraction()) }));
+    }) as typeof fetch,
+  });
+
+  assert.equal(BUYFLOW_EXTRACTION_PROMPT_VERSION, 'email-extraction-v2.3-logistics-boundaries');
+  assert.match(request.instructions, /packed, prepared, ready for shipping, or waiting for courier pickup.*order_updated/i);
+  assert.match(request.instructions, /pickup\/collection booking is not a parcel shipment/i);
+  assert.match(request.instructions, /pickup request ID.*tracking_number/i);
+  assert.match(request.instructions, /Physical inbound at a carrier depot or warehouse.*establishes shipped/i);
+  assert.match(request.instructions, /pre-notification.*shipment_created/i);
+  assert.match(request.instructions, /existing subscription.*completed charge/i);
+  assert.match(request.instructions, /receipt\/nyugta.*invoice_or_receipt/i);
 });
