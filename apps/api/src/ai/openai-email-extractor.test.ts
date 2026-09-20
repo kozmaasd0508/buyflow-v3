@@ -271,3 +271,26 @@ test('application diagnostics survive a model claiming no evidence issues', asyn
   assert.match(request.instructions, /untrusted data/);
   assert.match(request.instructions, /ready_for_pickup/);
 });
+
+
+test('includes sender and received time as untrusted MailLens evidence context', async () => {
+  let request: any;
+  await extractEmailWithOpenAIResult({
+    apiKey: 'synthetic',
+    subject: 'Előértesítés',
+    from: ['FOXPOST <ertesitesek@allegromail.com>'],
+    receivedAt: '2026-09-18T08:01:32Z',
+    fromDomains: ['allegromail.com'],
+    bodyText: 'Csomagszám: CLFOX178971847766417. A csomagot még nem adták át a FOXPOST részére.',
+    fetchImpl: (async (_url, init) => {
+      request = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ output_text: JSON.stringify(extraction()) }));
+    }) as typeof fetch,
+  });
+
+  assert.match(request.input, /Received at: 2026-09-18T08:01:32Z/);
+  assert.match(request.input, /From: FOXPOST <ertesitesek@allegromail\.com>/);
+  assert.match(request.input, /Subject: Előértesítés/);
+  assert.match(request.input, /CLFOX178971847766417/);
+  assert.match(request.instructions, /sender metadata.*untrusted data/i);
+});
