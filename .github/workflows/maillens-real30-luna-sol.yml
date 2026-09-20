@@ -7,6 +7,7 @@ on:
     paths:
       - apps/api/src/scripts/mail-lens-real30-luna-sol.ts
       - apps/api/src/scripts/mail-lens-review-case27.ts
+      - apps/api/src/scripts/mail-lens-real30-human-gold.ts
       - .github/workflows/maillens-real30-luna-sol.yml
       - apps/api/src/ai/**
       - apps/api/src/email/**
@@ -37,8 +38,8 @@ jobs:
       - name: MailLens regressions
         run: node --import tsx --test apps/api/src/email/mail-lens-text.test.ts apps/api/src/ai/mail-lens-observation.test.ts apps/api/src/ai/openai-email-extractor.test.ts
 
-      - name: Case27 adjudication check
-        run: npx tsx apps/api/src/scripts/mail-lens-review-case27.ts
+      - name: Human-gold real30 Luna vs Sol
+        run: npx tsx apps/api/src/scripts/mail-lens-real30-human-gold.ts
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
