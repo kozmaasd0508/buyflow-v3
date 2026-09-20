@@ -1,0 +1,39 @@
+name: Main Selective Sol REAL30 Holdout
+
+on:
+  push:
+    branches:
+      - test/selective-sol-main-holdout-20260920
+    paths:
+      - apps/api/src/scripts/mail-lens-real30-main-selective-sol.ts
+      - .github/workflows/main-selective-sol-real30.yml
+      - apps/api/src/ai/selective-email-observation.ts
+      - apps/api/src/ai/sol-verification-policy.ts
+
+permissions:
+  contents: read
+
+jobs:
+  holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install
+      - name: API typecheck
+        run: npm run typecheck --workspace @buyflow/api
+      - name: Selective Sol unit tests
+        run: node --import tsx --test apps/api/src/ai/selective-email-observation.test.ts apps/api/src/ai/sol-verification-policy.test.ts apps/api/src/ai/mail-lens-observation.test.ts apps/api/src/ai/openai-email-extractor.test.ts
+      - name: Main selective Sol REAL30 holdout
+        run: npx tsx apps/api/src/scripts/mail-lens-real30-main-selective-sol.ts
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
