@@ -3,7 +3,7 @@ name: Main Selective Sol REAL30 Holdout
 on:
   push:
     branches:
-      - test/selective-sol-main-holdout-20260920
+      - test/luna-sol-field-merge-holdout
     paths:
       - apps/api/src/scripts/mail-lens-real30-main-selective-sol.ts
       - .github/workflows/main-selective-sol-real30.yml
