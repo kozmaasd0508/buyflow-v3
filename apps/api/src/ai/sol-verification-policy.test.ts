@@ -59,10 +59,6 @@ test('semantic boundary cases request Sol verification', () => {
       order_number: 'ORDER-1', tracking_number: 'TRACK-1',
     }, 'merchant_pre_handover_boundary'],
     [{ event_type: 'order_created', shipment_phase: null, confidence: 0.98 }, 'ambiguous_order_creation'],
-    [{
-      event_type: 'invoice_or_receipt', shipment_phase: null,
-      invoice_number: 'INV-1', order_number: null,
-    }, 'receipt_missing_order_link'],
   ];
 
   for (const [overrides, reason] of cases) {
@@ -72,13 +68,15 @@ test('semantic boundary cases request Sol verification', () => {
   }
 });
 
-test('receipt already linked to an order does not spend Sol solely for receipt status', () => {
-  assert.equal(decideSolVerification(extraction({
-    event_type: 'invoice_or_receipt',
-    shipment_phase: null,
-    invoice_number: 'INV-1',
-    order_number: 'ORDER-1',
-  })).verify, false);
+test('receipts do not spend Sol solely for a missing order link', () => {
+  for (const order_number of [null, 'ORDER-1']) {
+    assert.equal(decideSolVerification(extraction({
+      event_type: 'invoice_or_receipt',
+      shipment_phase: null,
+      invoice_number: 'INV-1',
+      order_number,
+    })).verify, false);
+  }
 });
 
 test('core agreement includes event, phase and durable identifiers', () => {
