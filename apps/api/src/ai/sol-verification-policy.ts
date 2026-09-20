@@ -8,8 +8,7 @@ export type SolVerificationReason =
   | 'order_update_boundary'
   | 'shipment_phase_missing'
   | 'merchant_pre_handover_boundary'
-  | 'ambiguous_order_creation'
-  | 'receipt_missing_order_link';
+  | 'ambiguous_order_creation';
 
 export interface SolVerificationDecision {
   verify: boolean;
@@ -55,13 +54,6 @@ export function decideSolVerification(extraction: EmailExtraction): SolVerificat
     reasons.push('ambiguous_order_creation');
   }
 
-  if (
-    extraction.event_type === 'invoice_or_receipt'
-    && Boolean(extraction.invoice_number)
-    && !extraction.order_number
-  ) {
-    reasons.push('receipt_missing_order_link');
-  }
 
   return { verify: reasons.length > 0, reasons: [...new Set(reasons)] };
 }
