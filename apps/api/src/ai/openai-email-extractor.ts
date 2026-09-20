@@ -39,7 +39,7 @@ export interface ProductExtraction {
   confidence: number;
 }
 
-export const BUYFLOW_EXTRACTION_PROMPT_VERSION = 'email-extraction-v2.2-evidence-envelope';
+export const BUYFLOW_EXTRACTION_PROMPT_VERSION = 'email-extraction-v2.3-logistics-boundaries';
 export const SHIPMENT_PHASES = ['shipment_created', 'shipped', 'in_transit', 'out_for_delivery', 'ready_for_pickup', 'delivered'] as const;
 export const EVIDENCE_ISSUES = ['multiple_orders', 'multiple_shipments', 'conflicting_evidence', 'insufficient_evidence', 'truncated_input', 'too_many_products'] as const;
 
@@ -271,6 +271,13 @@ export async function extractEmailWithOpenAIResult(input: {
     'Never treat order numbers, tracking numbers, invoice numbers, payment references or customer IDs as interchangeable. Preserve identifiers exactly apart from surrounding labels.',
     'If several independent orders or shipments cannot fit this single-record schema without choosing or combining unrelated evidence, report multiple_orders or multiple_shipments; leave ambiguous identifiers and associated amounts null and products empty.',
     'shipment_phase must describe only the explicitly established current phase: label/data received=shipment_created; physical carrier acceptance=shipped; transport=in_transit; with courier for delivery=out_for_delivery; waiting at a pickup point=ready_for_pickup; received by the intended recipient=delivered. Otherwise null.',
+    'A merchant saying an order is packed, prepared, ready for shipping, or waiting for courier pickup is an order_updated event with shipment_phase=null until there is explicit evidence the parcel was physically accepted by the carrier. A carrier name, planned delivery date or tracking-style URL alone does not prove carrier acceptance.',
+    'A carrier pickup/collection booking is not a parcel shipment. Messages about ordering a courier pickup, a pickup request being recorded/accepted, or a future collection time use other with shipment_phase=null unless the same evidence explicitly says a parcel itself was accepted into the carrier network.',
+    'Never use a courier pickup request ID, collection booking ID, customer reference or service request number as tracking_number unless the evidence explicitly labels it as a parcel/shipment/tracking/waybill/consignment number.',
+    'Physical inbound at a carrier depot or warehouse, or explicit wording that the carrier received/accepted the parcel, establishes shipped. Do not upgrade that to in_transit unless the evidence explicitly establishes onward transport or movement through the network.',
+    'A carrier pre-notification saying the sender prepared a parcel or transmitted shipment data, especially when dispatch/hand-over is conditional or still pending, is shipment with shipment_phase=shipment_created, not shipped.',
+    'A current receipt or charge confirmation is primarily invoice_or_receipt or payment_completed according to what it newly proves, even when it concerns an existing subscription. Use subscription for subscription lifecycle changes such as start, renewal setup, plan change, cancellation or expiry when the primary new fact is not a completed charge.',
+    'If an email is primarily a receipt/nyugta for a completed cash-on-delivery collection or locker transaction, use invoice_or_receipt rather than delivery merely because the receipt states the parcel was taken out or collected.',
     'A label created, scheduled delivery, delivery attempt, pickup-ready notice or statement that a parcel was NOT delivered is never delivery/delivered. delivery requires affirmative completed delivery and shipment_phase=delivered; the other logistics phases use shipment.',
     'A refund requested, promised or approved is not proof that money was returned. payment_status=refunded requires explicit completed reimbursement. A payment link, retry request or cash-on-delivery amount does not prove paid.',
     'Cancellation or failed payment concerning an existing order uses order_updated, not order_created or payment_completed. Preserve a failed payment_status when explicitly stated.',
