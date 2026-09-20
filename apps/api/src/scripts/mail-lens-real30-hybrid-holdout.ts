@@ -19,8 +19,6 @@ type Gold={
   payment_status:string|null;
 };
 
-const H=(v:string)=>createHash('sha256').update(v,'utf8').digest('hex');
-
 const GOLD:Gold[]=[
   {event_type:'shipment',shipment_phase:'shipped',order_hash:'26858778c7cd462fbc7fb48d95f808de791d82873f04d6b7c40b47db4c52f2fd',tracking_hash:'f20245da2f8fa514717dab84772c4f2593cd5d1254e388c9653964f6ecfd0f11',invoice_hash:null,payment_status:null},
   {event_type:'shipment',shipment_phase:'shipment_created',order_hash:null,tracking_hash:'e48375f20333ce95861ab67c6912743edca51f8f3295b7bbcf7c656312516dfc',invoice_hash:null,payment_status:null},
