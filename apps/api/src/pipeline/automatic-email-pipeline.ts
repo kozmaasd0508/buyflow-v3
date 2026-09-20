@@ -689,6 +689,7 @@ export async function processNylasMessage(input: {
           completed: selective.verification.completed,
           core_agreement: selective.verification.coreAgreement,
           verifier_error_type: selective.verification.verifierErrorType,
+          selection_strategy: selective.verification.selectionStrategy,
           primary_response_id: selective.primary.result.responseId,
           verifier_response_id: selective.verifier?.result.responseId ?? null,
           primary_total_tokens: selective.primary.result.totalTokens,
