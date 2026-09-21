@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { getSupabaseAdmin } from '../db/supabase-admin.js';
 import { isCarrierSenderDomain } from '../email/sender-role.js';
 import { isTrustedAutomaticEvidence } from '../pipeline/automatic-write-gate.js';
 
@@ -88,41 +87,11 @@ export function buildAutomaticTargetedRecoveryPlan(
 }
 
 export async function enqueueAutomaticTargetedRecoveryForSource(
-  sourceEmailId: string,
+  _sourceEmailId: string,
 ): Promise<{ eligible: boolean; jobId?: string }> {
-  const db = getSupabaseAdmin() as any;
-  const { data: source, error: sourceError } = await db
-    .from('source_emails')
-    .select('id,user_id,email_connection_id,from_address,received_at,processing_status,validation_status,validated_result')
-    .eq('id', sourceEmailId)
-    .maybeSingle();
-
-  if (sourceError) {
-    throw new Error(`Automatic targeted recovery source read failed: ${sourceError.message}`);
-  }
-  if (!source) return { eligible: false };
-
-  const typedSource = source as SourceEmailForRecovery;
-  const plan = buildAutomaticTargetedRecoveryPlan(typedSource);
-  if (!plan) return { eligible: false };
-
-  const { data: jobId, error: enqueueError } = await db.rpc(
-    'enqueue_automatic_targeted_email_scan',
-    {
-      p_user_id: typedSource.user_id,
-      p_email_connection_id: typedSource.email_connection_id,
-      p_search_term: plan.searchTerm,
-      p_dedupe_key: plan.dedupeKey,
-      p_window_days: plan.windowDays,
-    },
-  );
-
-  if (enqueueError) {
-    throw new Error(`Automatic targeted recovery enqueue failed: ${enqueueError.message}`);
-  }
-  if (typeof jobId !== 'string' || !jobId) {
-    throw new Error('Automatic targeted recovery enqueue returned no job id');
-  }
-
-  return { eligible: true, jobId };
+  // Product policy: automatic inbox discovery is limited to the recent two-day
+  // window. Older/deeper recovery must be explicitly started by the user from
+  // the targeted order search UI. Keep the planner above for deterministic
+  // evidence inspection/tests, but never enqueue a background deep search here.
+  return { eligible: false };
 }
