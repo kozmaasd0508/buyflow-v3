@@ -80,7 +80,7 @@ async function main() {
   }
 
   console.log(JSON.stringify({
-    mode: 'read_only_gpt_5_4_nano_smoke',
+    mode: 'read_only_gpt_6_luna_smoke',
     safety: {
       databaseWrites: false,
       bodyOutput: false,
@@ -102,6 +102,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('GPT-5.4 nano read-only smoke failed:', error instanceof Error ? error.message : 'unknown error');
+  console.error('GPT-6 Luna read-only smoke failed:', error instanceof Error ? error.message : 'unknown error');
   process.exit(1);
 });
