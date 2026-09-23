@@ -38,7 +38,7 @@ function extraction(overrides: Partial<EmailExtraction> = {}): EmailExtraction {
 }
 
 test('Sol verifier model is pinned', () => {
-  assert.equal(BUYFLOW_SOL_VERIFIER_MODEL, 'gpt-5.6-sol');
+  assert.equal(BUYFLOW_SOL_VERIFIER_MODEL, 'gpt-6-sol');
 });
 
 test('high-confidence unambiguous Luna extraction stays Luna-only', () => {

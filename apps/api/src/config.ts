@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { extractEmailWithOpenAIResult } from './ai/openai-email-extractor.js';
 import { BUYFLOW_SOL_VERIFIER_MODEL } from './ai/sol-verification-policy.js';
 
-export const BUYFLOW_RUNTIME_OPENAI_MODEL = 'gpt-5.6-luna' as const;
+export const BUYFLOW_RUNTIME_OPENAI_MODEL = 'gpt-6-luna' as const;
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),

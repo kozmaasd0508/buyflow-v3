@@ -76,7 +76,7 @@ function observation(x: EmailExtraction, responseId: string) {
 test('safe Luna result remains one-call Luna-only', async () => {
   const calls: string[] = [];
   const result = await extractWithSelectiveSolVerification({
-    email, apiKey: 'key', primaryModel: 'gpt-5.6-luna', verifierEnabled: true,
+    email, apiKey: 'key', primaryModel: 'gpt-6-luna', verifierEnabled: true,
   }, {
     extract: (async (input: any) => {
       calls.push(input.model);
@@ -84,9 +84,9 @@ test('safe Luna result remains one-call Luna-only', async () => {
     }) as any,
   });
 
-  assert.deepEqual(calls, ['gpt-5.6-luna']);
+  assert.deepEqual(calls, ['gpt-6-luna']);
   assert.equal(result.aiCalls, 1);
-  assert.equal(result.selectedModel, 'gpt-5.6-luna');
+  assert.equal(result.selectedModel, 'gpt-6-luna');
   assert.equal(result.verification.attempted, false);
   assert.equal(result.verification.selectionStrategy, 'luna_only');
 });
@@ -94,20 +94,20 @@ test('safe Luna result remains one-call Luna-only', async () => {
 test('risky Luna result is verified by Sol and successful Sol becomes selected', async () => {
   const calls: string[] = [];
   const result = await extractWithSelectiveSolVerification({
-    email, apiKey: 'key', primaryModel: 'gpt-5.6-luna',
-    verifierEnabled: true, verifierModel: 'gpt-5.6-sol',
+    email, apiKey: 'key', primaryModel: 'gpt-6-luna',
+    verifierEnabled: true, verifierModel: 'gpt-6-sol',
   }, {
     extract: (async (input: any) => {
       calls.push(input.model);
-      return input.model === 'gpt-5.6-luna'
+      return input.model === 'gpt-6-luna'
         ? observation(extraction({ event_type: 'shipment', shipment_phase: null, confidence: 0.98 }), 'luna')
         : observation(extraction({ event_type: 'shipment', shipment_phase: 'out_for_delivery' }), 'sol');
     }) as any,
   });
 
-  assert.deepEqual(calls, ['gpt-5.6-luna', 'gpt-5.6-sol']);
+  assert.deepEqual(calls, ['gpt-6-luna', 'gpt-6-sol']);
   assert.equal(result.aiCalls, 2);
-  assert.equal(result.selectedModel, 'gpt-5.6-sol');
+  assert.equal(result.selectedModel, 'gpt-6-sol');
   assert.equal(result.selected.result.responseId, 'sol');
   assert.equal(result.verification.completed, true);
   assert.equal(result.verification.coreAgreement, false);
@@ -117,17 +117,17 @@ test('risky Luna result is verified by Sol and successful Sol becomes selected',
 
 test('Sol verifier failure falls back to Luna shadow observation', async () => {
   const result = await extractWithSelectiveSolVerification({
-    email, apiKey: 'key', primaryModel: 'gpt-5.6-luna',
-    verifierEnabled: true, verifierModel: 'gpt-5.6-sol',
+    email, apiKey: 'key', primaryModel: 'gpt-6-luna',
+    verifierEnabled: true, verifierModel: 'gpt-6-sol',
   }, {
     extract: (async (input: any) => {
-      if (input.model === 'gpt-5.6-sol') throw new TypeError('synthetic verifier failure');
+      if (input.model === 'gpt-6-sol') throw new TypeError('synthetic verifier failure');
       return observation(extraction({ event_type: 'order_updated', shipment_phase: null }), 'luna');
     }) as any,
   });
 
   assert.equal(result.aiCalls, 2);
-  assert.equal(result.selectedModel, 'gpt-5.6-luna');
+  assert.equal(result.selectedModel, 'gpt-6-luna');
   assert.equal(result.selected.result.responseId, 'luna');
   assert.equal(result.verification.attempted, true);
   assert.equal(result.verification.completed, false);
@@ -185,10 +185,10 @@ test('semantic merge keeps Luna commerce fields while accepting Sol event bounda
 
 test('selective verification does not let Sol erase a correct Luna payment status', async () => {
   const result = await extractWithSelectiveSolVerification({
-    email, apiKey: 'key', primaryModel: 'gpt-5.6-luna',
-    verifierEnabled: true, verifierModel: 'gpt-5.6-sol',
+    email, apiKey: 'key', primaryModel: 'gpt-6-luna',
+    verifierEnabled: true, verifierModel: 'gpt-6-sol',
   }, {
-    extract: (async (input: any) => input.model === 'gpt-5.6-luna'
+    extract: (async (input: any) => input.model === 'gpt-6-luna'
       ? observation(extraction({
           event_type: 'shipment',
           shipment_phase: 'shipment_created',

@@ -1,6 +1,6 @@
 import type { EmailExtraction } from './openai-email-extractor.js';
 
-export const BUYFLOW_SOL_VERIFIER_MODEL = 'gpt-5.6-sol' as const;
+export const BUYFLOW_SOL_VERIFIER_MODEL = 'gpt-6-sol' as const;
 
 export type SolVerificationReason =
   | 'evidence_issue'
