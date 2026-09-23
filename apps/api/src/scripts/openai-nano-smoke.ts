@@ -111,6 +111,10 @@ async function main() {
     fieldPresence,
     samples,
   }, null, 2));
+
+  if (errors > 0 || processed === 0) {
+    throw new Error(`READ_ONLY_SMOKE_INCOMPLETE processed=${processed} errors=${errors}`);
+  }
 }
 
 main().catch((error) => {
