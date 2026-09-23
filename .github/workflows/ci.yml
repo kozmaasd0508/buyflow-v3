@@ -70,3 +70,30 @@ jobs:
           PGPASSWORD: ci-only-password
           PGDATABASE: buyflow_permissions_test
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/source-extraction-leases.sql
+
+
+  gpt6-readonly-smoke:
+    if: github.event_name == 'pull_request' && github.head_ref == 'chore/gpt6-luna-sol-eval-20260923'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: GPT-6 Luna read-only live smoke
+        run: npm run openai:nano-smoke --workspace @buyflow/api
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-6-luna
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+          EMAIL_DISCOVERY_QUERY: category:purchases newer_than:30d -in:spam -in:trash
