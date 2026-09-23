@@ -1,5 +1,5 @@
 import { env, requireNylasSmokeGrantId, requireOpenAIConfig } from '../config.js';
-import { extractEmailWithOpenAI, htmlToCompactText } from '../ai/openai-email-extractor.js';
+import { extractEmailWithOpenAIResult, htmlToCompactText } from '../ai/openai-email-extractor.js';
 import { createEmailProvider } from '../email/factory.js';
 
 const SAMPLE_SIZE = 10;
@@ -39,6 +39,10 @@ async function main() {
 
   let processed = 0;
   let errors = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalTokens = 0;
+  let totalCachedInputTokens = 0;
   const errorTypes = new Map<string, number>();
   let firstError: string | null = null;
 
@@ -50,15 +54,20 @@ async function main() {
       const bodyText = htmlToCompactText(message.bodyHtml ?? '');
       if (!bodyText) continue;
 
-      const extraction = await extractEmailWithOpenAI({
+      const result = await extractEmailWithOpenAIResult({
         apiKey: openai.apiKey,
         model: openai.model,
         subject: message.subject,
         fromDomains: senderDomains(message),
         bodyText,
       });
+      const extraction = result.extraction;
 
       processed += 1;
+      totalInputTokens += result.inputTokens ?? 0;
+      totalOutputTokens += result.outputTokens ?? 0;
+      totalTokens += result.totalTokens ?? 0;
+      totalCachedInputTokens += result.cachedInputTokens ?? 0;
       eventCounts.set(extraction.event_type, (eventCounts.get(extraction.event_type) ?? 0) + 1);
 
       const present: string[] = [];
@@ -90,7 +99,7 @@ async function main() {
   }
 
   console.log(JSON.stringify({
-    mode: 'read_only_gpt_6_luna_smoke',
+    mode: 'read_only_openai_smoke',
     safety: {
       databaseWrites: false,
       bodyOutput: false,
@@ -107,6 +116,14 @@ async function main() {
     errors,
     errorTypes: Object.fromEntries([...errorTypes.entries()].sort()),
     firstError,
+    usage: {
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      totalTokens,
+      cachedInputTokens: totalCachedInputTokens,
+      averageInputTokensPerProcessed: processed > 0 ? Math.round(totalInputTokens / processed) : 0,
+      averageOutputTokensPerProcessed: processed > 0 ? Math.round(totalOutputTokens / processed) : 0,
+    },
     eventCounts: Object.fromEntries([...eventCounts.entries()].sort()),
     fieldPresence,
     samples,
@@ -118,6 +135,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('GPT-6 Luna read-only smoke failed:', error instanceof Error ? error.message : 'unknown error');
+  console.error('OpenAI read-only smoke failed:', error instanceof Error ? error.message : 'unknown error');
   process.exit(1);
 });
