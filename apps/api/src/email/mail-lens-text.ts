@@ -19,7 +19,7 @@ function compactEvidenceUrl(raw: string): string {
     const usefulParams = [...url.searchParams.entries()]
       .filter(([key]) => IMPORTANT_URL_PARAM.test(key))
       .slice(0, 4)
-      .map(([key, value]) => [key, value.slice(0, 96)] as const);
+      .map(([key, value]) => [key, value.slice(0, 96)] as [string, string]);
 
     let path = url.pathname || '/';
     if (path.length > 120 && !USEFUL_PATH_HINT.test(path)) path = '/…';
