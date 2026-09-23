@@ -1,11 +1,62 @@
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { NormalizedEmail } from './types.js';
 
-export const MAIL_LENS_TEXT_VERSION = 'mail-lens-text-v2';
+export const MAIL_LENS_TEXT_VERSION = 'mail-lens-text-v3';
 
 type Node = DefaultTreeAdapterMap['node'];
 const BLOCKS = new Set(['address', 'article', 'blockquote', 'div', 'footer', 'h1', 'h2', 'h3', 'header', 'li', 'p', 'section', 'table', 'tr']);
 const NON_TEXT = new Set(['script', 'style', 'template', 'head', 'title', 'noscript']);
+
+const IMPORTANT_URL_PARAM = /^(?:id|order(?:id|_id|number)?|tracking(?:id|_id|number)?|track(?:id|_id)?|shipment(?:id|_id)?|parcel(?:id|_id)?|product(?:id|_id)?|sku|ref|reference|code|searchvalue)$/i;
+const USEFUL_PATH_HINT = /(?:order|track|product|item|shipment|parcel|invoice|receipt|refund|delivery|szamla|rendel|csomag)/i;
+
+function compactEvidenceUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    if (!['https:', 'http:'].includes(url.protocol)) return '';
+    if (url.href.length <= 240) return url.href;
+
+    const usefulParams = [...url.searchParams.entries()]
+      .filter(([key]) => IMPORTANT_URL_PARAM.test(key))
+      .slice(0, 4)
+      .map(([key, value]) => [key, value.slice(0, 96)] as [string, string]);
+
+    let path = url.pathname || '/';
+    if (path.length > 120 && !USEFUL_PATH_HINT.test(path)) path = '/…';
+    else if (path.length > 160) path = path.slice(0, 159) + '…';
+
+    const query = usefulParams.length ? '?' + new URLSearchParams(usefulParams).toString() : '';
+    return url.origin + path + query;
+  } catch {
+    return '';
+  }
+}
+
+function compactSemanticUrls(text: string): { text: string; count: number } {
+  let count = 0;
+  const compacted = text.replace(/https?:\/\/[^\s<>"'\])]+/gi, (raw) => {
+    const next = compactEvidenceUrl(raw);
+    if (next && next !== raw) count += 1;
+    return next || raw;
+  });
+  return { text: compacted, count };
+}
+
+function trimKnownLegalBoilerplate(text: string): { text: string; trimmed: boolean } {
+  const markers = [
+    /\nÁLTALÁNOS SZERZŐDÉSI FELTÉTELEK\n/iu,
+    /\nGENERAL TERMS AND CONDITIONS\n/iu,
+    /\nTERMS AND CONDITIONS\n/iu,
+  ];
+  let boundary = -1;
+  for (const marker of markers) {
+    const match = marker.exec(text);
+    if (match && match.index >= 800 && (boundary < 0 || match.index < boundary)) boundary = match.index;
+  }
+  if (boundary < 0) return { text, trimmed: false };
+  return { text: tidy(text.slice(0, boundary)), trimmed: true };
+}
+
 
 function tidy(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ')
@@ -104,18 +155,22 @@ export function normalizeMailLensText(email: Pick<NormalizedEmail, 'bodyText' | 
   const source = usePlain ? 'provider_plain' : html ? 'html_derived' : email.snippet?.trim() ? 'snippet_fallback' : 'none';
   const body = usePlain ? plain : html ? html.bodyText : email.snippet?.trim() ?? '';
   const current = usePlain || !html ? currentText(body) : { text: html.semanticText, quoted: html.quoted };
+  const boilerplate = trimKnownLegalBoilerplate(current.text);
+  const compacted = compactSemanticUrls(boilerplate.text);
   return {
     bodyText: body.slice(0, limit),
     // Empty means no authored evidence. Never fall back to the quoted body/snippet.
-    semanticText: current.text.slice(0, limit),
+    semanticText: compacted.text.slice(0, limit),
     normalization: {
       version: MAIL_LENS_TEXT_VERSION,
       bodyTextSource: source,
       bodyTextTruncated: body.length > limit,
-      semanticTextTruncated: current.text.length > limit,
+      semanticTextTruncated: compacted.text.length > limit,
       hiddenHtmlRemoved: Boolean(!usePlain && html?.hidden),
       quotedHistoryDetected: current.quoted,
       providerPlaceholderIgnored: Boolean(plain && !usePlain && html),
+      semanticUrlsCompacted: compacted.count,
+      legalBoilerplateTrimmed: boilerplate.trimmed,
     },
   };
 }

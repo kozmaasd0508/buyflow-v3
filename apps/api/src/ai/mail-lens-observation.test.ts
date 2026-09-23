@@ -31,7 +31,7 @@ test('actual Responses request and validation evidence use the same MailLens tex
   assert.equal(result.evidence.receivedAt, '2026-09-13T00:00:00Z');
   assert.match(request.input, /Received at: 2026-09-13T00:00:00Z/);
   assert.match(request.input, /From: Example Orders <Orders@Shop\.Example>/);
-  assert.equal(result.evidence.normalization.version, 'mail-lens-text-v2');
+  assert.equal(result.evidence.normalization.version, 'mail-lens-text-v3');
   assert.deepEqual(email, original); // Archived provider evidence is unchanged.
 });
 
