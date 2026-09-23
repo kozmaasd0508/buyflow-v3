@@ -39,6 +39,8 @@ async function main() {
 
   let processed = 0;
   let errors = 0;
+  const errorTypes = new Map<string, number>();
+  let firstError: string | null = null;
 
   for (const [index, listed] of page.messages.entries()) {
     try {
@@ -74,8 +76,16 @@ async function main() {
         confidence: Number(extraction.confidence.toFixed(3)),
         fieldsPresent: present,
       });
-    } catch {
+    } catch (error) {
       errors += 1;
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      errorTypes.set(errorName, (errorTypes.get(errorName) ?? 0) + 1);
+      if (!firstError && error instanceof Error) {
+        const apiFailure = error.message.match(/^OpenAI Responses API failed \((\d+)\): (.*)$/s);
+        firstError = apiFailure
+          ? `OpenAI Responses API failed (${apiFailure[1]}): ${apiFailure[2].slice(0, 350)}`
+          : errorName;
+      }
     }
   }
 
@@ -95,6 +105,8 @@ async function main() {
     listed: page.messages.length,
     processed,
     errors,
+    errorTypes: Object.fromEntries([...errorTypes.entries()].sort()),
+    firstError,
     eventCounts: Object.fromEntries([...eventCounts.entries()].sort()),
     fieldPresence,
     samples,
