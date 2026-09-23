@@ -10,6 +10,7 @@ function senderDomains(message: { from: Array<{ email: string }> }): string[] {
 
 async function main() {
   const openai = requireOpenAIConfig();
+  const smokeModel = process.env.OPENAI_SMOKE_MODEL?.trim() || openai.model;
   const provider = createEmailProvider({
     provider: 'nylas',
     providerAccountId: requireNylasSmokeGrantId(),
@@ -56,7 +57,7 @@ async function main() {
 
       const result = await extractEmailWithOpenAIResult({
         apiKey: openai.apiKey,
-        model: openai.model,
+        model: smokeModel,
         subject: message.subject,
         fromDomains: senderDomains(message),
         bodyText,
@@ -109,7 +110,7 @@ async function main() {
       identifierValueOutput: false,
       storeOpenAIResponse: false,
     },
-    model: openai.model,
+    model: smokeModel,
     query: env.EMAIL_DISCOVERY_QUERY,
     listed: page.messages.length,
     processed,
