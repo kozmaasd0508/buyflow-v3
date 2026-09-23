@@ -97,3 +97,13 @@ jobs:
           NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
           NYLAS_API_URI: https://api.eu.nylas.com
           EMAIL_DISCOVERY_QUERY: category:purchases newer_than:30d -in:spam -in:trash
+
+      - name: GPT-6 Sol read-only live smoke
+        run: npm run openai:nano-smoke --workspace @buyflow/api
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: gpt-6-sol
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
+          EMAIL_DISCOVERY_QUERY: category:purchases newer_than:30d -in:spam -in:trash
