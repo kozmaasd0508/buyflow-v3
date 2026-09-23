@@ -70,3 +70,26 @@ jobs:
           PGPASSWORD: ci-only-password
           PGDATABASE: buyflow_permissions_test
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/source-extraction-leases.sql
+
+  real35-environment-audit:
+    if: github.event_name == 'pull_request' && github.head_ref == 'chore/mail-lens-env-audit-20260923'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: REAL35 environment audit - no OpenAI calls
+        run: npm run audit:real35-environment --workspace @buyflow/api
+        env:
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
