@@ -127,3 +127,27 @@ jobs:
           NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
           NYLAS_API_URI: https://api.eu.nylas.com
           EMAIL_DISCOVERY_QUERY: category:purchases newer_than:30d -in:spam -in:trash
+
+  gpt6-production35-benchmark:
+    if: github.event_name == 'pull_request' && github.head_ref == 'chore/gpt6-luna-sol-eval-20260923'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: REAL35 exact production prompt benchmark
+        run: npm run openai:production35-benchmark --workspace @buyflow/api
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NYLAS_API_KEY: ${{ secrets.NYLAS_API_KEY }}
+          NYLAS_SMOKE_GRANT_ID: ${{ secrets.NYLAS_GRANT_ID }}
+          NYLAS_API_URI: https://api.eu.nylas.com
