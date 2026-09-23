@@ -76,3 +76,49 @@ test('provider body outranks a shorter snippet and preserves late order tracking
   assert.match(result.semanticText, /CLFOX178971847766417/);
   assert.match(result.semanticText, /140 000 HUF/);
 });
+
+
+test('compacts long redirect URLs but preserves short direct tracking URLs', () => {
+  const redirect = 'https://mailer.example/tr/cl/' + 'x'.repeat(500);
+  const tracking = 'https://tracking.packeta.com/hu/?id=Z2746595832';
+  const result = normalize({ bodyText: `Order ready [open](${redirect}) Track: ${tracking}` });
+  assert.ok(result.semanticText.length < redirect.length);
+  assert.match(result.semanticText, /https:\/\/mailer\.example\/…/);
+  assert.match(result.semanticText, /https:\/\/tracking\.packeta\.com\/hu\/\?id=Z2746595832/);
+  assert.equal(result.normalization.semanticUrlsCompacted, 1);
+});
+
+test('preserves useful identifiers from long URLs while removing opaque query noise', () => {
+  const url = 'https://shop.example/track?' + new URLSearchParams({
+    id: 'TRACK-123',
+    utm_source: 'x'.repeat(400),
+    campaign: 'y'.repeat(400),
+  }).toString();
+  const result = normalize({ bodyText: `Track here: ${url}` });
+  assert.match(result.semanticText, /https:\/\/shop\.example\/track\?id=TRACK-123/);
+  assert.doesNotMatch(result.semanticText, /utm_source|campaign/);
+});
+
+test('trims a large standalone legal terms tail only after authored commerce evidence', () => {
+  const body = [
+    'Rendelésszám: ORD-123',
+    'Nyomkövetési kód: TRACK-123',
+    'Termék: Example',
+    'x'.repeat(900),
+    'ÁLTALÁNOS SZERZŐDÉSI FELTÉTELEK',
+    'legal '.repeat(2000),
+  ].join('\n');
+  const result = normalize({ bodyText: body }, 20_000);
+  assert.match(result.semanticText, /ORD-123/);
+  assert.match(result.semanticText, /TRACK-123/);
+  assert.doesNotMatch(result.semanticText, /legal legal/);
+  assert.equal(result.normalization.legalBoilerplateTrimmed, true);
+  assert.equal(result.normalization.semanticTextTruncated, false);
+});
+
+test('does not trim a terms document whose heading is near the start', () => {
+  const body = 'ÁLTALÁNOS SZERZŐDÉSI FELTÉTELEK\n' + 'Legal update '.repeat(100);
+  const result = normalize({ bodyText: body });
+  assert.match(result.semanticText, /ÁLTALÁNOS SZERZŐDÉSI FELTÉTELEK/);
+  assert.equal(result.normalization.legalBoilerplateTrimmed, false);
+});
