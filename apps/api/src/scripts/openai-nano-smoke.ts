@@ -83,7 +83,7 @@ async function main() {
       if (!firstError && error instanceof Error) {
         const apiFailure = error.message.match(/^OpenAI Responses API failed \((\d+)\): (.*)$/s);
         firstError = apiFailure
-          ? `OpenAI Responses API failed (${apiFailure[1]}): ${apiFailure[2].slice(0, 350)}`
+          ? `OpenAI Responses API failed (${apiFailure[1]}): ${(apiFailure[2] ?? '').slice(0, 350)}`
           : errorName;
       }
     }
